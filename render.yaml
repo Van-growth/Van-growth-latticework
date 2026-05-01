@@ -1,0 +1,52 @@
+services:
+  # ── API Server ─────────────────────────────────────────────────────────────
+  - type: web
+    name: latticework-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLIENT_URL
+        sync: false   # e.g. https://latticework-client.onrender.com
+      - key: PORT
+        value: "4000"
+
+  # ── Next.js Client ──────────────────────────────────────────────────────────
+  - type: web
+    name: latticework-client
+    runtime: node
+    rootDir: client
+    buildCommand: npm install && npm run build
+    startCommand: node_modules/.bin/next start -p $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        sync: false   # e.g. https://latticework-server.onrender.com
+
+  # ── Daily Cron ──────────────────────────────────────────────────────────────
+  - type: cron
+    name: latticework-daily-cron
+    runtime: node
+    schedule: "0 1 * * *"   # 01:00 UTC (한국 오전 10시)
+    buildCommand: echo "no build needed"
+    startCommand: >
+      node -e "
+        const url = process.env.SERVER_URL + '/api/cron/daily';
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+          .then(r => r.json())
+          .then(d => { console.log(JSON.stringify(d)); process.exit(0); })
+          .catch(e => { console.error(e.message); process.exit(1); });
+      "
+    envVars:
+      - key: SERVER_URL
+        sync: false   # e.g. https://latticework-server.onrender.com

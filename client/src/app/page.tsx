@@ -1,45 +1,42 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
+import Link from 'next/link';
+import AnalysisCard from './components/AnalysisCard';
+import LinkedInDraftCard from './components/LinkedInDraftCard';
+import { AnalysisDetail, LinkedInDraft } from '@/types';
 
-interface AnalysisResult {
-  companyName: string;
-  analysisId: string;
-  content: string;
-  createdAt: string;
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+interface AnalyzeResult extends AnalysisDetail {
+  linkedinDrafts: LinkedInDraft[];
 }
 
 export default function Home() {
   const [companyName, setCompanyName] = useState('');
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const [showLinkedIn, setShowLinkedIn] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!companyName.trim()) return;
+    if (!companyName.trim() || loading) return;
 
     setLoading(true);
     setError(null);
     setResult(null);
+    setShowLinkedIn(false);
 
     try {
-      const res = await fetch(`${apiUrl}/api/analyze`, {
+      const res = await fetch(`${API_URL}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyName: companyName.trim() }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || '분석 중 오류가 발생했습니다.');
-        return;
-      }
-
-      setResult(data as AnalysisResult);
+      if (!res.ok) { setError(data.error || '분석 중 오류가 발생했습니다.'); return; }
+      setResult(data as AnalyzeResult);
     } catch {
       setError('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
     } finally {
@@ -47,60 +44,36 @@ export default function Home() {
     }
   }
 
-  function formatContent(content: string) {
-    return content.split('\n').map((line, i) => {
-      if (line.startsWith('## ') || line.startsWith('# ')) {
-        return (
-          <h2 key={i} className="text-lg font-bold text-gray-900 mt-6 mb-2">
-            {line.replace(/^#+\s/, '')}
-          </h2>
-        );
-      }
-      if (line.startsWith('**') && line.endsWith('**')) {
-        return (
-          <p key={i} className="font-semibold text-gray-800 mt-3">
-            {line.replace(/\*\*/g, '')}
-          </p>
-        );
-      }
-      if (line.startsWith('- ') || line.startsWith('* ')) {
-        return (
-          <li key={i} className="ml-4 text-gray-700 list-disc">
-            {line.replace(/^[-*]\s/, '')}
-          </li>
-        );
-      }
-      if (line.trim() === '') return <br key={i} />;
-      return (
-        <p key={i} className="text-gray-700 leading-relaxed">
-          {line}
-        </p>
-      );
-    });
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="max-w-3xl mx-auto px-4 py-16">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">
-            Latticework
-          </h1>
-          <p className="text-gray-500 text-lg">
-            AI 기반 기업 심층 분석 플랫폼
-          </p>
+      {/* Nav */}
+      <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+          <span className="font-bold text-gray-900 text-lg">Latticework</span>
+          <div className="flex gap-4 text-sm">
+            <Link href="/" className="text-blue-600 font-medium">분석</Link>
+            <Link href="/history" className="text-gray-500 hover:text-gray-800">히스토리</Link>
+            <Link href="/linkedin" className="text-gray-500 hover:text-gray-800">LinkedIn</Link>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-4xl mx-auto px-4 py-12">
+        {/* Hero */}
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">기업 심층 분석</h1>
+          <p className="text-gray-500">Claude AI + Web Search — 산업역사, 기술변화, 밸류체인, BM, 재무를 한번에</p>
         </div>
 
-        {/* Input form */}
-        <form onSubmit={handleSubmit} className="mb-10">
-          <div className="flex gap-3">
+        {/* Search form */}
+        <form onSubmit={handleSubmit} className="mb-8">
+          <div className="flex gap-3 max-w-2xl mx-auto">
             <input
               type="text"
               value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="기업명을 입력하세요 (예: 삼성전자, Apple, Tesla)"
-              className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-gray-900 placeholder-gray-400"
+              onChange={e => setCompanyName(e.target.value)}
+              placeholder="기업명 입력 (예: 삼성전자, Apple, NVIDIA)"
+              className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900 placeholder-gray-400"
               disabled={loading}
             />
             <button
@@ -115,34 +88,44 @@ export default function Home() {
 
         {/* Loading */}
         {loading && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-            <div className="inline-block w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4" />
-            <p className="text-gray-500">
-              <span className="font-medium text-gray-700">{companyName}</span>을(를) 분석하고 있습니다...
-            </p>
-            <p className="text-sm text-gray-400 mt-1">웹 검색 및 AI 분석 중 (약 30–60초 소요)</p>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
+            <div className="inline-block w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4" />
+            <p className="text-gray-700 font-medium">{companyName} 분석 중...</p>
+            <p className="text-sm text-gray-400 mt-1">웹 검색 + AI 분석 (약 30–90초)</p>
           </div>
         )}
 
         {/* Error */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700">
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-red-700 text-sm">
             {error}
           </div>
         )}
 
         {/* Result */}
         {result && !loading && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">{result.companyName}</h2>
-              <span className="text-xs text-gray-400">
-                {new Date(result.createdAt).toLocaleString('ko-KR')}
-              </span>
-            </div>
-            <div className="prose prose-sm max-w-none">
-              {formatContent(result.content)}
-            </div>
+          <div className="space-y-6">
+            <AnalysisCard data={result} />
+
+            {/* LinkedIn drafts toggle */}
+            {result.linkedinDrafts?.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowLinkedIn(v => !v)}
+                  className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  <span>{showLinkedIn ? '▲' : '▼'}</span>
+                  LinkedIn 초안 {result.linkedinDrafts.length}개 {showLinkedIn ? '닫기' : '보기'}
+                </button>
+                {showLinkedIn && (
+                  <div className="mt-4 space-y-4">
+                    {result.linkedinDrafts.map(d => (
+                      <LinkedInDraftCard key={d.draft_number} draft={d} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

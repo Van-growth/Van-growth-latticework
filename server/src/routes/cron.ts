@@ -1,33 +1,42 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
-import { analyzeCompany, generateLinkedInDrafts } from '../lib/claude';
+import { selectDailyCompany, analyzeCompany, generateLinkedInDrafts } from '../lib/claude';
 
 const router = Router();
 
-router.post('/', async (req: Request, res: Response) => {
-  const { companyName } = req.body as { companyName?: string };
-
-  if (!companyName?.trim()) {
-    res.status(400).json({ error: '기업명을 입력해주세요.' });
-    return;
-  }
-
-  const name = companyName.trim();
-
+// POST /api/cron/daily  — auto-select a company and run analysis
+router.post('/daily', async (_req: Request, res: Response) => {
   try {
-    // 1. Upsert company
+    // 1. Select today's company
+    const companyName = await selectDailyCompany();
+    console.log(`[cron] Daily company: ${companyName}`);
+
+    // 2. Check if analyzed in the last 24 hours
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: existing } = await supabase
+      .from('analyses')
+      .select('id, companies!inner(name)')
+      .eq('companies.name', companyName)
+      .gte('created_at', since)
+      .maybeSingle();
+
+    if (existing) {
+      res.json({ skipped: true, reason: 'Already analyzed today', companyName });
+      return;
+    }
+
+    // 3. Upsert company
     const { data: company, error: companyErr } = await supabase
       .from('companies')
-      .upsert({ name }, { onConflict: 'name' })
+      .upsert({ name: companyName }, { onConflict: 'name' })
       .select('id')
       .single();
 
     if (companyErr) throw companyErr;
 
-    // 2. Run AI analysis
-    const analysis = await analyzeCompany(name);
+    // 4. Run analysis
+    const analysis = await analyzeCompany(companyName);
 
-    // 3. Save analysis
     const { data: savedAnalysis, error: analysisErr } = await supabase
       .from('analyses')
       .insert({
@@ -44,7 +53,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (analysisErr) throw analysisErr;
 
-    // 4. Save value chain players
+    // 5. Save value chain players
     if (analysis.value_chain_players.length > 0) {
       await supabase.from('value_chain_players').insert(
         analysis.value_chain_players.map(p => ({
@@ -56,8 +65,8 @@ router.post('/', async (req: Request, res: Response) => {
       );
     }
 
-    // 5. Generate & save LinkedIn drafts
-    const drafts = await generateLinkedInDrafts(analysis, name);
+    // 6. Generate & save LinkedIn drafts
+    const drafts = await generateLinkedInDrafts(analysis, companyName);
     if (drafts.length > 0) {
       await supabase.from('linkedin_drafts').insert(
         drafts.map(d => ({
@@ -69,15 +78,14 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     res.json({
+      success: true,
+      companyName,
       analysisId: savedAnalysis.id,
-      companyName: name,
       createdAt: savedAnalysis.created_at,
-      ...analysis,
-      linkedinDrafts: drafts,
     });
   } catch (err) {
-    console.error('[POST /api/analyze]', err);
-    res.status(500).json({ error: '분석 중 오류가 발생했습니다.' });
+    console.error('[POST /api/cron/daily]', err);
+    res.status(500).json({ error: '일일 분석 실행 중 오류가 발생했습니다.' });
   }
 });
 
