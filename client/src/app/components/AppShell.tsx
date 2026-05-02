@@ -1,13 +1,87 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import AiAssistantPanel from './AiAssistantPanel';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 600;
+const DEFAULT_WIDTH = 340;
+const LS_KEY = 'ai_panel_width';
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { analysisData } = useAnalysis();
   const [showPanel, setShowPanel] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const dragStartXRef = useRef(0);
+  const dragStartWidthRef = useRef(DEFAULT_WIDTH);
+  const panelWidthRef = useRef(DEFAULT_WIDTH);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(LS_KEY);
+    if (stored) {
+      const w = parseInt(stored, 10);
+      if (!isNaN(w) && w >= MIN_WIDTH && w <= MAX_WIDTH) {
+        setPanelWidth(w);
+        panelWidthRef.current = w;
+        dragStartWidthRef.current = w;
+      }
+    }
+  }, []);
+
+  const startDrag = useCallback((clientX: number) => {
+    dragStartXRef.current = clientX;
+    dragStartWidthRef.current = panelWidthRef.current;
+    setIsDragging(true);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  }, []);
+
+  const onDragMove = useCallback((clientX: number) => {
+    const delta = dragStartXRef.current - clientX;
+    const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, dragStartWidthRef.current + delta));
+    panelWidthRef.current = next;
+    setPanelWidth(next);
+  }, []);
+
+  const endDrag = useCallback(() => {
+    setIsDragging(false);
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    localStorage.setItem(LS_KEY, String(panelWidthRef.current));
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    function onMouseMove(e: MouseEvent) { onDragMove(e.clientX); }
+    function onMouseUp() { endDrag(); }
+    function onTouchMove(e: TouchEvent) { onDragMove(e.touches[0].clientX); }
+    function onTouchEnd() { endDrag(); }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('touchmove', onTouchMove);
+    document.addEventListener('touchend', onTouchEnd);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [isDragging, onDragMove, endDrag]);
+
+  function handleMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    startDrag(e.clientX);
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    startDrag(e.touches[0].clientX);
+  }
 
   return (
     <div className="lg:flex lg:items-start min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -16,9 +90,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {/* Right: desktop sticky panel */}
-      <div className="hidden lg:block w-[340px] shrink-0 sticky top-0 h-screen overflow-hidden p-3">
-        <AiAssistantPanel analysisData={analysisData} />
+      {/* Right: desktop sticky panel with drag handle */}
+      <div
+        className="hidden lg:flex shrink-0 sticky top-0 h-screen"
+        style={{ width: panelWidth }}
+      >
+        {/* Drag handle */}
+        <div
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          className="relative w-2 shrink-0 h-full cursor-col-resize group"
+        >
+          <div
+            className={`absolute left-0.5 top-0 h-full w-1 rounded-full transition-colors ${
+              isDragging ? 'bg-blue-400' : 'bg-gray-200 group-hover:bg-blue-400'
+            }`}
+          />
+        </div>
+
+        {/* Panel content */}
+        <div className="flex-1 min-w-0 h-full py-3 pr-3 overflow-hidden">
+          <AiAssistantPanel analysisData={analysisData} />
+        </div>
       </div>
 
       {/* Mobile: floating toggle button */}
