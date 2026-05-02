@@ -70,6 +70,8 @@ router.get('/:id', async (req: Request, res: Response) => {
       business_model: row.business_model,
       moat_analysis: row.moat_analysis ?? {},
       risk_analysis: row.risk_analysis ?? {},
+      competitors: row.competitors ?? {},
+      strategy: row.strategy ?? {},
       financials: row.financials,
       sources: row.sources ?? {},
       createdAt: row.created_at,

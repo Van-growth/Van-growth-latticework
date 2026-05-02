@@ -54,7 +54,56 @@ export interface AnalysisSources {
   tech_evolution?: Source[];
   value_chain?: Source[];
   business_model?: Source[];
+  competitors?: Source[];
+  strategy?: Source[];
   financials?: Source[];
+}
+
+export interface DirectCompetitor {
+  name: string;
+  country: string;
+  market_share: string;
+  strengths: string[];
+  differentiation: string;
+}
+
+export interface IndirectCompetitor {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface CompetitorsAnalysis {
+  direct: DirectCompetitor[];
+  indirect: IndirectCompetitor[];
+}
+
+export interface CorporateStrategy {
+  portfolio_direction: string;
+  ma_partnership: string;
+  regional_expansion: string;
+  notes?: string;
+}
+
+export interface BusinessStrategy {
+  competitive_advantage: string;
+  customer_channel: string;
+  product_roadmap: string;
+  notes?: string;
+}
+
+export interface FinancialStrategy {
+  capital_raising: string;
+  investment_priority: string;
+  dividend_buyback: string;
+  profitability_target: string;
+  notes?: string;
+}
+
+export interface StrategyAnalysis {
+  corporate: CorporateStrategy;
+  business: BusinessStrategy;
+  financial: FinancialStrategy;
 }
 
 export interface AnalysisData {
@@ -66,6 +115,8 @@ export interface AnalysisData {
   business_model: string;
   moat_analysis: MoatAnalysis;
   risk_analysis: RiskAnalysis;
+  competitors: CompetitorsAnalysis;
+  strategy: StrategyAnalysis;
   financials: string;
   sources: AnalysisSources;
 }
@@ -87,6 +138,17 @@ const DEFAULT_RISK: RiskAnalysis = {
   business:  { severity: '중간', items: [] },
   financial: { severity: '중간', items: [] },
   external:  { severity: '중간', items: [] },
+};
+
+const DEFAULT_COMPETITORS: CompetitorsAnalysis = {
+  direct: [],
+  indirect: [],
+};
+
+const DEFAULT_STRATEGY: StrategyAnalysis = {
+  corporate: { portfolio_direction: '', ma_partnership: '', regional_expansion: '' },
+  business:  { competitive_advantage: '', customer_channel: '', product_roadmap: '' },
+  financial: { capital_raising: '', investment_priority: '', dividend_buyback: '', profitability_target: '' },
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -161,11 +223,15 @@ export async function analyzeCompany(companyName: string): Promise<AnalysisData>
 출력 JSON 형식:
 {
   "summary": "경영 요약 (200-300자) — 강점과 약점 균형 포함",
-  "industry_history": "산업 역사 및 발전 과정 (400-600자)",
+  "industry_history": "글로벌 산업 역사 및 발전 과정 (600-800자). 미국·유럽·아시아 주요 플레이어 등장 타임라인, 글로벌 규제 변화, 주요 M&A 이벤트, 기술 전환점을 포함할 것. 한국 기업만이 아닌 글로벌 산업 흐름 속에서 분석 대상 기업의 위치를 파악할 것.",
   "tech_evolution": "기술 변화 및 혁신 트렌드 (300-500자)",
-  "value_chain_overview": "밸류체인 전체 개요 (200-300자)",
+  "value_chain_overview": "글로벌 밸류체인 전체 개요 (200-300자) — 원재료 공급국, 제조 허브, 주요 시장 지역을 포함할 것",
   "value_chain_players": [
-    { "role": "밸류체인 내 역할", "player_name": "기업/기관명", "description": "역할 설명 1-2문장" }
+    {
+      "role": "밸류체인 내 역할 (예: 원재료 공급 | 부품 제조 | 최종 조립 | 유통 | 최종 소비시장 등)",
+      "player_name": "글로벌 주요 기업/기관명 (국가 포함, 예: BASF(독일), CATL(중국))",
+      "description": "역할 설명 1-2문장 — 분석 대상 기업이 해당 단계에 있을 경우 포지션을 명시할 것"
+    }
   ],
   "business_model": "비즈니스 모델 및 수익 구조 (400-600자) — 수익화 방식과 한계 균형 포함",
   "moat_analysis": {
@@ -205,6 +271,42 @@ export async function analyzeCompany(companyName: string): Promise<AnalysisData>
       ]
     }
   },
+  "competitors": {
+    "direct": [
+      {
+        "name": "경쟁사명",
+        "country": "본사 국가",
+        "market_share": "시장점유율 (추정) — 모르면 '확인 필요'",
+        "strengths": ["핵심 강점1", "핵심 강점2"],
+        "differentiation": "분석 대상 기업과의 주요 차별점 1-2문장"
+      }
+    ],
+    "indirect": [
+      {
+        "name": "간접경쟁사 또는 대체재명",
+        "type": "간접경쟁사 또는 대체재",
+        "description": "경쟁 관계 설명 1문장"
+      }
+    ]
+  },
+  "strategy": {
+    "corporate": {
+      "portfolio_direction": "사업 포트폴리오 방향 — 집중/다각화/철수 중 어떤 방향인지 근거와 함께 서술. 확인 불가 항목은 '확인 필요' 명시",
+      "ma_partnership": "M&A/파트너십/JV 전략 — 주요 사례 포함. 확인 불가 항목은 '확인 필요' 명시",
+      "regional_expansion": "지역 확장 전략 — 주요 타깃 지역 및 방식. 확인 불가 항목은 '확인 필요' 명시"
+    },
+    "business": {
+      "competitive_advantage": "경쟁 우위 방식 — 원가우위/차별화/집중 중 해당 유형과 근거. 확인 불가 항목은 '확인 필요' 명시",
+      "customer_channel": "고객 세그먼트 및 채널 전략. 확인 불가 항목은 '확인 필요' 명시",
+      "product_roadmap": "제품/서비스 로드맵 — 현재 라인업과 향후 방향. 확인 불가 항목은 '확인 필요' 명시"
+    },
+    "financial": {
+      "capital_raising": "자본 조달 방식 — 자체/외부/IPO/채권 등. 확인 불가 항목은 '확인 필요' 명시",
+      "investment_priority": "투자 우선순위 — R&D/CAPEX/M&A 배분 방향. 확인 불가 항목은 '확인 필요' 명시",
+      "dividend_buyback": "배당/자사주 정책. 확인 불가 항목은 '확인 필요' 명시",
+      "profitability_target": "목표 수익성 지표 — 마진율, ROE, EBITDA 등. 확인 불가 항목은 '확인 필요' 명시"
+    }
+  },
   "financials": "재무 현황 및 주요 지표 (400-600자) — 공개된 수치만 사용, 없으면 '공개 데이터 없음' 명시",
   "sources": {
     "summary":          [{"url": "https://...", "title": "페이지 제목"}],
@@ -212,11 +314,14 @@ export async function analyzeCompany(companyName: string): Promise<AnalysisData>
     "tech_evolution":   [{"url": "https://...", "title": "페이지 제목"}],
     "value_chain":      [{"url": "https://...", "title": "페이지 제목"}],
     "business_model":   [{"url": "https://...", "title": "페이지 제목"}],
+    "competitors":      [{"url": "https://...", "title": "페이지 제목"}],
+    "strategy":         [{"url": "https://...", "title": "페이지 제목"}],
     "financials":       [{"url": "https://...", "title": "페이지 제목"}]
   }
 }
 
 sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 URL만 포함하세요. 없으면 빈 배열 []로 두세요.
+competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
 모든 텍스트 내용은 한국어로 작성하세요.`;
 
   const raw = await runWithWebSearch(
@@ -232,6 +337,8 @@ sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 
       ...parsed,
       moat_analysis: parsed.moat_analysis ?? DEFAULT_MOAT,
       risk_analysis: parsed.risk_analysis ?? DEFAULT_RISK,
+      competitors:   parsed.competitors   ?? DEFAULT_COMPETITORS,
+      strategy:      parsed.strategy      ?? DEFAULT_STRATEGY,
       sources:       parsed.sources ?? {},
     };
   }
@@ -245,6 +352,8 @@ sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 
     business_model: '',
     moat_analysis: DEFAULT_MOAT,
     risk_analysis: DEFAULT_RISK,
+    competitors: DEFAULT_COMPETITORS,
+    strategy: DEFAULT_STRATEGY,
     financials: '',
     sources: {},
   };

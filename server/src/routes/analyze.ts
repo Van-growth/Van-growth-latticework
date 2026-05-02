@@ -39,6 +39,8 @@ router.post('/', async (req: Request, res: Response) => {
         business_model: analysis.business_model,
         moat_analysis: analysis.moat_analysis,
         risk_analysis: analysis.risk_analysis,
+        competitors: analysis.competitors,
+        strategy: analysis.strategy,
         financials: analysis.financials,
         sources: analysis.sources,
       })

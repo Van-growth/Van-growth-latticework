@@ -5,6 +5,8 @@ import {
   AnalysisDetail,
   MoatAnalysis,
   RiskAnalysis,
+  CompetitorsAnalysis,
+  StrategyAnalysis,
   Source,
 } from '@/types';
 
@@ -390,6 +392,154 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
   );
 }
 
+// ── Tab: 경쟁사 ────────────────────────────────────────────────────────────────
+
+function CompetitorsTab({ data }: { data: AnalysisDetail }) {
+  const c = data.competitors;
+  const direct = c?.direct ?? [];
+  const indirect = c?.indirect ?? [];
+
+  if (direct.length === 0 && indirect.length === 0) {
+    return <p className="text-sm text-gray-500">경쟁사 데이터가 없습니다.</p>;
+  }
+
+  return (
+    <>
+      <div className="space-y-6">
+        {direct.length > 0 && (
+          <div>
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">직접 경쟁사</h4>
+            <div className="space-y-3">
+              {direct.map((comp, i) => (
+                <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <span className="font-bold text-gray-900 text-sm">{comp.name}</span>
+                      <span className="ml-2 text-xs text-gray-400">{comp.country}</span>
+                    </div>
+                    <span className="shrink-0 text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 font-medium">
+                      점유율: {comp.market_share}
+                    </span>
+                  </div>
+                  {comp.strengths?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {comp.strengths.map((s, j) => (
+                        <span key={j} className="text-xs bg-emerald-50 text-emerald-700 rounded px-2 py-0.5">{s}</span>
+                      ))}
+                    </div>
+                  )}
+                  {comp.differentiation && (
+                    <p className="text-xs text-gray-600 leading-relaxed border-t border-gray-100 pt-2 mt-2">
+                      <span className="font-medium text-gray-500">차별점: </span>{comp.differentiation}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {indirect.length > 0 && (
+          <div>
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">간접 경쟁사 / 대체재</h4>
+            <div className="flex flex-wrap gap-3">
+              {indirect.map((comp, i) => (
+                <div key={i} className="flex-1 min-w-[160px] bg-amber-50 border border-amber-100 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="font-semibold text-gray-800 text-sm">{comp.name}</span>
+                    <span className="text-xs bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">{comp.type}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed">{comp.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <SourcesList sources={data.sources?.competitors} />
+    </>
+  );
+}
+
+// ── Tab: 전략 ──────────────────────────────────────────────────────────────────
+
+function StrategyTab({ data }: { data: AnalysisDetail }) {
+  const s = data.strategy;
+  if (!s || (!s.corporate && !s.business && !s.financial)) {
+    return <p className="text-sm text-gray-500">전략 데이터가 없습니다.</p>;
+  }
+
+  const sections = [
+    {
+      label: '기업 전략',
+      color: 'violet',
+      bgClass: 'bg-violet-50 border-violet-100',
+      headerClass: 'text-violet-800',
+      labelClass: 'text-violet-600',
+      items: s.corporate ? [
+        { label: '포트폴리오 방향', value: s.corporate.portfolio_direction },
+        { label: 'M&A / 파트너십', value: s.corporate.ma_partnership },
+        { label: '지역 확장',       value: s.corporate.regional_expansion },
+        ...(s.corporate.notes ? [{ label: '비고', value: s.corporate.notes }] : []),
+      ] : [],
+    },
+    {
+      label: '사업 전략',
+      color: 'blue',
+      bgClass: 'bg-blue-50 border-blue-100',
+      headerClass: 'text-blue-800',
+      labelClass: 'text-blue-600',
+      items: s.business ? [
+        { label: '경쟁 우위',     value: s.business.competitive_advantage },
+        { label: '고객 / 채널',   value: s.business.customer_channel },
+        { label: '제품 로드맵',   value: s.business.product_roadmap },
+        ...(s.business.notes ? [{ label: '비고', value: s.business.notes }] : []),
+      ] : [],
+    },
+    {
+      label: '재무 전략',
+      color: 'emerald',
+      bgClass: 'bg-emerald-50 border-emerald-100',
+      headerClass: 'text-emerald-800',
+      labelClass: 'text-emerald-600',
+      items: s.financial ? [
+        { label: '자본 조달',     value: s.financial.capital_raising },
+        { label: '투자 우선순위', value: s.financial.investment_priority },
+        { label: '배당 / 자사주', value: s.financial.dividend_buyback },
+        { label: '목표 수익성',   value: s.financial.profitability_target },
+        ...(s.financial.notes ? [{ label: '비고', value: s.financial.notes }] : []),
+      ] : [],
+    },
+  ];
+
+  return (
+    <>
+      <div className="space-y-4">
+        {sections.map(sec => (
+          sec.items.length > 0 && (
+            <div key={sec.label} className={`border rounded-xl p-5 ${sec.bgClass}`}>
+              <h4 className={`text-sm font-bold mb-4 ${sec.headerClass}`}>{sec.label}</h4>
+              <div className="space-y-3">
+                {sec.items.map((item, i) => (
+                  item.value ? (
+                    <div key={i} className="flex gap-3">
+                      <span className={`shrink-0 text-xs font-semibold w-24 pt-0.5 ${sec.labelClass}`}>{item.label}</span>
+                      <p className="text-sm text-gray-700 leading-relaxed">
+                        <HighlightNumbers text={item.value} />
+                      </p>
+                    </div>
+                  ) : null
+                ))}
+              </div>
+            </div>
+          )
+        ))}
+      </div>
+      <SourcesList sources={data.sources?.strategy} />
+    </>
+  );
+}
+
 // ── Tab: 재무 (Number cards) ──────────────────────────────────────────────────
 
 function FinancialsTab({ data }: { data: AnalysisDetail }) {
@@ -445,7 +595,9 @@ const TABS = [
   { key: 'industry_history', label: '산업 역사' },
   { key: 'tech_evolution',   label: '기술 변화' },
   { key: 'value_chain',      label: '밸류체인' },
+  { key: 'competitors',      label: '경쟁사' },
   { key: 'business_model',   label: '비즈니스 모델' },
+  { key: 'strategy',         label: '전략' },
   { key: 'financials',       label: '재무' },
 ] as const;
 
@@ -486,7 +638,9 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
         {tab === 'industry_history' && <IndustryHistoryTab  data={data} />}
         {tab === 'tech_evolution'   && <TechEvolutionTab    data={data} />}
         {tab === 'value_chain'      && <ValueChainTab       data={data} />}
+        {tab === 'competitors'      && <CompetitorsTab      data={data} />}
         {tab === 'business_model'   && <BusinessModelTab    data={data} />}
+        {tab === 'strategy'         && <StrategyTab         data={data} />}
         {tab === 'financials'       && <FinancialsTab       data={data} />}
       </div>
     </div>

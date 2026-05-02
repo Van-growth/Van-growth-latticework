@@ -44,7 +44,56 @@ export interface AnalysisSources {
   tech_evolution?: Source[];
   value_chain?: Source[];
   business_model?: Source[];
+  competitors?: Source[];
+  strategy?: Source[];
   financials?: Source[];
+}
+
+export interface DirectCompetitor {
+  name: string;
+  country: string;
+  market_share: string;
+  strengths: string[];
+  differentiation: string;
+}
+
+export interface IndirectCompetitor {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface CompetitorsAnalysis {
+  direct: DirectCompetitor[];
+  indirect: IndirectCompetitor[];
+}
+
+export interface CorporateStrategy {
+  portfolio_direction: string;
+  ma_partnership: string;
+  regional_expansion: string;
+  notes?: string;
+}
+
+export interface BusinessStrategy {
+  competitive_advantage: string;
+  customer_channel: string;
+  product_roadmap: string;
+  notes?: string;
+}
+
+export interface FinancialStrategy {
+  capital_raising: string;
+  investment_priority: string;
+  dividend_buyback: string;
+  profitability_target: string;
+  notes?: string;
+}
+
+export interface StrategyAnalysis {
+  corporate: CorporateStrategy;
+  business: BusinessStrategy;
+  financial: FinancialStrategy;
 }
 
 export interface LinkedInDraft {
@@ -70,6 +119,8 @@ export interface AnalysisDetail {
   business_model: string;
   moat_analysis: MoatAnalysis | null;
   risk_analysis: RiskAnalysis | null;
+  competitors: CompetitorsAnalysis | null;
+  strategy: StrategyAnalysis | null;
   financials: string;
   sources: AnalysisSources;
   createdAt: string;
