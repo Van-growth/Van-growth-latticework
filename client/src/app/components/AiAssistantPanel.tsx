@@ -15,6 +15,16 @@ const QUICK_QUESTIONS = [
   '경쟁사 대비 포지션',
 ];
 
+const MUNGER_PROMPT = `찰리 멍거 관점에서 이 기업을 체크리스트로 평가해줘. 아래 5개 프레임 각각에 대해 현재 분석 데이터 기반으로 간결하게 답해줘:
+
+1. 비즈니스 퀄리티: 진입장벽 / Pricing power / 10년 내구성
+2. 해자(Moat): 전환비용 / 규모의 경제 / 네트워크 효과
+3. 경영진: 자본배분 / 가이던스 실행력 / SBC 수준
+4. 재무: ROE·ROIC vs 자본비용 / FCF vs 순이익 괴리 / 부채 안전성
+5. 밸류에이션: 현재 가격에 반영된 성장 가정 / 최악 시나리오 손실 / 5년 후 이 가격이 싸 보일 조건
+
+각 항목은 ✅ 양호 / ⚠️ 주의 / ❌ 취약 으로 시작하고 한 줄 근거를 붙여줘.`;
+
 function buildContext(data: AnalysisDetail): string {
   const metrics = data.metrics
     ?.map(m => `${m.label}: ${m.value}${m.unit ? ' ' + m.unit : ''}`)
@@ -185,6 +195,13 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
                   {q}
                 </button>
               ))}
+              <button
+                onClick={() => sendMessage(MUNGER_PROMPT)}
+                disabled={isLoading}
+                className="text-left text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-50 border border-amber-200 bg-amber-50 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-0.5"
+              >
+                멍거 체크리스트
+              </button>
             </div>
           </div>
 
