@@ -1,7 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { AnalysisDetail } from '@/types';
+import {
+  AnalysisDetail,
+  MoatAnalysis,
+  RiskAnalysis,
+  Source,
+} from '@/types';
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 
@@ -24,10 +29,133 @@ function HighlightNumbers({ text }: { text: string }) {
   );
 }
 
+// ── Shared: Sources ────────────────────────────────────────────────────────────
+
+function SourcesList({ sources }: { sources: Source[] | undefined }) {
+  if (!sources || sources.length === 0) return null;
+  return (
+    <div className="mt-5 pt-4 border-t border-gray-100">
+      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">참고 출처</h4>
+      <div className="flex flex-col gap-1">
+        {sources.map((s, i) => (
+          <a
+            key={i}
+            href={s.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:text-blue-800 hover:underline truncate"
+          >
+            {s.title || s.url}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Shared: Moat ───────────────────────────────────────────────────────────────
+
+function MoatSection({ moat }: { moat: MoatAnalysis }) {
+  if (!moat.types?.length && !moat.sustain_conditions && !moat.collapse_scenarios) return null;
+
+  const strengthStyle: Record<string, string> = {
+    '강함': 'bg-green-100 text-green-700',
+    '보통': 'bg-amber-100 text-amber-700',
+    '약함': 'bg-red-100 text-red-700',
+  };
+
+  return (
+    <div className="mt-5 bg-indigo-50 border border-indigo-100 rounded-xl p-5">
+      <h4 className="text-sm font-bold text-indigo-800 mb-4">해자 분석 (Moat)</h4>
+
+      {moat.types?.length > 0 && (
+        <div className="space-y-3 mb-4">
+          {moat.types.map((t, i) => (
+            <div key={i} className="bg-white rounded-lg p-3 border border-indigo-100">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-semibold text-gray-800">{t.name}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${strengthStyle[t.strength] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {t.strength}
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 leading-relaxed">{t.basis}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {moat.sustain_conditions && (
+          <div>
+            <div className="text-xs font-bold text-indigo-600 mb-1">유지 조건</div>
+            <p className="text-sm text-gray-700 leading-relaxed">{moat.sustain_conditions}</p>
+          </div>
+        )}
+        {moat.collapse_scenarios && (
+          <div>
+            <div className="text-xs font-bold text-red-500 mb-1">붕괴 시나리오</div>
+            <p className="text-sm text-gray-700 leading-relaxed">{moat.collapse_scenarios}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Shared: Risk ───────────────────────────────────────────────────────────────
+
+function RiskSection({ risk }: { risk: RiskAnalysis }) {
+  const groups = [
+    { label: '비즈니스 리스크', data: risk.business },
+    { label: '재무 리스크',     data: risk.financial },
+    { label: '외부 리스크',     data: risk.external },
+  ];
+
+  const hasContent = groups.some(g => g.data?.items?.length > 0);
+  if (!hasContent) return null;
+
+  const severityStyle: Record<string, string> = {
+    '높음': 'bg-red-100 text-red-700',
+    '중간': 'bg-amber-100 text-amber-700',
+    '낮음': 'bg-green-100 text-green-700',
+  };
+
+  return (
+    <div className="mt-4 bg-rose-50 border border-rose-100 rounded-xl p-5">
+      <h4 className="text-sm font-bold text-rose-800 mb-4">리스크 분석</h4>
+      <div className="space-y-4">
+        {groups.map(({ label, data }) => {
+          if (!data?.items?.length) return null;
+          return (
+            <div key={label}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold text-gray-700">{label}</span>
+                {data.severity && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${severityStyle[data.severity] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {data.severity}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {data.items.map((item, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-xs font-medium text-gray-500 w-16 shrink-0 pt-0.5">{item.category}</span>
+                    <p className="text-sm text-gray-700 leading-relaxed">{item.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: 요약 ──────────────────────────────────────────────────────────────────
 
-function SummaryTab({ summary }: { summary: string }) {
-  const ls = splitLines(summary);
+function SummaryTab({ data }: { data: AnalysisDetail }) {
+  const ls = splitLines(data.summary);
   const statLines = ls
     .filter(l => /[$₩\d].*?(?:조|억|만|B|M|K|%|배)/.test(l))
     .slice(0, 3);
@@ -62,14 +190,15 @@ function SummaryTab({ summary }: { summary: string }) {
           </p>
         ))}
       </div>
+      <SourcesList sources={data.sources?.summary} />
     </div>
   );
 }
 
 // ── Tab: 산업 역사 (Timeline) ──────────────────────────────────────────────────
 
-function IndustryHistoryTab({ text }: { text: string }) {
-  const ls = splitLines(text);
+function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
+  const ls = splitLines(data.industry_history);
 
   type Item = { period: string; content: string };
   const items: Item[] = [];
@@ -89,45 +218,46 @@ function IndustryHistoryTab({ text }: { text: string }) {
 
   const hasYears = items.some(it => it.period !== '');
 
-  if (hasYears) {
-    return (
-      <div className="space-y-0">
-        {items.map((item, i) => (
-          <div key={i} className="flex gap-4">
-            <div className="flex flex-col items-center">
-              <div className={`w-3 h-3 rounded-full shrink-0 mt-1 ${item.period ? 'bg-blue-500' : 'bg-gray-300'}`} />
-              {i < items.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1 min-h-[1rem]" />}
-            </div>
-            <div className="pb-5 min-w-0">
-              {item.period && (
-                <span className="inline-block text-xs font-bold text-blue-600 bg-blue-50 rounded px-2 py-0.5 mb-1">
-                  {item.period}
-                </span>
-              )}
-              <p className="text-sm text-gray-700 leading-relaxed">{item.content}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {ls.map((l, i) => (
-        <div key={i} className="flex gap-3 items-start">
-          <span className="mt-2 w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-          <p className="text-sm text-gray-700 leading-relaxed">{l}</p>
+    <>
+      {hasYears ? (
+        <div className="space-y-0">
+          {items.map((item, i) => (
+            <div key={i} className="flex gap-4">
+              <div className="flex flex-col items-center">
+                <div className={`w-3 h-3 rounded-full shrink-0 mt-1 ${item.period ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                {i < items.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1 min-h-[1rem]" />}
+              </div>
+              <div className="pb-5 min-w-0">
+                {item.period && (
+                  <span className="inline-block text-xs font-bold text-blue-600 bg-blue-50 rounded px-2 py-0.5 mb-1">
+                    {item.period}
+                  </span>
+                )}
+                <p className="text-sm text-gray-700 leading-relaxed">{item.content}</p>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      ) : (
+        <div className="space-y-3">
+          {ls.map((l, i) => (
+            <div key={i} className="flex gap-3 items-start">
+              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+              <p className="text-sm text-gray-700 leading-relaxed">{l}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <SourcesList sources={data.sources?.industry_history} />
+    </>
   );
 }
 
 // ── Tab: 기술 변화 (Change points) ────────────────────────────────────────────
 
-function TechEvolutionTab({ text }: { text: string }) {
-  const ls = splitLines(text);
+function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
+  const ls = splitLines(data.tech_evolution);
   const points: string[] = [];
   let buf = '';
 
@@ -140,7 +270,7 @@ function TechEvolutionTab({ text }: { text: string }) {
     }
   }
   if (buf) points.push(buf.trim());
-  if (points.length === 0 && text) points.push(text);
+  if (points.length === 0 && data.tech_evolution) points.push(data.tech_evolution);
 
   const gradients = [
     'from-violet-50 to-blue-50 border-violet-100',
@@ -151,21 +281,24 @@ function TechEvolutionTab({ text }: { text: string }) {
   ];
 
   return (
-    <div className="space-y-3">
-      {points.map((point, i) => (
-        <div
-          key={i}
-          className={`flex gap-3 p-4 bg-gradient-to-r ${gradients[i % gradients.length]} rounded-xl border`}
-        >
-          <span className="shrink-0 w-6 h-6 rounded-full bg-violet-500 text-white text-xs flex items-center justify-center font-bold">
-            {i + 1}
-          </span>
-          <p className="text-sm text-gray-800 leading-relaxed">
-            <HighlightNumbers text={point} />
-          </p>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="space-y-3">
+        {points.map((point, i) => (
+          <div
+            key={i}
+            className={`flex gap-3 p-4 bg-gradient-to-r ${gradients[i % gradients.length]} rounded-xl border`}
+          >
+            <span className="shrink-0 w-6 h-6 rounded-full bg-violet-500 text-white text-xs flex items-center justify-center font-bold">
+              {i + 1}
+            </span>
+            <p className="text-sm text-gray-800 leading-relaxed">
+              <HighlightNumbers text={point} />
+            </p>
+          </div>
+        ))}
+      </div>
+      <SourcesList sources={data.sources?.tech_evolution} />
+    </>
   );
 }
 
@@ -174,35 +307,38 @@ function TechEvolutionTab({ text }: { text: string }) {
 function ValueChainTab({ data }: { data: AnalysisDetail }) {
   const players = data.valuechainPlayers ?? [];
   return (
-    <div className="space-y-5">
-      {data.value_chain_overview && (
-        <p className="text-sm text-gray-700 leading-relaxed">{data.value_chain_overview}</p>
-      )}
-      {players.length > 0 && (
-        <>
-          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">플레이어</h4>
-          <div className="flex flex-wrap gap-3">
-            {players.map((p, i) => (
-              <div
-                key={i}
-                className="flex-1 min-w-[150px] max-w-xs bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="text-xs font-semibold text-blue-600 mb-1">{p.role}</div>
-                <div className="font-bold text-gray-900 text-sm mb-2">{p.player_name}</div>
-                <div className="text-xs text-gray-500 leading-relaxed">{p.description}</div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+    <>
+      <div className="space-y-5">
+        {data.value_chain_overview && (
+          <p className="text-sm text-gray-700 leading-relaxed">{data.value_chain_overview}</p>
+        )}
+        {players.length > 0 && (
+          <>
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">플레이어</h4>
+            <div className="flex flex-wrap gap-3">
+              {players.map((p, i) => (
+                <div
+                  key={i}
+                  className="flex-1 min-w-[150px] max-w-xs bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="text-xs font-semibold text-blue-600 mb-1">{p.role}</div>
+                  <div className="font-bold text-gray-900 text-sm mb-2">{p.player_name}</div>
+                  <div className="text-xs text-gray-500 leading-relaxed">{p.description}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      <SourcesList sources={data.sources?.value_chain} />
+    </>
   );
 }
 
-// ── Tab: 비즈니스 모델 (Revenue Engine / Unit Economics) ─────────────────────
+// ── Tab: 비즈니스 모델 (Revenue Engine / Unit Economics / Moat / Risk) ─────────
 
-function BusinessModelTab({ text }: { text: string }) {
-  const ls = splitLines(text);
+function BusinessModelTab({ data }: { data: AnalysisDetail }) {
+  const ls = splitLines(data.business_model);
   let reLines: string[] = [];
   let ueLines: string[] = [];
   let section = 0;
@@ -222,35 +358,42 @@ function BusinessModelTab({ text }: { text: string }) {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-5">
-        <h4 className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-3">Revenue Engine</h4>
-        <div className="space-y-2">
-          {reLines.map((l, i) => (
-            <p key={i} className="text-sm text-gray-700 leading-relaxed">
-              <HighlightNumbers text={l} />
-            </p>
-          ))}
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-5">
+          <h4 className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-3">Revenue Engine</h4>
+          <div className="space-y-2">
+            {reLines.map((l, i) => (
+              <p key={i} className="text-sm text-gray-700 leading-relaxed">
+                <HighlightNumbers text={l} />
+              </p>
+            ))}
+          </div>
+        </div>
+        <div className="bg-amber-50 border border-amber-100 rounded-xl p-5">
+          <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-3">Unit Economics</h4>
+          <div className="space-y-2">
+            {ueLines.map((l, i) => (
+              <p key={i} className="text-sm text-gray-700 leading-relaxed">
+                <HighlightNumbers text={l} />
+              </p>
+            ))}
+          </div>
         </div>
       </div>
-      <div className="bg-amber-50 border border-amber-100 rounded-xl p-5">
-        <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-3">Unit Economics</h4>
-        <div className="space-y-2">
-          {ueLines.map((l, i) => (
-            <p key={i} className="text-sm text-gray-700 leading-relaxed">
-              <HighlightNumbers text={l} />
-            </p>
-          ))}
-        </div>
-      </div>
-    </div>
+
+      {data.moat_analysis && <MoatSection moat={data.moat_analysis} />}
+      {data.risk_analysis  && <RiskSection  risk={data.risk_analysis} />}
+
+      <SourcesList sources={data.sources?.business_model} />
+    </>
   );
 }
 
 // ── Tab: 재무 (Number cards) ──────────────────────────────────────────────────
 
-function FinancialsTab({ text }: { text: string }) {
-  const ls = splitLines(text);
+function FinancialsTab({ data }: { data: AnalysisDetail }) {
+  const ls = splitLines(data.financials);
   const statLines = ls
     .filter(l => /[$₩\d].*?(?:조|억|만|B|M|K|%|배|원)/.test(l))
     .slice(0, 6);
@@ -265,30 +408,33 @@ function FinancialsTab({ text }: { text: string }) {
   }
 
   return (
-    <div className="space-y-5">
-      {statLines.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {statLines.map((l, i) => {
-            const { value, label } = parseStat(l);
-            return (
-              <div key={i} className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                <div className="text-xl font-bold text-slate-800">{value}</div>
-                <div className="text-xs text-gray-500 mt-1 leading-snug line-clamp-2">{label}</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {restLines.length > 0 && (
-        <div className="space-y-2">
-          {restLines.map((l, i) => (
-            <p key={i} className="text-sm text-gray-700 leading-relaxed">
-              <HighlightNumbers text={l} />
-            </p>
-          ))}
-        </div>
-      )}
-    </div>
+    <>
+      <div className="space-y-5">
+        {statLines.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {statLines.map((l, i) => {
+              const { value, label } = parseStat(l);
+              return (
+                <div key={i} className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                  <div className="text-xl font-bold text-slate-800">{value}</div>
+                  <div className="text-xs text-gray-500 mt-1 leading-snug line-clamp-2">{label}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {restLines.length > 0 && (
+          <div className="space-y-2">
+            {restLines.map((l, i) => (
+              <p key={i} className="text-sm text-gray-700 leading-relaxed">
+                <HighlightNumbers text={l} />
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+      <SourcesList sources={data.sources?.financials} />
+    </>
   );
 }
 
@@ -336,12 +482,12 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
       </div>
 
       <div className="p-6">
-        {tab === 'summary'          && <SummaryTab summary={data.summary} />}
-        {tab === 'industry_history' && <IndustryHistoryTab text={data.industry_history} />}
-        {tab === 'tech_evolution'   && <TechEvolutionTab text={data.tech_evolution} />}
-        {tab === 'value_chain'      && <ValueChainTab data={data} />}
-        {tab === 'business_model'   && <BusinessModelTab text={data.business_model} />}
-        {tab === 'financials'       && <FinancialsTab text={data.financials} />}
+        {tab === 'summary'          && <SummaryTab          data={data} />}
+        {tab === 'industry_history' && <IndustryHistoryTab  data={data} />}
+        {tab === 'tech_evolution'   && <TechEvolutionTab    data={data} />}
+        {tab === 'value_chain'      && <ValueChainTab       data={data} />}
+        {tab === 'business_model'   && <BusinessModelTab    data={data} />}
+        {tab === 'financials'       && <FinancialsTab       data={data} />}
       </div>
     </div>
   );

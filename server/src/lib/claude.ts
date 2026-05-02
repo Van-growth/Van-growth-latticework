@@ -15,6 +15,48 @@ export interface ValueChainPlayer {
   description: string;
 }
 
+export interface MoatType {
+  name: string;
+  strength: '강함' | '보통' | '약함';
+  basis: string;
+}
+
+export interface MoatAnalysis {
+  types: MoatType[];
+  sustain_conditions: string;
+  collapse_scenarios: string;
+}
+
+export interface RiskItem {
+  category: string;
+  description: string;
+}
+
+export interface RiskGroup {
+  severity: '높음' | '중간' | '낮음';
+  items: RiskItem[];
+}
+
+export interface RiskAnalysis {
+  business: RiskGroup;
+  financial: RiskGroup;
+  external: RiskGroup;
+}
+
+export interface Source {
+  url: string;
+  title: string;
+}
+
+export interface AnalysisSources {
+  summary?: Source[];
+  industry_history?: Source[];
+  tech_evolution?: Source[];
+  value_chain?: Source[];
+  business_model?: Source[];
+  financials?: Source[];
+}
+
 export interface AnalysisData {
   summary: string;
   industry_history: string;
@@ -22,13 +64,30 @@ export interface AnalysisData {
   value_chain_overview: string;
   value_chain_players: ValueChainPlayer[];
   business_model: string;
+  moat_analysis: MoatAnalysis;
+  risk_analysis: RiskAnalysis;
   financials: string;
+  sources: AnalysisSources;
 }
 
 export interface LinkedInDraft {
   draft_number: number;
   content: string;
 }
+
+// ── Defaults ─────────────────────────────────────────────────────────────────
+
+const DEFAULT_MOAT: MoatAnalysis = {
+  types: [],
+  sustain_conditions: '',
+  collapse_scenarios: '',
+};
+
+const DEFAULT_RISK: RiskAnalysis = {
+  business:  { severity: '중간', items: [] },
+  financial: { severity: '중간', items: [] },
+  external:  { severity: '중간', items: [] },
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,10 +136,8 @@ async function runWithWebSearch(
 
 function extractJson<T>(text: string): T | null {
   try {
-    // Try full text first
     return JSON.parse(text) as T;
   } catch {
-    // Try to find first JSON object or array
     const match = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
     if (match) {
       try { return JSON.parse(match[0]) as T; } catch { /* fall through */ }
@@ -92,33 +149,93 @@ function extractJson<T>(text: string): T | null {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function analyzeCompany(companyName: string): Promise<AnalysisData> {
-  const systemPrompt = `당신은 전문 기업 분석가입니다. 웹 검색으로 기업을 충분히 조사한 후, 아래 JSON 형식으로만 응답하세요. 마크다운, 코드블록, 추가 설명 없이 JSON만 출력하세요.
+  const systemPrompt = `당신은 균형 잡힌 시각을 가진 전문 기업 분석가입니다. 웹 검색으로 기업을 충분히 조사한 후, 아래 JSON 형식으로만 응답하세요. 마크다운, 코드블록, 추가 설명 없이 순수 JSON만 출력하세요.
 
+균형 잡힌 분석 원칙 (반드시 준수):
+- 긍정적 측면과 부정적 측면을 반드시 균형 있게 서술할 것
+- 불확실하거나 검증되지 않은 정보는 "(추정)" 또는 "(확인 필요)"로 명시할 것
+- "혁신적인", "최고의", "선두적인" 등 근거 없는 과장된 수식어 사용 금지
+- 구체적 수치나 데이터가 없을 경우 "공개 데이터 없음" 또는 "추정 불가"로 명시할 것
+- 출처가 확인된 정보와 추정 정보를 구분하여 서술할 것
+
+출력 JSON 형식:
 {
-  "summary": "경영 요약 (200-300자)",
+  "summary": "경영 요약 (200-300자) — 강점과 약점 균형 포함",
   "industry_history": "산업 역사 및 발전 과정 (400-600자)",
   "tech_evolution": "기술 변화 및 혁신 트렌드 (300-500자)",
   "value_chain_overview": "밸류체인 전체 개요 (200-300자)",
   "value_chain_players": [
     { "role": "밸류체인 내 역할", "player_name": "기업/기관명", "description": "역할 설명 1-2문장" }
   ],
-  "business_model": "비즈니스 모델 및 수익 구조 분석 (400-600자)",
-  "financials": "재무 현황 및 주요 지표 (400-600자)"
+  "business_model": "비즈니스 모델 및 수익 구조 (400-600자) — 수익화 방식과 한계 균형 포함",
+  "moat_analysis": {
+    "types": [
+      {
+        "name": "네트워크 효과 | 전환비용 | 규모의 경제 | 무형자산 | 비용우위 중 해당하는 것",
+        "strength": "강함 또는 보통 또는 약함",
+        "basis": "해당 해자의 근거 2-3문장 (반론 포함)"
+      }
+    ],
+    "sustain_conditions": "해자가 유지되는 조건 (2-3문장)",
+    "collapse_scenarios": "해자가 무너지는 시나리오 (2-3문장) — 현실적 리스크 기반"
+  },
+  "risk_analysis": {
+    "business": {
+      "severity": "높음 또는 중간 또는 낮음",
+      "items": [
+        {"category": "경쟁", "description": "구체적 리스크 내용"},
+        {"category": "시장", "description": "구체적 리스크 내용"},
+        {"category": "실행", "description": "구체적 리스크 내용"}
+      ]
+    },
+    "financial": {
+      "severity": "높음 또는 중간 또는 낮음",
+      "items": [
+        {"category": "수익성", "description": "구체적 리스크 내용"},
+        {"category": "현금흐름", "description": "구체적 리스크 내용"},
+        {"category": "부채", "description": "구체적 리스크 내용"}
+      ]
+    },
+    "external": {
+      "severity": "높음 또는 중간 또는 낮음",
+      "items": [
+        {"category": "규제", "description": "구체적 리스크 내용"},
+        {"category": "매크로", "description": "구체적 리스크 내용"},
+        {"category": "기술변화", "description": "구체적 리스크 내용"}
+      ]
+    }
+  },
+  "financials": "재무 현황 및 주요 지표 (400-600자) — 공개된 수치만 사용, 없으면 '공개 데이터 없음' 명시",
+  "sources": {
+    "summary":          [{"url": "https://...", "title": "페이지 제목"}],
+    "industry_history": [{"url": "https://...", "title": "페이지 제목"}],
+    "tech_evolution":   [{"url": "https://...", "title": "페이지 제목"}],
+    "value_chain":      [{"url": "https://...", "title": "페이지 제목"}],
+    "business_model":   [{"url": "https://...", "title": "페이지 제목"}],
+    "financials":       [{"url": "https://...", "title": "페이지 제목"}]
+  }
 }
 
-모든 내용은 한국어로 작성하세요.`;
+sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 URL만 포함하세요. 없으면 빈 배열 []로 두세요.
+모든 텍스트 내용은 한국어로 작성하세요.`;
 
   const raw = await runWithWebSearch(
     systemPrompt,
-    `기업명: ${companyName}\n\n이 기업의 최신 정보를 웹에서 검색하여 분석해주세요.`,
+    `기업명: ${companyName}\n\n이 기업의 최신 정보를 웹에서 검색하여 균형 잡힌 분석을 해주세요.`,
     'claude-sonnet-4-6',
   );
 
   const parsed = extractJson<AnalysisData>(raw);
 
-  if (parsed && parsed.summary) return parsed;
+  if (parsed && parsed.summary) {
+    return {
+      ...parsed,
+      moat_analysis: parsed.moat_analysis ?? DEFAULT_MOAT,
+      risk_analysis: parsed.risk_analysis ?? DEFAULT_RISK,
+      sources:       parsed.sources ?? {},
+    };
+  }
 
-  // Fallback: store raw text as summary
   return {
     summary: raw.slice(0, 1000),
     industry_history: '',
@@ -126,7 +243,10 @@ export async function analyzeCompany(companyName: string): Promise<AnalysisData>
     value_chain_overview: '',
     value_chain_players: [],
     business_model: '',
+    moat_analysis: DEFAULT_MOAT,
+    risk_analysis: DEFAULT_RISK,
     financials: '',
+    sources: {},
   };
 }
 
@@ -224,7 +344,6 @@ Respond ONLY with this JSON array (no markdown, no code blocks):
   const parsed = extractJson<LinkedInDraft[]>(raw);
   if (Array.isArray(parsed) && parsed.length > 0) return parsed;
 
-  // Fallback drafts
   return [1, 2, 3].map(n => ({
     draft_number: n,
     content: `${companyName} 분석 초안 ${n}\n\n${analysis.summary.slice(0, 100)}...`,

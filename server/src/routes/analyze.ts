@@ -37,7 +37,10 @@ router.post('/', async (req: Request, res: Response) => {
         tech_evolution: analysis.tech_evolution,
         value_chain_overview: analysis.value_chain_overview,
         business_model: analysis.business_model,
+        moat_analysis: analysis.moat_analysis,
+        risk_analysis: analysis.risk_analysis,
         financials: analysis.financials,
+        sources: analysis.sources,
       })
       .select('id, created_at')
       .single();
