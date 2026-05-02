@@ -256,7 +256,7 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
   sources: {},
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Low-level helpers ─────────────────────────────────────────────────────────
 
 const WEB_SEARCH_TOOL = [{ type: 'web_search_20250305', name: 'web_search' }] as any;
 
@@ -324,236 +324,137 @@ function extractJson<T>(raw: string, label = 'response'): T | null {
   return null;
 }
 
+// ── Section prompts ───────────────────────────────────────────────────────────
+
+const SECTION_SYSTEM = `당신은 전문 기업 분석가입니다. 제공된 리서치 데이터를 바탕으로 지정된 섹션만 분석합니다.
+규칙: 마크다운·코드블록·추가 설명 없이 순수 JSON만 출력. 모든 텍스트는 한국어 (기업명·기술명·티커는 원어 유지). 불확실한 수치는 "추정 불가"로 명시.`;
+
+const SECTION_SCHEMAS: Record<string, string> = {
+  summary_v2: `아래 스키마의 JSON 객체만 출력:
+{"company":"기업명","ticker":"티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치","trend":"up|down|flat"},{"label":"영업이익률","value":"수치%","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["고객사명 최대5개"],"key_markets":[{"country":"국가","revenue_share":숫자}],"one_line":"투자자 관점 핵심 한줄 20자이내","bull_case":"강세 시나리오 2줄이내","bear_case":"약세 시나리오 2줄이내"}`,
+
+  industry_history_v2: `아래 스키마의 JSON 객체만 출력:
+{"industry_name":"산업명","timeline":[{"period":"시기","title":"시대제목 15자이내","technology":"핵심기술 1줄","market_need":"시장수요 1줄","key_players":["기업명(국가)"],"significance":"중요성 1줄"}],"why_durable":"지속가능이유 2줄이내","chasm_points":["캐즘시점과이유 1줄 최대3개"]}
+timeline은 연대순 4~6개.`,
+
+  tech_evolution_v2: `아래 스키마의 JSON 객체만 출력:
+{"tech_name":"핵심기술명","stages":[{"stage":1,"period":"시기","title":"단계제목 15자이내","description":"설명 2줄이내","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["핵심요인 최대3개"],"key_players":["기업명 최대4개"]}],"current_stage":"현재단계 1줄","next_inflection":"다음변곡점 1줄"}
+stages는 4~6개.`,
+
+  value_chain_v2: `아래 스키마의 JSON 객체만 출력:
+{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내"}
+layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true 설정.`,
+
+  business_model_v2: `아래 스키마의 JSON 객체만 출력:
+{"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}]}`,
+
+  competitors_v2: `아래 스키마의 JSON 객체만 출력:
+{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율","strengths":["강점 1줄 최대3개"],"weaknesses":["약점 1줄 최대2개"],"vs_subject":"차별점 1줄"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower"}
+direct는 글로벌 직접 경쟁사 3~5개 필수.`,
+
+  strategy_v2: `아래 스키마의 JSON 객체만 출력:
+{"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내"}`,
+
+  financials_v2: `아래 스키마의 JSON 객체만 출력:
+{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"값 or 공개없음","fy2022":"값","fy2023":"값","fy2024":"값","fy2025":"값 or 추정","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"값","fy2024":"값","fy2025":"값"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"값","investing":"값","financing":"값","fcf":"값","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"값% or 추정불가","roic":"값% or 추정불가","owner_earnings":"값 or 추정불가","debt_to_equity":"값 or 추정불가","interest_coverage":"값 or 추정불가","reinvestment_rate":"값% or 추정불가"},"key_risks":["리스크 1줄 최대5개"]}
+income_statement 빈칸 절대 금지 — 수치 없으면 반드시 '공개 없음'.`,
+};
+
+// ── Research gathering (1 web-search pass) ────────────────────────────────────
+
+async function gatherResearch(companyName: string): Promise<string> {
+  const systemPrompt = `당신은 기업 분석 리서처입니다. 아래 기업에 대해 웹 검색으로 종합적인 정보를 수집하고, 수집된 사실을 상세히 정리해주세요.
+
+수집 항목:
+1. 기업 개요 (설립연도, 본사, 사업영역, 주요 제품/서비스, 시가총액, 티커)
+2. 최근 3~5년 재무 데이터 (매출, 영업이익, 순이익, FCF, 이익률)
+3. 사업 모델 (수익 구조, 고객 세그먼트, 성장 방식)
+4. 밸류체인 위치 (핵심 공급사, 주요 고객사)
+5. 경쟁 현황 (주요 경쟁사, 시장점유율)
+6. 전략 방향 (최근 M&A, 투자, 신규 사업, 지역 확장)
+7. 산업/기술 트렌드 (산업 역사, 기술 발전 단계)
+8. 리스크 요소 (규제, 경쟁, 기술 교체 위험)
+
+JSON 불필요. 수집된 사실과 수치를 최대한 구체적으로 서술해주세요.`;
+
+  return runWithWebSearch(
+    systemPrompt,
+    `기업명: ${companyName}\n\n이 기업의 종합적인 정보를 웹에서 수집해주세요.`,
+    'claude-sonnet-4-6',
+    8,
+  );
+}
+
+// ── Section call (no web search, uses shared context) ─────────────────────────
+
+async function callSection<T>(context: string, sectionKey: string): Promise<T | null> {
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: SECTION_SYSTEM,
+      messages: [{
+        role: 'user',
+        content: `${context}\n\n---\n\n${SECTION_SCHEMAS[sectionKey]}`,
+      }],
+    });
+    const raw = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+    return extractJson<T>(raw, sectionKey);
+  } catch (err) {
+    console.error(`[claude] ${sectionKey} failed:`, err);
+    return null;
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function analyzeCompany(
   companyName: string,
   financialContext?: string,
 ): Promise<AnalysisData> {
-  const systemPrompt = `당신은 전문 기업 분석가입니다. 웹 검색으로 기업을 충분히 조사한 후, 아래 JSON 형식으로만 응답하세요.
-**중요**: 마크다운, 코드블록, 추가 설명 없이 순수 JSON만 출력하세요.
-**원칙**: 서술형 텍스트 최소화. 모든 데이터는 구조화된 배열/객체로 반환. 불확실한 수치는 null 또는 0 대신 "추정 불가"로 명시.
+  // Step 1: One web-search pass to gather research context
+  const researchText = await gatherResearch(companyName);
 
-출력 JSON 형식 (모든 텍스트는 한국어):
-{
-  "summary_v2": {
-    "company": "기업명",
-    "ticker": "티커심볼 또는 null",
-    "industry": "산업분류 (예: 반도체 장비, SaaS, 2차전지)",
-    "hq": "본사 도시, 국가",
-    "value_chain_position": "upstream 또는 midstream 또는 downstream",
-    "products": [
-      {"name": "제품/서비스명", "revenue_share": 매출비중(0-100 숫자)}
-    ],
-    "key_metrics": [
-      {"label": "매출", "value": "실제 수치 또는 추정", "trend": "up 또는 down 또는 flat"},
-      {"label": "영업이익률", "value": "수치%", "trend": "up 또는 down 또는 flat"},
-      {"label": "시가총액", "value": "수치", "trend": "up 또는 down 또는 flat"},
-      {"label": "YoY 성장률", "value": "수치%", "trend": "up 또는 down 또는 flat"}
-    ],
-    "top_customers": ["고객사명 (최대 5개)"],
-    "key_markets": [
-      {"country": "국가명", "revenue_share": 비중(0-100 숫자)}
-    ],
-    "one_line": "투자자 관점 핵심 한줄 (20자 이내)",
-    "bull_case": "강세 시나리오 2줄 이내 — 구체적 촉매 기반",
-    "bear_case": "약세 시나리오 2줄 이내 — 현실적 리스크 기반"
-  },
-  "industry_history_v2": {
-    "industry_name": "산업명",
-    "timeline": [
-      {
-        "period": "시기 (예: 1960s~1980s, 1990년대)",
-        "title": "시대 제목 15자 이내",
-        "technology": "핵심 기술 1줄",
-        "market_need": "시장 수요 1줄",
-        "key_players": ["주요 기업명 (국가 포함)"],
-        "significance": "이 시기의 중요성 1줄"
-      }
-    ],
-    "why_durable": "산업이 향후 10년 지속 가능한 이유 2줄 이내",
-    "chasm_points": ["캐즘 발생 시점과 이유 1줄씩 (최대 3개)"]
-  },
-  "tech_evolution_v2": {
-    "tech_name": "핵심 기술명",
-    "stages": [
-      {
-        "stage": 단계번호(1부터),
-        "period": "시기",
-        "title": "단계 제목 15자 이내",
-        "description": "단계 설명 2줄 이내",
-        "hype_level": "emerging 또는 hype 또는 trough 또는 recovery 또는 mainstream",
-        "key_enablers": ["핵심 기술/요인 (최대 3개)"],
-        "key_players": ["주요 기업명 (최대 4개)"]
-      }
-    ],
-    "current_stage": "현재 단계 설명 1줄",
-    "next_inflection": "다음 변곡점 예측 1줄"
-  },
-  "value_chain_v2": {
-    "industry": "산업명",
-    "layers": [
-      {
-        "name": "레이어명 (예: 원재료, 부품, 완제품, 유통, 최종소비)",
-        "description": "레이어 설명 1줄",
-        "is_subject": true 또는 false (분석 대상 기업이 이 레이어에 속하면 true),
-        "pricing_power": "high 또는 medium 또는 low",
-        "bottleneck": true 또는 false (공급 병목 여부),
-        "global_leaders": [
-          {"name": "기업명", "country": "국가", "why_leader": "선도 이유 1줄"}
-        ]
-      }
-    ],
-    "value_flow": "가격전가 메커니즘 2줄 이내",
-    "subject_position": "분석 기업의 밸류체인 내 포지션 및 경쟁력 2줄 이내"
-  },
-  "business_model_v2": {
-    "revenue_streams": [
-      {
-        "name": "수익원 이름",
-        "type": "subscription 또는 transaction 또는 service 또는 license 또는 other",
-        "revenue_share": 비중(0-100 숫자),
-        "operating_margin": 영업이익률(숫자, 없으면 0),
-        "growth_rate": YoY성장률(숫자, 없으면 0)
-      }
-    ],
-    "segments": [
-      {
-        "name": "세그먼트명",
-        "revenue_share": 비중(0-100 숫자),
-        "characteristics": "특성 1줄"
-      }
-    ],
-    "growth_motion": "PLG 또는 SLG 또는 FLG 또는 hybrid",
-    "growth_motion_detail": "성장 방식 설명 2줄 이내",
-    "unit_economics": {
-      "gross_margin": 매출총이익률(숫자, 없으면 0),
-      "operating_margin": 영업이익률(숫자, 없으면 0),
-      "net_margin": 순이익률(숫자, 없으면 0),
-      "fcf_margin": FCF마진(숫자, 없으면 0),
-      "nrr": NRR(숫자, 해당없으면 0)
-    },
-    "moat": [
-      {
-        "type": "해자 유형 (네트워크 효과/전환비용/규모의 경제/무형자산/비용우위)",
-        "strength": "strong 또는 medium 또는 weak",
-        "description": "해자 설명 1줄"
-      }
-    ]
-  },
-  "competitors_v2": {
-    "direct": [
-      {
-        "name": "경쟁사명",
-        "country": "본사 국가",
-        "market_share": "시장점유율 (추정 포함)",
-        "strengths": ["핵심 강점 1줄씩 (최대 3개)"],
-        "weaknesses": ["핵심 약점 1줄씩 (최대 2개)"],
-        "vs_subject": "분석 기업 대비 차별점 한줄"
-      }
-    ],
-    "indirect": [{"name": "간접경쟁사명", "threat": "위협 내용 1줄"}],
-    "substitutes": [{"name": "대체재명", "threat": "위협 내용 1줄"}],
-    "competitive_position": "leader 또는 challenger 또는 niche 또는 follower"
-  },
-  "strategy_v2": {
-    "corporate": {
-      "direction": "기업 전략 핵심 한줄",
-      "portfolio": "포트폴리오 방향 1줄",
-      "ma_partnerships": ["M&A/파트너십 사례 1줄씩 (최대 3개)"],
-      "geographic": "지역 확장 전략 1줄"
-    },
-    "business": {
-      "direction": "사업 전략 핵심 한줄",
-      "competitive_advantage": "경쟁 우위 방식 1줄",
-      "go_to_market": "GTM 전략 1줄",
-      "product_roadmap": ["제품 로드맵 항목 1줄씩 (최대 4개)"]
-    },
-    "financial": {
-      "direction": "재무 전략 핵심 한줄",
-      "capital_allocation": "자본배분 방향 1줄",
-      "investment_priority": "투자 우선순위 1줄",
-      "return_target": "목표 수익성 지표 1줄"
-    },
-    "strategy_coherence": "3전략 수렴 방향 2줄 이내",
-    "ten_year_durability": "10년 지속 가능성 2줄 이내"
-  },
-  "financials_v2": {
-    "narrative": "재무 서사 3줄 이내 — 추세·특이사항·자본배분 의도",
-    "income_statement": [
-      {
-        "item": "매출",
-        "fy2021": "값 또는 '공개 없음'",
-        "fy2022": "값 또는 '공개 없음'",
-        "fy2023": "값 또는 '공개 없음'",
-        "fy2024": "값 또는 '공개 없음'",
-        "fy2025": "값 또는 '추정' 또는 '공개 없음'",
-        "yoy": "▲N% 또는 ▼N% 또는 '—'"
-      },
-      {"item": "매출총이익", "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"},
-      {"item": "영업이익",   "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"},
-      {"item": "순이익",     "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"},
-      {"item": "EBITDA",    "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"}
-    ],
-    "balance_sheet": [
-      {"item": "현금·현금성자산", "fy2023": "값 또는 '공개 없음'", "fy2024": "값", "fy2025": "값"},
-      {"item": "총자산",          "fy2023": "값", "fy2024": "값", "fy2025": "값"},
-      {"item": "총부채",          "fy2023": "값", "fy2024": "값", "fy2025": "값"},
-      {"item": "자본총계",        "fy2023": "값", "fy2024": "값", "fy2025": "값"}
-    ],
-    "cash_flow": {
-      "operating": "영업활동 CF 최신 연도 값",
-      "investing": "투자활동 CF 최신 연도 값",
-      "financing": "재무활동 CF 최신 연도 값",
-      "fcf": "FCF 값",
-      "notes": "특이사항 1줄 또는 빈 문자열"
-    },
-    "munger_buffett_metrics": {
-      "roe": "ROE 값% 또는 '추정 불가'",
-      "roic": "ROIC 값% 또는 '추정 불가'",
-      "owner_earnings": "오너이익 값 또는 '추정 불가'",
-      "debt_to_equity": "부채비율 값 또는 '추정 불가'",
-      "interest_coverage": "이자보상배율 값 또는 '추정 불가'",
-      "reinvestment_rate": "재투자율 값% 또는 '추정 불가'"
-    },
-    "key_risks": ["리스크 1줄씩 (최대 5개)"]
-  },
-  "sources": {
-    "summary":          [{"url": "https://...", "title": "페이지 제목"}],
-    "industry_history": [{"url": "https://...", "title": "페이지 제목"}],
-    "tech_evolution":   [{"url": "https://...", "title": "페이지 제목"}],
-    "value_chain":      [{"url": "https://...", "title": "페이지 제목"}],
-    "business_model":   [{"url": "https://...", "title": "페이지 제목"}],
-    "competitors":      [{"url": "https://...", "title": "페이지 제목"}],
-    "strategy":         [{"url": "https://...", "title": "페이지 제목"}],
-    "financials":       [{"url": "https://...", "title": "페이지 제목"}]
-  }
-}
+  const sharedContext = [
+    `기업명: ${companyName}`,
+    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
+    `\n[웹 리서치]\n${researchText}`,
+  ].filter(Boolean).join('\n');
 
-추가 지침:
-- competitors_v2.direct: 글로벌 직접 경쟁사 3~5개 필수
-- financials_v2.income_statement: 빈칸 절대 금지 — 수치 없으면 반드시 '공개 없음'
-- key_metrics: 검증된 수치만. 수치 없으면 빈 배열 []
-- 모든 텍스트는 한국어로 작성 (기업명·티커·기술명은 원어 유지)`;
-
-  const userMessage = financialContext
-    ? `[공시 데이터]\n${financialContext}\n\n[분석 요청]\n기업명: ${companyName}\n\n위 공시 데이터의 재무수치를 financials_v2에 우선 반영하고 웹 검색으로 나머지 섹션을 완성해주세요.`
-    : `기업명: ${companyName}\n\n이 기업의 최신 정보를 웹에서 검색하여 분석해주세요.`;
-
-  const raw = await runWithWebSearch(systemPrompt, userMessage, 'claude-sonnet-4-6');
-  const parsed = extractJson<AnalysisData>(raw, 'analyzeCompany');
-
-  if (parsed?.summary_v2?.company) {
-    return {
-      ...DEFAULT_ANALYSIS_DATA,
-      ...parsed,
-      sources: parsed.sources ?? {},
-    };
-  }
+  // Step 2: 8 sections in parallel
+  const [
+    summary_v2,
+    industry_history_v2,
+    tech_evolution_v2,
+    value_chain_v2,
+    business_model_v2,
+    competitors_v2,
+    strategy_v2,
+    financials_v2,
+  ] = await Promise.all([
+    callSection<SummaryV2>(sharedContext, 'summary_v2'),
+    callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'),
+    callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),
+    callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
+    callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
+    callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
+    callSection<StrategyV2>(sharedContext, 'strategy_v2'),
+    callSection<FinancialsV2>(sharedContext, 'financials_v2'),
+  ]);
 
   return {
-    ...DEFAULT_ANALYSIS_DATA,
-    summary_v2: { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName, one_line: raw.slice(0, 50) },
+    summary_v2:          summary_v2          ?? { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName },
+    industry_history_v2: industry_history_v2 ?? DEFAULT_ANALYSIS_DATA.industry_history_v2,
+    tech_evolution_v2:   tech_evolution_v2   ?? DEFAULT_ANALYSIS_DATA.tech_evolution_v2,
+    value_chain_v2:      value_chain_v2      ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
+    business_model_v2:   business_model_v2   ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
+    competitors_v2:      competitors_v2      ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
+    strategy_v2:         strategy_v2         ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
+    financials_v2:       financials_v2       ?? DEFAULT_ANALYSIS_DATA.financials_v2,
+    sources: {},
   };
 }
 
