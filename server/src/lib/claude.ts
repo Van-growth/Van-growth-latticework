@@ -166,7 +166,7 @@ async function runWithWebSearch(
   for (let round = 0; round < maxRounds; round++) {
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 8096,
+      max_tokens: 16000,
       system: systemPrompt,
       tools: WEB_SEARCH_TOOL,
       messages,
