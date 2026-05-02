@@ -5,7 +5,11 @@ import Link from 'next/link';
 import AnalysisCard from '../components/AnalysisCard';
 import { AnalysisSummary, AnalysisDetail } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = (() => {
+  const url = process.env.NEXT_PUBLIC_API_URL;
+  if (!url) throw new Error('NEXT_PUBLIC_API_URL is not set');
+  return url;
+})();
 
 export default function HistoryPage() {
   const [list, setList] = useState<AnalysisSummary[]>([]);

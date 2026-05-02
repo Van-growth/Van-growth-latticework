@@ -6,7 +6,11 @@ import AnalysisCard from './components/AnalysisCard';
 import LinkedInDraftCard from './components/LinkedInDraftCard';
 import { AnalysisDetail, LinkedInDraft } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = (() => {
+  const url = process.env.NEXT_PUBLIC_API_URL;
+  if (!url) throw new Error('NEXT_PUBLIC_API_URL is not set');
+  return url;
+})();
 
 interface AnalyzeResult extends AnalysisDetail {
   linkedinDrafts: LinkedInDraft[];
