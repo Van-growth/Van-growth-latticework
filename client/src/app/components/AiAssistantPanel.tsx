@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, KeyboardEvent, FormEvent } from 'react';
 import { MessageCircle, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { AnalysisDetail } from '@/types';
 
 interface Message {
@@ -183,6 +184,7 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
                 >
                   {msg.role === 'assistant' ? (
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
                         h1: ({ children }) => <div className="text-xs font-bold text-gray-900 mt-1 mb-0.5">{children}</div>,
                         h2: ({ children }) => <div className="text-xs font-semibold text-gray-900 mt-1.5 mb-0.5 border-b border-gray-200 pb-0.5">{children}</div>,
@@ -194,6 +196,16 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
                         li: ({ children }) => <li className="text-xs leading-relaxed list-disc">{children}</li>,
                         code: ({ children }) => <code className="bg-gray-200 text-gray-700 px-1 py-0.5 rounded text-[10px] font-mono">{children}</code>,
                         blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-300 pl-2 text-gray-600 italic my-1">{children}</blockquote>,
+                        table: ({ children }) => (
+                          <div className="overflow-x-auto my-2">
+                            <table className="text-[11px] border-collapse w-full">{children}</table>
+                          </div>
+                        ),
+                        thead: ({ children }) => <thead className="bg-gray-200">{children}</thead>,
+                        tbody: ({ children }) => <tbody>{children}</tbody>,
+                        tr: ({ children }) => <tr className="border-b border-gray-200">{children}</tr>,
+                        th: ({ children }) => <th className="px-2 py-1 text-left font-semibold text-gray-700 border border-gray-300 whitespace-nowrap">{children}</th>,
+                        td: ({ children }) => <td className="px-2 py-1 text-gray-700 border border-gray-300">{children}</td>,
                       }}
                     >
                       {msg.content}
