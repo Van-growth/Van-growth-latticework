@@ -135,10 +135,19 @@ export interface CashFlow {
   notes?: string;
 }
 
+export interface UnitEconomics {
+  gross_margin?: string;
+  operating_margin?: string;
+  net_margin?: string;
+  fcf_margin?: string;
+  nrr?: string;
+}
+
 export interface StructuredFinancials {
   income_statement: IncomeStatementRow[];
   balance_sheet: BalanceSheetRow[];
   cash_flow: CashFlow;
+  unit_economics?: UnitEconomics;
 }
 
 export interface AnalysisData {
@@ -390,15 +399,17 @@ export async function analyzeCompany(
   "financials": "재무 맥락 서사 (150-250자) — 수치는 financials_structured에 분리. 추세·특이사항·자본배분 의도 등 서술",
   "financials_structured": {
     "income_statement": [
-      {"item": "매출",     "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
-      {"item": "영업이익", "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
-      {"item": "순이익",   "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
-      {"item": "EBITDA",  "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"}
+      {"item": "매출",       "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
+      {"item": "매출총이익", "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
+      {"item": "영업이익",   "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
+      {"item": "순이익",     "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
+      {"item": "EBITDA",    "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"}
     ],
     "balance_sheet": [
-      {"item": "총자산",  "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
-      {"item": "총부채",  "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
-      {"item": "자본총계","fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"}
+      {"item": "현금·현금성자산", "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
+      {"item": "총자산",          "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
+      {"item": "총부채",          "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
+      {"item": "자본총계",        "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"}
     ],
     "cash_flow": {
       "operating":       "값 또는 '공개 없음'",
@@ -406,6 +417,13 @@ export async function analyzeCompany(
       "financing":       "값 또는 '공개 없음'",
       "free_cash_flow":  "값 또는 '공개 없음'",
       "notes":           "FCF 특이사항 (SBC 조정, CAPEX 성격 등) 또는 빈 문자열"
+    },
+    "unit_economics": {
+      "gross_margin":     "값% 또는 '공개 없음'",
+      "operating_margin": "값% 또는 '공개 없음'",
+      "net_margin":       "값% 또는 '공개 없음'",
+      "fcf_margin":       "값% 또는 '공개 없음'",
+      "nrr":              "값% (SaaS·구독 기업 해당 시) 또는 생략"
     }
   },
   "sources": {
@@ -424,7 +442,8 @@ sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 
 competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
 metrics는 검증된 수치만 포함하세요. 수치 없으면 빈 배열 [].
 strengths와 risks는 각 3~5개, 1문장씩, 구체적 근거 포함.
-financials_structured는 공개 재무제표 기반으로 작성하세요. 수치 없는 항목은 '공개 없음'으로 표시.
+financials_structured는 SEC 10-K, DART 공시, 웹 검색에서 최대한 수집한 실제 수치를 기반으로 작성하세요. 빈칸 절대 금지 — 수치 없는 항목은 반드시 '공개 없음'으로 표시하세요. FY2023/FY2024/FY2025 3개년 데이터를 반드시 채울 것.
+unit_economics는 SaaS·구독 서비스가 아닌 경우 nrr을 생략해도 됩니다. 나머지 마진 지표는 반드시 포함하세요.
 모든 텍스트 내용은 한국어로 작성하세요.`;
 
   const userMessage = financialContext

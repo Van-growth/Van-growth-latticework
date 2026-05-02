@@ -5,7 +5,7 @@ import {
   BarChart2, TrendingUp, Layers, Users, Briefcase, Target,
   DollarSign, Clock, Globe, Shield, AlertTriangle, ChevronRight,
   ExternalLink, Zap, Award, Activity, BookOpen, GitBranch,
-  Building2, ArrowUpRight, ArrowDownRight, Minus,
+  Building2, ArrowRight, ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
 import {
   AnalysisDetail,
@@ -19,37 +19,19 @@ import {
   Source,
 } from '@/types';
 
-// ── Palette ───────────────────────────────────────────────────────────────────
-
-const PALETTE = {
-  border: 'border-gray-200',
-  cardBg: 'bg-white',
-  sectionBg: 'bg-gray-50',
-  labelText: 'text-gray-500',
-  headingText: 'text-gray-900',
-  subText: 'text-gray-600',
-  accent: 'text-blue-600',
-  accentBg: 'bg-blue-50',
-  accentBorder: 'border-blue-200',
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function splitLines(text: string): string[] {
-  return text.split('\n').map(s => s.trim()).filter(Boolean);
-}
+// ── Primitives ────────────────────────────────────────────────────────────────
 
 function Tag({ label, color = 'gray' }: { label: string; color?: string }) {
   const map: Record<string, string> = {
-    gray: 'bg-gray-100 text-gray-700 border-gray-200',
-    blue: 'bg-blue-50 text-blue-700 border-blue-200',
-    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    amber: 'bg-amber-50 text-amber-700 border-amber-200',
-    red: 'bg-red-50 text-red-700 border-red-200',
-    violet: 'bg-violet-50 text-violet-700 border-violet-200',
+    gray:    'bg-gray-100 text-gray-600',
+    blue:    'bg-blue-50 text-blue-700',
+    emerald: 'bg-emerald-50 text-emerald-700',
+    amber:   'bg-amber-50 text-amber-700',
+    red:     'bg-red-50 text-red-700',
+    violet:  'bg-violet-50 text-violet-700',
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${map[color] ?? map.gray}`}>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[color] ?? map.gray}`}>
       {label}
     </span>
   );
@@ -62,11 +44,11 @@ function SectionCard({ title, icon: Icon, children, className = '' }: {
   className?: string;
 }) {
   return (
-    <div className={`bg-white border border-gray-200 rounded-xl shadow-sm ${className}`}>
+    <div className={`bg-white border border-gray-100 rounded-xl shadow-sm ${className}`}>
       {title && (
-        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100">
-          {Icon && <Icon size={15} className="text-gray-400 shrink-0" />}
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">{title}</span>
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
+          {Icon && <Icon size={13} className="text-gray-400 shrink-0" />}
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{title}</span>
         </div>
       )}
       <div className="p-5">{children}</div>
@@ -74,27 +56,11 @@ function SectionCard({ title, icon: Icon, children, className = '' }: {
   );
 }
 
-function MetricCard({ value, label, delta, icon: Icon }: {
-  value: string;
-  label: string;
-  delta?: string;
-  icon?: React.ElementType;
-}) {
-  const isPos = delta?.startsWith('+');
-  const isNeg = delta?.startsWith('-');
+function MetricCard({ value, label }: { value: string; label: string }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-medium text-gray-500 leading-tight">{label}</span>
-        {Icon && <Icon size={14} className="text-gray-300 shrink-0" />}
-      </div>
-      <div className="text-xl font-bold text-gray-900 leading-none mb-1">{value}</div>
-      {delta && (
-        <div className={`flex items-center gap-0.5 text-xs font-semibold mt-1 ${isPos ? 'text-emerald-600' : isNeg ? 'text-red-500' : 'text-gray-400'}`}>
-          {isPos ? <ArrowUpRight size={12} /> : isNeg ? <ArrowDownRight size={12} /> : <Minus size={12} />}
-          {delta}
-        </div>
-      )}
+    <div className="bg-gray-50 rounded-lg p-3">
+      <div className="text-[11px] text-gray-400 mb-1 leading-tight">{label}</div>
+      <div className="text-xl font-medium text-gray-900 leading-none">{value}</div>
     </div>
   );
 }
@@ -104,14 +70,14 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
   return (
     <div className="mt-5 pt-4 border-t border-gray-100">
       <div className="flex items-center gap-1.5 mb-2">
-        <BookOpen size={12} className="text-gray-400" />
-        <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">참고 출처</span>
+        <BookOpen size={11} className="text-gray-400" />
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">참고 출처</span>
       </div>
       <div className="flex flex-col gap-1">
         {sources.map((s, i) => (
           <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 truncate group">
-            <ExternalLink size={10} className="shrink-0 group-hover:text-blue-800" />
+            <ExternalLink size={10} className="shrink-0" />
             {s.title || s.url}
           </a>
         ))}
@@ -123,22 +89,26 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
 // ── Data Source Badge ─────────────────────────────────────────────────────────
 
 const DATA_SOURCE_CONFIG: Record<DataSource, { label: string; cls: string; dot: string }> = {
-  dart:       { label: 'DART 연동됨',     cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  edgar:      { label: 'SEC EDGAR 연동됨', cls: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500' },
-  web_search: { label: '웹 검색 기반',     cls: 'bg-gray-50 text-gray-500 border-gray-200',         dot: 'bg-gray-400' },
+  dart:       { label: 'DART 연동됨',     cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  edgar:      { label: 'SEC EDGAR 연동됨', cls: 'bg-blue-50 text-blue-700',      dot: 'bg-blue-500' },
+  web_search: { label: '웹 검색 기반',     cls: 'bg-gray-100 text-gray-500',     dot: 'bg-gray-400' },
 };
 
 function DataSourceBadge({ source }: { source: DataSource }) {
   const cfg = DATA_SOURCE_CONFIG[source];
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${cfg.cls}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.cls}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
     </span>
   );
 }
 
-// ── Metric extraction from text ───────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function splitLines(text: string): string[] {
+  return text.split('\n').map(s => s.trim()).filter(Boolean);
+}
 
 function extractMetrics(text: string): Metric[] {
   const lines = splitLines(text);
@@ -150,7 +120,7 @@ function extractMetrics(text: string): Metric[] {
         value: m[1],
         label: line.replace(m[0], '').replace(/[:：\s·\-–]+/g, ' ').trim() || line,
       });
-      if (results.length >= 4) break;
+      if (results.length >= 8) break;
     }
   }
   return results;
@@ -161,47 +131,45 @@ function extractMetrics(text: string): Metric[] {
 function SummaryTab({ data }: { data: AnalysisDetail }) {
   const lines = splitLines(data.summary);
 
-  // Use structured fields when available, fall back to heuristic extraction
   const metrics = (data.metrics && data.metrics.length > 0)
-    ? data.metrics
-    : extractMetrics(data.summary);
+    ? data.metrics.slice(0, 8)
+    : extractMetrics(data.summary).slice(0, 8);
 
   const strengths = (data.strengths && data.strengths.length > 0)
     ? data.strengths
-    : lines.filter(l => /강점|경쟁|성장|우위|확대|증가|선두|핵심|차별|혁신/.test(l)).slice(0, 3);
+    : lines.filter(l => /강점|경쟁|성장|우위|확대|증가|선두|핵심|차별/.test(l)).slice(0, 5);
 
   const risks = (data.risks && data.risks.length > 0)
     ? data.risks
-    : lines.filter(l => /리스크|약점|우려|감소|하락|손실|부채|불확실|경쟁 심화|위험/.test(l)).slice(0, 3);
+    : lines.filter(l => /리스크|약점|우려|감소|하락|손실|부채|불확실|위험/.test(l)).slice(0, 5);
 
   return (
     <div className="space-y-5">
-      {/* Metric cards */}
+      {/* Metric grid — 4 cols, up to 2 rows */}
       {metrics.length > 0 && (
-        <div className={`grid gap-3 ${metrics.length >= 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'}`}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {metrics.map((m, i) => (
             <MetricCard
               key={i}
               value={m.value}
               label={m.unit ? `${m.label} (${m.unit})` : m.label}
-              icon={[DollarSign, TrendingUp, BarChart2, Activity][i % 4]}
             />
           ))}
         </div>
       )}
 
-      {/* Summary prose + 강점/약점 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="sm:col-span-2">
-          <SectionCard title="경영 요약" icon={Briefcase}>
-            <div className="space-y-2">
-              {lines.map((l, i) => (
-                <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
-              ))}
-            </div>
-          </SectionCard>
+      {/* Prose summary */}
+      <SectionCard title="경영 요약" icon={Briefcase}>
+        <div className="space-y-2">
+          {lines.map((l, i) => (
+            <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+          ))}
         </div>
-        <div className="flex flex-col gap-4">
+      </SectionCard>
+
+      {/* Strengths / Risks 2-col */}
+      {(strengths.length > 0 || risks.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {strengths.length > 0 && (
             <SectionCard title="핵심 강점" icon={Award}>
               <div className="space-y-2">
@@ -227,14 +195,14 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
             </SectionCard>
           )}
         </div>
-      </div>
+      )}
 
       <SourcesList sources={data.sources?.summary} />
     </div>
   );
 }
 
-// ── Shared Timeline ───────────────────────────────────────────────────────────
+// ── Tab: 산업 역사 ─────────────────────────────────────────────────────────────
 
 function Timeline({ text, sourcesKey, data }: {
   text: string;
@@ -269,7 +237,7 @@ function Timeline({ text, sourcesKey, data }: {
             </div>
             <div className="pb-5 min-w-0 flex-1">
               {item.period && hasYears && (
-                <span className="inline-block text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded px-2 py-0.5 mb-1.5 leading-none">
+                <span className="inline-block text-[11px] font-semibold text-blue-600 bg-blue-50 rounded-full px-2 py-0.5 mb-1.5 leading-none">
                   {item.period}
                 </span>
               )}
@@ -291,6 +259,8 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
   );
 }
 
+// ── Tab: 기술 변화 ─────────────────────────────────────────────────────────────
+
 function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
   const lines = splitLines(data.tech_evolution);
   const points: string[] = [];
@@ -311,7 +281,7 @@ function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
       <div className="space-y-3">
         {points.map((point, i) => (
           <div key={i} className="flex gap-3 items-start">
-            <span className="shrink-0 w-6 h-6 rounded-full bg-violet-600 text-white text-[11px] flex items-center justify-center font-bold leading-none">
+            <span className="shrink-0 w-6 h-6 rounded-full bg-violet-600 text-white text-[11px] flex items-center justify-center font-semibold leading-none">
               {i + 1}
             </span>
             <p className="text-sm text-gray-700 leading-relaxed pt-0.5">{point}</p>
@@ -329,6 +299,29 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
   const players = data.valuechainPlayers ?? [];
   const companyName = data.companyName?.toLowerCase() ?? '';
 
+  // Classify players into chain positions
+  const upstream: typeof players = [];
+  const target: typeof players = [];
+  const downstream: typeof players = [];
+
+  for (const p of players) {
+    const roleLow = (p.role + p.description).toLowerCase();
+    const isTargetPlayer = p.player_name?.toLowerCase().includes(companyName) ||
+      p.description?.toLowerCase().includes('분석 대상') ||
+      p.description?.toLowerCase().includes('해당 기업');
+    if (isTargetPlayer) {
+      target.push(p);
+    } else if (/원재료|공급|supplier|upstream|광산|채굴|소재|화학|반도체 장비/.test(roleLow)) {
+      upstream.push(p);
+    } else if (/유통|downstream|최종|소비|고객|판매|리테일|distribution/.test(roleLow)) {
+      downstream.push(p);
+    } else {
+      // Heuristic: first half goes upstream, second half downstream
+      if (upstream.length <= downstream.length) upstream.push(p);
+      else downstream.push(p);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {data.value_chain_overview && (
@@ -336,30 +329,46 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
           <p className="text-sm text-gray-700 leading-relaxed">{data.value_chain_overview}</p>
         </SectionCard>
       )}
+
       {players.length > 0 && (
         <SectionCard title="주요 플레이어" icon={Globe}>
+          {/* Flow diagram header */}
+          <div className="flex items-center gap-2 mb-5 px-1">
+            <div className="flex-1 text-center">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Upstream</span>
+            </div>
+            <ArrowRight size={14} className="text-gray-300 shrink-0" />
+            <div className="flex-1 text-center">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-blue-500">분석 대상</span>
+            </div>
+            <ArrowRight size={14} className="text-gray-300 shrink-0" />
+            <div className="flex-1 text-center">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Downstream</span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {players.map((p, i) => {
-              const isTarget = p.player_name?.toLowerCase().includes(companyName) ||
+              const isTargetPlayer = p.player_name?.toLowerCase().includes(companyName) ||
                 p.description?.toLowerCase().includes('분석 대상') ||
                 p.description?.toLowerCase().includes('해당 기업');
               return (
                 <div key={i} className={`rounded-xl border p-4 transition-shadow hover:shadow-md ${
-                  isTarget
-                    ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-200'
-                    : 'border-gray-200 bg-white'
+                  isTargetPlayer
+                    ? 'border-blue-200 bg-blue-50 ring-1 ring-blue-100'
+                    : 'border-gray-100 bg-white'
                 }`}>
                   <div className="flex items-start justify-between gap-1 mb-2">
-                    <span className={`text-[11px] font-bold uppercase tracking-wide ${isTarget ? 'text-blue-600' : 'text-gray-400'}`}>
+                    <span className={`text-[11px] font-semibold uppercase tracking-widest ${isTargetPlayer ? 'text-blue-500' : 'text-gray-400'}`}>
                       {p.role}
                     </span>
-                    {isTarget && (
-                      <span className="shrink-0 text-[10px] bg-blue-600 text-white rounded px-1.5 py-0.5 font-bold">
+                    {isTargetPlayer && (
+                      <span className="shrink-0 text-[10px] bg-blue-600 text-white rounded-full px-2 py-0.5 font-semibold">
                         분석 대상
                       </span>
                     )}
                   </div>
-                  <div className="font-bold text-gray-900 text-sm mb-1.5">{p.player_name}</div>
+                  <div className="font-semibold text-gray-900 text-sm mb-1.5">{p.player_name}</div>
                   <p className="text-xs text-gray-500 leading-relaxed">{p.description}</p>
                 </div>
               );
@@ -367,6 +376,7 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
           </div>
         </SectionCard>
       )}
+
       <SourcesList sources={data.sources?.value_chain} />
     </div>
   );
@@ -391,11 +401,11 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">기업명</th>
-                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">국가</th>
-                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">점유율</th>
-                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">핵심 강점</th>
-                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">차별점</th>
+                  <th className="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">기업명</th>
+                  <th className="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">국가</th>
+                  <th className="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">점유율</th>
+                  <th className="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">핵심 강점</th>
+                  <th className="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">차별점</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -406,7 +416,7 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
                       <Tag label={comp.country} color="blue" />
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-mono text-xs font-bold text-gray-700">{comp.market_share}</span>
+                      <span className="font-mono text-xs font-semibold text-gray-700">{comp.market_share}</span>
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex flex-wrap gap-1">
@@ -428,13 +438,11 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
         <SectionCard title="간접 경쟁사 / 대체재" icon={Layers}>
           <div className="flex flex-wrap gap-2">
             {indirect.map((comp, i) => (
-              <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                <div>
-                  <span className="text-xs font-semibold text-gray-800">{comp.name}</span>
-                  <Tag label={comp.type} color="amber" />
-                </div>
+              <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                <span className="text-xs font-semibold text-gray-800">{comp.name}</span>
+                <Tag label={comp.type} color="amber" />
                 {comp.description && (
-                  <span className="text-xs text-gray-500 ml-1 hidden sm:inline">{comp.description}</span>
+                  <span className="text-xs text-gray-500 hidden sm:inline">{comp.description}</span>
                 )}
               </div>
             ))}
@@ -451,9 +459,9 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
 
 function MoatBar({ strength }: { strength: string }) {
   const map: Record<string, { width: string; color: string }> = {
-    '강함': { width: 'w-full', color: 'bg-emerald-500' },
-    '보통': { width: 'w-2/3',  color: 'bg-amber-400' },
-    '약함': { width: 'w-1/3',  color: 'bg-red-400' },
+    '강함': { width: 'w-[90%]', color: 'bg-emerald-500' },
+    '보통': { width: 'w-[60%]', color: 'bg-amber-400' },
+    '약함': { width: 'w-[30%]', color: 'bg-red-400' },
   };
   const cfg = map[strength] ?? map['보통'];
   return (
@@ -468,36 +476,54 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
   const risk = data.risk_analysis as RiskAnalysis | null;
   const ls = splitLines(data.business_model);
 
+  // Split business model text into Revenue / UE sections
   const reLines: string[] = [];
-  const ueLines: string[] = [];
+  const ueTextLines: string[] = [];
   let section = 0;
   for (const line of ls) {
     const low = line.toLowerCase();
     if (/revenue|수익화|수익 구조|수익모델|매출/.test(low)) { section = 1; reLines.push(line); continue; }
-    if (/unit economics|유닛|arpu|ltv|cac|가격|구독|수수료/.test(low)) { section = 2; ueLines.push(line); continue; }
-    if (section === 1) reLines.push(line);
-    else if (section === 2) ueLines.push(line);
+    if (/unit economics|유닛|arpu|ltv|cac|가격|구독|수수료/.test(low)) { section = 2; ueTextLines.push(line); continue; }
+    if (section === 2) ueTextLines.push(line);
     else reLines.push(line);
   }
-  if (ueLines.length === 0 && reLines.length > 1) {
+  if (ueTextLines.length === 0 && reLines.length > 2) {
     const mid = Math.ceil(reLines.length / 2);
-    ueLines.push(...reLines.splice(mid));
+    ueTextLines.push(...reLines.splice(mid));
   }
 
+  // Unit Economics structured metrics from financials_structured
+  const ueData = data.financials_structured?.unit_economics;
+  const ueMetrics = ueData ? [
+    { label: 'Gross Margin',     value: ueData.gross_margin },
+    { label: 'Operating Margin', value: ueData.operating_margin },
+    { label: 'Net Margin',       value: ueData.net_margin },
+    { label: 'FCF Margin',       value: ueData.fcf_margin },
+    ...(ueData.nrr ? [{ label: 'NRR', value: ueData.nrr }] : []),
+  ].filter((m): m is { label: string; value: string } =>
+    !!m.value && m.value !== '공개 없음'
+  ) : [];
+
   const strengthStyle: Record<string, string> = {
-    '강함': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    '보통': 'bg-amber-50 text-amber-700 border-amber-200',
-    '약함': 'bg-red-50 text-red-700 border-red-200',
+    '강함': 'bg-emerald-50 text-emerald-700',
+    '보통': 'bg-amber-50 text-amber-700',
+    '약함': 'bg-red-50 text-red-700',
   };
   const severityStyle: Record<string, { bg: string; text: string }> = {
-    '높음': { bg: 'bg-red-50',    text: 'text-red-700' },
-    '중간': { bg: 'bg-amber-50',  text: 'text-amber-700' },
-    '낮음': { bg: 'bg-emerald-50',text: 'text-emerald-700' },
+    '높음': { bg: 'bg-red-50',     text: 'text-red-700' },
+    '중간': { bg: 'bg-amber-50',   text: 'text-amber-700' },
+    '낮음': { bg: 'bg-emerald-50', text: 'text-emerald-700' },
   };
+
+  const riskGroups = risk ? [
+    { label: '비즈니스', data: risk.business },
+    { label: '재무',     data: risk.financial },
+    { label: '외부',     data: risk.external },
+  ].filter(g => (g.data?.items?.length ?? 0) > 0) : [];
 
   return (
     <div className="space-y-5">
-      {/* Revenue / Unit Econ */}
+      {/* Revenue Engine / Unit Economics 2-col */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SectionCard title="Revenue Engine" icon={DollarSign}>
           <div className="space-y-2">
@@ -506,16 +532,25 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
             ))}
           </div>
         </SectionCard>
+
         <SectionCard title="Unit Economics" icon={BarChart2}>
-          <div className="space-y-2">
-            {ueLines.map((l, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
-            ))}
-          </div>
+          {ueMetrics.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              {ueMetrics.map((m, i) => (
+                <MetricCard key={i} label={m.label} value={m.value} />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {ueTextLines.map((l, i) => (
+                <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+              ))}
+            </div>
+          )}
         </SectionCard>
       </div>
 
-      {/* Moat */}
+      {/* Moat Analysis */}
       {moat && (moat.types?.length > 0 || moat.sustain_conditions || moat.collapse_scenarios) && (
         <SectionCard title="해자 분석 (Economic Moat)" icon={Shield}>
           <div className="space-y-4">
@@ -525,7 +560,7 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
                   <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-semibold text-gray-800">{t.name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${strengthStyle[t.strength] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${strengthStyle[t.strength] ?? 'bg-gray-100 text-gray-600'}`}>
                         {t.strength}
                       </span>
                     </div>
@@ -535,16 +570,16 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
                 ))}
               </div>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {moat.sustain_conditions && (
                 <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
-                  <div className="text-xs font-bold text-emerald-700 mb-1">유지 조건</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 mb-1">유지 조건</div>
                   <p className="text-xs text-gray-700 leading-relaxed">{moat.sustain_conditions}</p>
                 </div>
               )}
               {moat.collapse_scenarios && (
                 <div className="bg-red-50 border border-red-100 rounded-lg p-3">
-                  <div className="text-xs font-bold text-red-600 mb-1">붕괴 시나리오</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-red-500 mb-1">붕괴 시나리오</div>
                   <p className="text-xs text-gray-700 leading-relaxed">{moat.collapse_scenarios}</p>
                 </div>
               )}
@@ -553,49 +588,39 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
         </SectionCard>
       )}
 
-      {/* Risk */}
-      {risk && (
-        (() => {
-          const groups = [
-            { label: '비즈니스', data: risk.business },
-            { label: '재무',     data: risk.financial },
-            { label: '외부',     data: risk.external },
-          ].filter(g => g.data?.items?.length > 0);
-          if (!groups.length) return null;
-          return (
-            <SectionCard title="리스크 분석" icon={AlertTriangle}>
-              <div className="space-y-4">
-                {groups.map(({ label, data: g }) => {
-                  const sev = severityStyle[g.severity] ?? severityStyle['중간'];
-                  return (
-                    <div key={label}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-bold text-gray-700">{label} 리스크</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${sev.bg} ${sev.text}`}>
-                          {g.severity}
-                        </span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <tbody className="divide-y divide-gray-100">
-                            {g.items.map((item, i) => (
-                              <tr key={i} className="hover:bg-gray-50">
-                                <td className="py-2 pr-3 w-20 shrink-0">
-                                  <Tag label={item.category} color="gray" />
-                                </td>
-                                <td className="py-2 text-gray-700 leading-relaxed">{item.description}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </SectionCard>
-          );
-        })()
+      {/* Risk Analysis */}
+      {riskGroups.length > 0 && (
+        <SectionCard title="리스크 분석" icon={AlertTriangle}>
+          <div className="space-y-4">
+            {riskGroups.map(({ label, data: g }) => {
+              const sev = severityStyle[g.severity] ?? severityStyle['중간'];
+              return (
+                <div key={label}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-semibold text-gray-700">{label} 리스크</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${sev.bg} ${sev.text}`}>
+                      {g.severity}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <tbody className="divide-y divide-gray-100">
+                        {g.items.map((item, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="py-2 pr-3 w-20 shrink-0">
+                              <Tag label={item.category} color="gray" />
+                            </td>
+                            <td className="py-2 text-gray-700 leading-relaxed">{item.description}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
       )}
 
       <SourcesList sources={data.sources?.business_model} />
@@ -611,8 +636,7 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
     return <p className="text-sm text-gray-500 py-4 text-center">전략 데이터가 없습니다.</p>;
   }
 
-  // Inline highlight numbers
-  function HighlightInline({ text }: { text: string }) {
+  function HighlightNumbers({ text }: { text: string }) {
     const parts = text.split(/([$₩]?[\d,]+(?:\.\d+)?(?:조|억|만|B|M|K|T|%|배|원|x)+)/g);
     return (
       <>
@@ -630,9 +654,9 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
       label: '기업 전략', icon: Building2,
       headerCls: 'text-violet-800', bgCls: 'bg-violet-50 border-violet-100', labelCls: 'text-violet-600',
       items: s.corporate ? [
-        { label: '포트폴리오', value: s.corporate.portfolio_direction },
+        { label: '포트폴리오',    value: s.corporate.portfolio_direction },
         { label: 'M&A / 파트너십', value: s.corporate.ma_partnership },
-        { label: '지역 확장',   value: s.corporate.regional_expansion },
+        { label: '지역 확장',     value: s.corporate.regional_expansion },
         ...(s.corporate.notes ? [{ label: '비고', value: s.corporate.notes }] : []),
       ] : [],
     },
@@ -667,15 +691,15 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
         return (
           <div key={sec.label} className={`border rounded-xl p-5 ${sec.bgCls}`}>
             <div className="flex items-center gap-2 mb-4">
-              <sec.icon size={15} className={sec.labelCls} />
-              <h4 className={`text-sm font-bold ${sec.headerCls}`}>{sec.label}</h4>
+              <sec.icon size={14} className={sec.labelCls} />
+              <h4 className={`text-sm font-semibold ${sec.headerCls}`}>{sec.label}</h4>
             </div>
             <div className="space-y-3">
               {filled.map((item, i) => (
                 <div key={i} className="flex gap-3">
                   <span className={`shrink-0 text-xs font-semibold w-24 pt-0.5 ${sec.labelCls}`}>{item.label}</span>
                   <p className="text-sm text-gray-700 leading-relaxed">
-                    <HighlightInline text={item.value!} />
+                    <HighlightNumbers text={item.value!} />
                   </p>
                 </div>
               ))}
@@ -690,7 +714,7 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
 
 // ── Tab: 재무 ─────────────────────────────────────────────────────────────────
 
-type FinRow = { label: string; values: string[]; isHeader?: boolean; isTotal?: boolean };
+type FinRow = { label: string; values: string[]; isHeader?: boolean };
 
 function parseFinancials(text: string): {
   isRows: FinRow[];
@@ -706,7 +730,6 @@ function parseFinancials(text: string): {
   const cfRows: FinRow[] = [];
   const notes: string[] = [];
 
-  // Extract years mentioned
   for (const l of lines) {
     const ys = l.match(/20\d{2}/g);
     if (ys) ys.forEach(y => { if (!years.includes(y)) years.push(y); });
@@ -714,17 +737,13 @@ function parseFinancials(text: string): {
   years.sort().reverse();
   const displayYears = years.slice(0, 3);
 
-  // Helper: find number-rich lines
   function isNumberLine(l: string) {
     return (l.match(/[\d,]+/g) ?? []).length >= 1;
   }
 
-  // Categorize lines
   for (const l of lines) {
     const low = l.toLowerCase();
-    if (/매출|revenue|순매출/.test(low) || /영업이익|operating/.test(low) ||
-        /순이익|net income|당기순/.test(low) || /ebitda/.test(low) ||
-        /매출총이익|gross/.test(low) || /r&d|연구개발/.test(low)) {
+    if (/매출|revenue|순매출|영업이익|operating|순이익|net income|당기순|ebitda|매출총이익|gross|r&d|연구개발/.test(low)) {
       if (isNumberLine(l)) {
         const nums = l.match(/[$₩]?[\d,.]+(?:억|조|B|M|T|K)?/g) ?? [];
         isRows.push({ label: l.replace(/[$₩\d,.%억조BMK\s]+/g, ' ').trim().slice(0, 30), values: nums.slice(0, 3) });
@@ -747,38 +766,6 @@ function parseFinancials(text: string): {
   return { isRows, bsRows, cfRows, notes: notes.slice(0, 5), years: displayYears };
 }
 
-function FinTable({ title, rows, years, icon: Icon }: {
-  title: string; rows: FinRow[]; years: string[]; icon: React.ElementType;
-}) {
-  if (!rows.length) return null;
-  return (
-    <SectionCard title={title} icon={Icon}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100">
-              <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide min-w-[120px]">항목</th>
-              {(years.length > 0 ? years : ['최근']).map(y => (
-                <th key={y} className="text-right py-2 px-2 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{y}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {rows.map((row, i) => (
-              <tr key={i} className={`hover:bg-gray-50 transition-colors ${row.isTotal ? 'font-semibold' : ''}`}>
-                <td className="py-2.5 pr-4 text-xs text-gray-700 leading-snug">{row.label || '—'}</td>
-                {(row.values.length > 0 ? row.values : ['—']).map((v, j) => (
-                  <td key={j} className="py-2.5 px-2 text-right font-mono text-xs font-semibold text-gray-800 whitespace-nowrap">{v}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </SectionCard>
-  );
-}
-
 function FinancialsTab({ data }: { data: AnalysisDetail }) {
   const fs = data.financials_structured as StructuredFinancials | null | undefined;
   const hasStructured = !!(
@@ -788,19 +775,21 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
      fs.cash_flow?.operating)
   );
 
-  // Fallback: text parsing for old analyses without financials_structured
   const { isRows, bsRows, cfRows, notes, years } = parseFinancials(data.financials);
   const rawLines = splitLines(data.financials);
 
   const IS_COLS = ['FY2023', 'FY2024', 'FY2025'];
+
   const yoyColor = (v?: string) => {
     if (!v || v === '—') return 'text-gray-400';
-    return v.startsWith('▲') ? 'text-emerald-600' : v.startsWith('▼') ? 'text-red-500' : 'text-gray-500';
+    return v.startsWith('▲') ? 'text-emerald-600 font-semibold' : v.startsWith('▼') ? 'text-red-500 font-semibold' : 'text-gray-500';
   };
+
+  const BOLD_IS_ITEMS = ['매출', '영업이익', '순이익'];
 
   return (
     <div className="space-y-5">
-      {/* Prose / narrative */}
+      {/* Prose narrative */}
       {data.financials && (
         <SectionCard title="재무 서사" icon={Briefcase}>
           <div className="space-y-1.5">
@@ -820,23 +809,26 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide min-w-[100px]">항목</th>
+                      <th className="text-left py-2 pr-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[110px]">항목</th>
                       {IS_COLS.map(y => (
-                        <th key={y} className="text-right py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{y}</th>
+                        <th key={y} className="text-right py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">{y}</th>
                       ))}
-                      <th className="text-right py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">YoY</th>
+                      <th className="text-right py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">YoY</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {fs!.income_statement.map((row, i) => (
-                      <tr key={i} className="hover:bg-gray-50 transition-colors">
-                        <td className="py-2.5 pr-4 text-xs font-semibold text-gray-700">{row.item}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-600 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-700 whitespace-nowrap">{row.fy2024 ?? '—'}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
-                        <td className={`py-2.5 px-3 text-right font-mono text-xs font-bold whitespace-nowrap ${yoyColor(row.yoy)}`}>{row.yoy ?? '—'}</td>
-                      </tr>
-                    ))}
+                    {fs!.income_statement.map((row, i) => {
+                      const isBold = BOLD_IS_ITEMS.some(b => row.item.includes(b));
+                      return (
+                        <tr key={i} className={`hover:bg-gray-50 transition-colors ${isBold ? 'bg-gray-50/50' : ''}`}>
+                          <td className={`py-2.5 pr-4 text-xs ${isBold ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>{row.item}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'text-gray-800 font-semibold' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${yoyColor(row.yoy)}`}>{row.yoy ?? '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -850,41 +842,41 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide min-w-[100px]">항목</th>
+                      <th className="text-left py-2 pr-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[130px]">항목</th>
                       {IS_COLS.map(y => (
-                        <th key={y} className="text-right py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{y}</th>
+                        <th key={y} className="text-right py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">{y}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {fs!.balance_sheet.map((row, i) => (
-                      <tr key={i} className="hover:bg-gray-50 transition-colors">
-                        <td className="py-2.5 pr-4 text-xs font-semibold text-gray-700">{row.item}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-600 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-700 whitespace-nowrap">{row.fy2024 ?? '—'}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
-                      </tr>
-                    ))}
+                    {fs!.balance_sheet.map((row, i) => {
+                      const isHeader = row.item === '총자산';
+                      return (
+                        <tr key={i} className={`hover:bg-gray-50 transition-colors ${isHeader ? 'bg-gray-50' : ''}`}>
+                          <td className={`py-2.5 pr-4 text-xs ${isHeader ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>{row.item}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${isHeader ? 'text-gray-800 font-semibold' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </SectionCard>
           )}
 
-          {/* Cash Flow */}
+          {/* Cash Flow — 4 metric cards */}
           {fs!.cash_flow && (
             <SectionCard title="현금흐름 (C/F)" icon={Activity}>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: '영업활동',    value: fs!.cash_flow.operating },
-                  { label: '투자활동',    value: fs!.cash_flow.investing },
-                  { label: '재무활동',    value: fs!.cash_flow.financing },
-                  { label: 'Free CF',   value: fs!.cash_flow.free_cash_flow },
+                  { label: '영업활동 CF', value: fs!.cash_flow.operating },
+                  { label: '투자활동 CF', value: fs!.cash_flow.investing },
+                  { label: '재무활동 CF', value: fs!.cash_flow.financing },
+                  { label: 'Free Cash Flow', value: fs!.cash_flow.free_cash_flow },
                 ].map(({ label, value }) => (
-                  <div key={label} className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-center">
-                    <div className="text-[11px] font-semibold text-gray-400 mb-1">{label}</div>
-                    <div className="text-sm font-bold text-gray-800">{value || '—'}</div>
-                  </div>
+                  <MetricCard key={label} label={label} value={value || '—'} />
                 ))}
               </div>
               {fs!.cash_flow.notes && (
@@ -897,10 +889,70 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
         </>
       ) : (
         <>
-          {/* Fallback: text-parsed tables */}
-          {isRows.length > 0 && <FinTable title="손익계산서 (I/S)" rows={isRows} years={years} icon={TrendingUp} />}
-          {bsRows.length > 0 && <FinTable title="재무상태표 (B/S)" rows={bsRows} years={years} icon={BarChart2} />}
-          {cfRows.length > 0 && <FinTable title="현금흐름 (C/F)" rows={cfRows} years={years} icon={Activity} />}
+          {/* Fallback text-parsed tables */}
+          {isRows.length > 0 && (
+            <SectionCard title="손익계산서 (I/S)" icon={TrendingUp}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left py-2 pr-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[120px]">항목</th>
+                      {(years.length > 0 ? years : ['최근']).map(y => (
+                        <th key={y} className="text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">{y}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {isRows.map((row, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="py-2.5 pr-4 text-xs text-gray-700">{row.label || '—'}</td>
+                        {(row.values.length > 0 ? row.values : ['—']).map((v, j) => (
+                          <td key={j} className="py-2.5 px-2 text-right font-mono text-xs font-semibold text-gray-800 whitespace-nowrap">{v}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          )}
+
+          {bsRows.length > 0 && (
+            <SectionCard title="재무상태표 (B/S)" icon={BarChart2}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left py-2 pr-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[120px]">항목</th>
+                      {(years.length > 0 ? years : ['최근']).map(y => (
+                        <th key={y} className="text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">{y}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {bsRows.map((row, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="py-2.5 pr-4 text-xs text-gray-700">{row.label || '—'}</td>
+                        {(row.values.length > 0 ? row.values : ['—']).map((v, j) => (
+                          <td key={j} className="py-2.5 px-2 text-right font-mono text-xs font-semibold text-gray-800 whitespace-nowrap">{v}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          )}
+
+          {cfRows.length > 0 && (
+            <SectionCard title="현금흐름 (C/F)" icon={Activity}>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {cfRows.slice(0, 4).map((row, i) => (
+                  <MetricCard key={i} label={row.label} value={row.values[0] || '—'} />
+                ))}
+              </div>
+            </SectionCard>
+          )}
 
           {isRows.length === 0 && bsRows.length === 0 && cfRows.length === 0 && (
             <SectionCard title="재무 현황" icon={DollarSign}>
@@ -917,7 +969,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
               <div className="space-y-2">
                 {notes.map((n, i) => (
                   <div key={i} className="flex gap-2 items-start">
-                    <ChevronRight size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                    <ChevronRight size={13} className="text-gray-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-gray-700 leading-relaxed">{n}</p>
                   </div>
                 ))}
@@ -935,14 +987,14 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'summary',          label: '요약',        icon: Briefcase },
-  { key: 'industry_history', label: '산업 역사',   icon: Clock },
-  { key: 'tech_evolution',   label: '기술 변화',   icon: Zap },
-  { key: 'value_chain',      label: '밸류체인',    icon: GitBranch },
-  { key: 'competitors',      label: '경쟁사',      icon: Users },
+  { key: 'summary',          label: '요약',          icon: Briefcase },
+  { key: 'industry_history', label: '산업 역사',     icon: Clock },
+  { key: 'tech_evolution',   label: '기술 변화',     icon: Zap },
+  { key: 'value_chain',      label: '밸류체인',      icon: GitBranch },
+  { key: 'competitors',      label: '경쟁사',        icon: Users },
   { key: 'business_model',   label: '비즈니스 모델', icon: DollarSign },
-  { key: 'strategy',         label: '전략',        icon: Target },
-  { key: 'financials',       label: '재무',        icon: BarChart2 },
+  { key: 'strategy',         label: '전략',          icon: Target },
+  { key: 'financials',       label: '재무',          icon: BarChart2 },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -951,14 +1003,14 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
   const [tab, setTab] = useState<TabKey>('summary');
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       {/* Header */}
-      <div className="px-6 pt-5 pb-4 border-b border-gray-100 bg-gray-50">
+      <div className="px-6 pt-5 pb-4 border-b border-gray-100">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Building2 size={18} className="text-gray-400" />
-              <h2 className="text-2xl font-bold text-gray-900 leading-none">{data.companyName}</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 leading-none">{data.companyName}</h2>
             </div>
             <p className="text-xs text-gray-400 ml-6">
               {new Date(data.createdAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -980,10 +1032,10 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
               className={`shrink-0 flex items-center gap-1.5 py-3 px-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
                 active
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
-              <Icon size={13} />
+              <Icon size={12} />
               {t.label}
             </button>
           );

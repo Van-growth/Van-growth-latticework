@@ -125,10 +125,19 @@ export interface CashFlow {
   notes?: string;
 }
 
+export interface UnitEconomics {
+  gross_margin?: string;
+  operating_margin?: string;
+  net_margin?: string;
+  fcf_margin?: string;
+  nrr?: string;
+}
+
 export interface StructuredFinancials {
   income_statement: IncomeStatementRow[];
   balance_sheet: BalanceSheetRow[];
   cash_flow: CashFlow;
+  unit_economics?: UnitEconomics;
 }
 
 export interface LinkedInDraft {
