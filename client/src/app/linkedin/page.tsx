@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import LinkedInDraftCard from '../components/LinkedInDraftCard';
 import { AnalysisSummary, AnalysisDetail } from '@/types';
+import { useAnalysis } from '@/app/context/AnalysisContext';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -12,6 +13,7 @@ const API_URL = (() => {
 })();
 
 export default function LinkedInPage() {
+  const { setAnalysisData } = useAnalysis();
   const [list, setList] = useState<AnalysisSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<AnalysisDetail | null>(null);
@@ -38,6 +40,7 @@ export default function LinkedInPage() {
       const res = await fetch(`${API_URL}/api/analyses/${id}`);
       const data = await res.json();
       setDetail(data as AnalysisDetail);
+      setAnalysisData(data as AnalysisDetail);
     } catch {
       setError('초안을 불러오지 못했습니다.');
     } finally {
@@ -46,7 +49,7 @@ export default function LinkedInPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen">
       <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/" className="font-bold text-gray-900 text-lg">Latticework</Link>

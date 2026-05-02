@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { AnalysisSummary } from '@/types';
+import { AnalysisSummary, AnalysisDetail } from '@/types';
+import { useAnalysis } from '@/app/context/AnalysisContext';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -13,6 +14,7 @@ const API_URL = (() => {
 
 export default function HistoryPage() {
   const router = useRouter();
+  const { setAnalysisData } = useAnalysis();
   const [list, setList] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +27,20 @@ export default function HistoryPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  function handleSelect(id: string) {
+  async function handleSelect(id: string) {
+    // Fetch detail and update context so panel reflects the selected analysis
+    try {
+      const res = await fetch(`${API_URL}/api/analyses/${id}`);
+      const data = await res.json();
+      setAnalysisData(data as AnalysisDetail);
+    } catch {
+      // Context update is best-effort; navigation proceeds regardless
+    }
     router.push(`/?id=${id}`);
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen">
       <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/" className="font-bold text-gray-900 text-lg">Latticework</Link>
