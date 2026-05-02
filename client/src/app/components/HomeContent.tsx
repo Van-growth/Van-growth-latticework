@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Share2, Link, X } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import AnalysisLoader from './AnalysisLoader';
 import { useAnalysis } from '@/app/context/AnalysisContext';
@@ -33,7 +34,62 @@ export default function HomeContent() {
   const [fetchingId, setFetchingId] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [isShared, setIsShared] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [toast, setToast] = useState('');
+
   const loadedIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (result) {
+      setIsShared(result.is_shared ?? false);
+      setShareToken(result.share_token ?? null);
+    }
+  }, [result?.id]);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2500);
+  }
+
+  async function handleShare() {
+    if (!result?.id || sharing) return;
+    setSharing(true);
+    try {
+      const res = await fetch(`${API_URL}/api/analyses/${result.id}/share`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setShareToken(data.share_token);
+      setIsShared(true);
+      const url = `${window.location.origin}/share/${data.share_token}`;
+      await navigator.clipboard.writeText(url);
+      showToast('링크 복사됨!');
+    } catch {
+      showToast('공유 링크 생성 실패');
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!shareToken) return;
+    const url = `${window.location.origin}/share/${shareToken}`;
+    await navigator.clipboard.writeText(url);
+    showToast('링크 복사됨!');
+  }
+
+  async function handleRevoke() {
+    if (!result?.id) return;
+    try {
+      await fetch(`${API_URL}/api/analyses/${result.id}/share`, { method: 'DELETE' });
+      setIsShared(false);
+      setShareToken(null);
+      showToast('공유가 해제되었습니다.');
+    } catch {
+      showToast('공유 해제 실패');
+    }
+  }
 
   useEffect(() => {
     if (!urlId) return;
@@ -127,7 +183,51 @@ export default function HomeContent() {
 
       {/* Result */}
       {result && !loading && !fetchingId && (
-        <AnalysisCard data={result} />
+        <div>
+          {/* Share bar */}
+          <div className="flex items-center justify-end gap-2 mb-3">
+            {isShared ? (
+              <>
+                <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                  공유 중
+                </span>
+                <button
+                  onClick={handleCopyLink}
+                  className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <Link size={12} />
+                  링크 복사
+                </button>
+                <button
+                  onClick={handleRevoke}
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <X size={12} />
+                  공유 해제
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleShare}
+                disabled={sharing}
+                className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Share2 size={12} />
+                {sharing ? '생성 중...' : '공유'}
+              </button>
+            )}
+          </div>
+
+          {/* Toast */}
+          {toast && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
+              {toast}
+            </div>
+          )}
+
+          <AnalysisCard data={result} />
+        </div>
       )}
     </div>
   );

@@ -371,6 +371,8 @@ export interface AnalysisDetail {
   sources: AnalysisSources;
   dataSource?: DataSource;
   createdAt: string;
+  is_shared?: boolean;
+  share_token?: string | null;
   valuechainPlayers: ValueChainPlayer[];
   linkedinDrafts: LinkedInDraft[];
 }

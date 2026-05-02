@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { randomBytes } from 'crypto';
 import { supabase } from '../lib/supabase';
 
 const router = Router();
@@ -81,6 +82,8 @@ router.get('/:id', async (req: Request, res: Response) => {
       sources: row.sources ?? {},
       dataSource: (row.data_source ?? 'web_search') as 'dart' | 'edgar' | 'web_search',
       createdAt: row.created_at,
+      is_shared: row.is_shared ?? false,
+      share_token: row.share_token ?? null,
       valuechainPlayers: playersRes.data ?? [],
       linkedinDrafts: draftsRes.data ?? [],
       // V2 fields
@@ -96,6 +99,45 @@ router.get('/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[GET /api/analyses/:id]', err);
     res.status(500).json({ error: '상세 정보를 불러오지 못했습니다.' });
+  }
+});
+
+// POST /api/analyses/:id/share  — create / refresh share link
+router.post('/:id/share', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const token = randomBytes(6).toString('base64url');
+
+  try {
+    const { data, error } = await supabase
+      .from('analyses')
+      .update({ share_token: token, is_shared: true, shared_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('share_token')
+      .single();
+
+    if (error) throw error;
+    res.json({ share_token: data.share_token });
+  } catch (err) {
+    console.error('[POST /api/analyses/:id/share]', err);
+    res.status(500).json({ error: '공유 링크 생성에 실패했습니다.' });
+  }
+});
+
+// DELETE /api/analyses/:id/share  — revoke share
+router.delete('/:id/share', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const { error } = await supabase
+      .from('analyses')
+      .update({ share_token: null, is_shared: false, shared_at: null })
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /api/analyses/:id/share]', err);
+    res.status(500).json({ error: '공유 해제에 실패했습니다.' });
   }
 });
 

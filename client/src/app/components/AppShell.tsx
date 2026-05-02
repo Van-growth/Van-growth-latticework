@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import { MessageCircle, X } from 'lucide-react';
 import AiAssistantPanel from './AiAssistantPanel';
 import { useAnalysis } from '@/app/context/AnalysisContext';
@@ -11,8 +12,13 @@ const DEFAULT_WIDTH = 340;
 const LS_KEY = 'ai_panel_width';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { analysisData } = useAnalysis();
   const [showPanel, setShowPanel] = useState(false);
+
+  if (pathname?.startsWith('/share/')) {
+    return <>{children}</>;
+  }
   const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
 
