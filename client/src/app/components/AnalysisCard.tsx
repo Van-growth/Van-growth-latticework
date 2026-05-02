@@ -67,6 +67,22 @@ function SectionCard({ title, dotColor = 'bg-gray-300', children, className = ''
   );
 }
 
+function DataValue({ text, className = '' }: { text: string | null | undefined; className?: string }) {
+  const str = text ?? '—';
+  if (str === '확인 필요' || str === '공개 없음') {
+    return <span className={`text-gray-400 italic ${className}`}>{str}</span>;
+  }
+  if (str.includes('(추정)')) {
+    const idx = str.indexOf('(추정)');
+    return (
+      <span className={className}>
+        {str.slice(0, idx)}<span className="text-amber-500">(추정)</span>{str.slice(idx + 4)}
+      </span>
+    );
+  }
+  return <span className={className}>{str}</span>;
+}
+
 function MetricCard({ value, label, trend }: { value: string; label: string; trend?: 'up' | 'down' | 'flat' }) {
   const trendEl = trend === 'up'
     ? <span className="text-green-500 text-[10px] ml-1">↑</span>
@@ -75,12 +91,13 @@ function MetricCard({ value, label, trend }: { value: string; label: string; tre
     : trend === 'flat'
     ? <span className="text-gray-400 text-[10px] ml-1">→</span>
     : null;
+  const isUnknown = value === '확인 필요' || value === '공개 없음';
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <div className="text-[11px] text-gray-400 mb-1 leading-tight">{label}</div>
-      <div className="text-xl font-medium text-gray-900 leading-none flex items-baseline">
-        {value}
-        {trendEl}
+      <div className={`font-medium leading-none flex items-baseline ${isUnknown ? 'text-sm' : 'text-xl text-gray-900'}`}>
+        <DataValue text={value} />
+        {!isUnknown && trendEl}
       </div>
     </div>
   );
@@ -115,8 +132,8 @@ function CfMetricCard({ label, value, dotColor }: { label: string; value: string
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
         <span className="text-[11px] text-gray-400 leading-tight">{label}</span>
       </div>
-      <div className="text-sm font-medium text-gray-900 leading-snug break-words">{numPart}</div>
-      {descPart && <div className="text-xs text-gray-500 leading-snug mt-0.5 break-words">{descPart}</div>}
+      <div className="text-sm font-medium text-gray-900 leading-snug break-words"><DataValue text={numPart} /></div>
+      {descPart && <div className="text-xs text-gray-500 leading-snug mt-0.5 break-words"><DataValue text={descPart} /></div>}
     </div>
   );
 }
@@ -1387,7 +1404,7 @@ function FinancialsV2Tab({ f, sources }: { f: FinancialsV2; sources: Source[] | 
     { label: 'D/E Ratio',     value: f.munger_buffett_metrics.debt_to_equity },
     { label: 'Interest Coverage', value: f.munger_buffett_metrics.interest_coverage },
     { label: 'Reinvestment Rate', value: f.munger_buffett_metrics.reinvestment_rate },
-  ].filter(m => m.value && m.value !== '추정 불가');
+  ].filter(m => m.value && m.value !== '추정 불가' && m.value !== '확인 필요');
 
   const cfDots: Record<string, string> = {
     'Operating CF':  'bg-blue-400',
@@ -1433,10 +1450,10 @@ function FinancialsV2Tab({ f, sources }: { f: FinancialsV2; sources: Source[] | 
                       <td className={`py-2.5 pr-3 text-xs ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
                       {IS_COLS_V2.map(col => (
                         <td key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === 'fy2024' ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
-                          {row[col] ?? '—'}
+                          <DataValue text={row[col] ?? '—'} />
                         </td>
                       ))}
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}>{row.yoy ?? '—'}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={row.yoy ?? '—'} /></td>
                     </tr>
                   );
                 })}
@@ -1467,9 +1484,9 @@ function FinancialsV2Tab({ f, sources }: { f: FinancialsV2; sources: Source[] | 
                   return (
                     <tr key={i} className={`hover:bg-gray-50/50 transition-colors ${isBold ? 'bg-gray-50' : ''}`}>
                       <td className={`py-2.5 pr-3 text-xs ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2023 ?? '—'} /></td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><DataValue text={row.fy2024 ?? '—'} /></td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2025 ?? '—'} /></td>
                     </tr>
                   );
                 })}

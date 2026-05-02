@@ -336,11 +336,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // ── Section prompts ───────────────────────────────────────────────────────────
 
 const SECTION_SYSTEM = `당신은 전문 기업 분석가입니다. 제공된 리서치 데이터를 바탕으로 지정된 섹션만 분석합니다.
-규칙: 마크다운·코드블록·추가 설명 없이 순수 JSON만 출력. 모든 텍스트는 한국어 (기업명·기술명·티커는 원어 유지). 불확실한 수치는 "추정 불가"로 명시.`;
+규칙: 마크다운·코드블록·추가 설명 없이 순수 JSON만 출력. 모든 텍스트는 한국어 (기업명·기술명·티커는 원어 유지).
+
+[데이터 신뢰성 원칙]
+1. 확인된 데이터만 수치로 제시. 출처(10-K, IR, DART 등) 확인 가능한 것만.
+2. 추정·추론한 수치는 반드시 값 끝에 "(추정)" 레이블 명시. 예: "15.2% (추정)"
+3. 데이터가 없는 항목은 "확인 필요"로 반환. 절대 임의로 채우지 말 것.
+4. 지역별 매출 비중·고객사명 등 구체적 수치는 공시 데이터 기반이 아니면 제시 금지.
+5. 소규모·비상장 기업은 데이터 공백이 많을 수 있음 — 없으면 없다고 명시.`;
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `아래 스키마의 JSON 객체만 출력:
-{"company":"기업명","ticker":"티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치","trend":"up|down|flat"},{"label":"영업이익률","value":"수치%","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["고객사명 최대5개"],"key_markets":[{"country":"국가","revenue_share":숫자}],"one_line":"투자자 관점 핵심 한줄 20자이내","bull_case":"강세 시나리오 2줄이내","bear_case":"약세 시나리오 2줄이내"}`,
+{"company":"기업명","ticker":"티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"one_line":"투자자 관점 핵심 한줄 20자이내","bull_case":"강세 시나리오 2줄이내","bear_case":"약세 시나리오 2줄이내"}
+top_customers: IR·공시에서 확인된 것만. 추정이면 빈 배열. key_markets.revenue_share: 공시 수치 없으면 해당 국가 항목 자체를 제외.`,
 
   industry_history_v2: `아래 스키마의 JSON 객체만 출력:
 {"industry_name":"산업명","timeline":[{"period":"시기","title":"시대제목 15자이내","technology":"핵심기술 1줄","market_need":"시장수요 1줄","key_players":["기업명(국가)"],"significance":"중요성 1줄"}],"why_durable":"지속가능이유 2줄이내","chasm_points":["캐즘시점과이유 1줄 최대3개"]}
@@ -365,8 +373,8 @@ direct는 글로벌 직접 경쟁사 3~5개 필수.`,
 {"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내"}`,
 
   financials_v2: `아래 스키마의 JSON 객체만 출력:
-{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"값 or 공개없음","fy2022":"값","fy2023":"값","fy2024":"값","fy2025":"값 or 추정","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"값","fy2024":"값","fy2025":"값"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"값","investing":"값","financing":"값","fcf":"값","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"값% or 추정불가","roic":"값% or 추정불가","owner_earnings":"값 or 추정불가","debt_to_equity":"값 or 추정불가","interest_coverage":"값 or 추정불가","reinvestment_rate":"값% or 추정불가"},"key_risks":["리스크 1줄 최대5개"]}
-income_statement 빈칸 절대 금지 — 수치 없으면 반드시 '공개 없음'.`,
+{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요'","fy2022":"공시값 or '확인 필요'","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"공시값% or '수치% (추정)' or '확인 필요'","roic":"공시값% or '수치% (추정)' or '확인 필요'","owner_earnings":"공시값 or '확인 필요'","debt_to_equity":"공시값 or '확인 필요'","interest_coverage":"공시값 or '확인 필요'","reinvestment_rate":"공시값% or '수치% (추정)' or '확인 필요'"},"key_risks":["리스크 1줄 최대5개"]}
+income_statement·balance_sheet 빈칸 절대 금지 — 공시 수치 없으면 반드시 '확인 필요'. 추정값은 반드시 '숫자 (추정)' 형식.`,
 };
 
 // ── Research gathering (1 web-search pass) ────────────────────────────────────
