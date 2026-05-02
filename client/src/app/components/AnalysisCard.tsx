@@ -5,6 +5,7 @@ import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase,
 } from 'lucide-react';
+import TradingViewWidget from './TradingViewWidget';
 import {
   AnalysisDetail,
   Metric,
@@ -394,9 +395,10 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 산업역사 ──────────────────────────────────────────────────────────
 
-function IndustryHistoryV2Tab({ h, sources }: { h: IndustryHistoryV2; sources: Source[] | undefined }) {
+function IndustryHistoryV2Tab({ h, sources, ticker }: { h: IndustryHistoryV2; sources: Source[] | undefined; ticker: string | null }) {
   return (
     <div className="space-y-4">
+      <TradingViewWidget symbol={ticker} />
       <div>
         {h.timeline.map((item, i) => {
           const isLast = i === h.timeline.length - 1;
@@ -528,9 +530,10 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 기술변화 ──────────────────────────────────────────────────────────
 
-function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
+function TechEvolutionV2Tab({ t, sources, ticker }: { t: TechEvolutionV2; sources: Source[] | undefined; ticker: string | null }) {
   return (
     <div className="space-y-4">
+      <TradingViewWidget symbol={ticker} />
       <div className="space-y-3">
         {t.stages.map((s, i) => {
           const hype = HYPE_LEVEL_CFG[s.hype_level] ?? HYPE_LEVEL_CFG.mainstream;
@@ -1702,11 +1705,11 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
           : <SummaryTab data={data} />;
       case 'industry_history':
         return data.industry_history_v2
-          ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.sources?.industry_history} />
+          ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.sources?.industry_history} ticker={data.summary_v2?.ticker ?? null} />
           : <IndustryHistoryTab data={data} />;
       case 'tech_evolution':
         return data.tech_evolution_v2
-          ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.sources?.tech_evolution} />
+          ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.sources?.tech_evolution} ticker={data.summary_v2?.ticker ?? null} />
           : <TechEvolutionTab data={data} />;
       case 'value_chain':
         return data.value_chain_v2
