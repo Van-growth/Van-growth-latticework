@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import { analyzeCompany, generateLinkedInDrafts } from '../lib/claude';
+import { fetchFinancialContext } from '../lib/financialContext';
 
 const router = Router();
 
@@ -24,10 +25,13 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (companyErr) throw companyErr;
 
-    // 2. Run AI analysis
-    const analysis = await analyzeCompany(name);
+    // 2. Fetch financial context (DART / EDGAR) — graceful fallback to web_search
+    const { source: dataSource, contextText } = await fetchFinancialContext(name);
 
-    // 3. Save analysis
+    // 3. Run AI analysis (inject financial context when available)
+    const analysis = await analyzeCompany(name, contextText || undefined);
+
+    // 4. Save analysis
     const { data: savedAnalysis, error: analysisErr } = await supabase
       .from('analyses')
       .insert({
@@ -43,13 +47,14 @@ router.post('/', async (req: Request, res: Response) => {
         strategy: analysis.strategy,
         financials: analysis.financials,
         sources: analysis.sources,
+        data_source: dataSource,
       })
       .select('id, created_at')
       .single();
 
     if (analysisErr) throw analysisErr;
 
-    // 4. Save value chain players
+    // 5. Save value chain players
     if (analysis.value_chain_players.length > 0) {
       await supabase.from('value_chain_players').insert(
         analysis.value_chain_players.map(p => ({
@@ -61,7 +66,7 @@ router.post('/', async (req: Request, res: Response) => {
       );
     }
 
-    // 5. Generate & save LinkedIn drafts
+    // 6. Generate & save LinkedIn drafts
     const drafts = await generateLinkedInDrafts(analysis, name);
     if (drafts.length > 0) {
       await supabase.from('linkedin_drafts').insert(
@@ -78,6 +83,7 @@ router.post('/', async (req: Request, res: Response) => {
       companyName: name,
       createdAt: savedAnalysis.created_at,
       ...analysis,
+      dataSource,
       linkedinDrafts: drafts,
     });
   } catch (err) {

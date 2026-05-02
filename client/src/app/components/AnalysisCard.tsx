@@ -7,6 +7,7 @@ import {
   RiskAnalysis,
   CompetitorsAnalysis,
   StrategyAnalysis,
+  DataSource,
   Source,
 } from '@/types';
 
@@ -28,6 +29,47 @@ function HighlightNumbers({ text }: { text: string }) {
         )
       )}
     </>
+  );
+}
+
+// ── Data Source Badge ──────────────────────────────────────────────────────────
+
+const DATA_SOURCE_CONFIG: Record<
+  DataSource,
+  { label: string; bg: string; text: string; border: string; dot: string }
+> = {
+  dart: {
+    label: 'DART 연동됨',
+    bg: 'bg-emerald-50',
+    text: 'text-emerald-700',
+    border: 'border-emerald-200',
+    dot: 'bg-emerald-500',
+  },
+  edgar: {
+    label: 'SEC EDGAR 연동됨',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    border: 'border-blue-200',
+    dot: 'bg-blue-500',
+  },
+  web_search: {
+    label: '웹 검색 기반',
+    bg: 'bg-gray-50',
+    text: 'text-gray-500',
+    border: 'border-gray-200',
+    dot: 'bg-gray-400',
+  },
+};
+
+function DataSourceBadge({ source }: { source: DataSource }) {
+  const cfg = DATA_SOURCE_CONFIG[source];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
   );
 }
 
@@ -609,11 +651,14 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
       <div className="px-6 pt-6 pb-4 border-b border-gray-100">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3">
           <h2 className="text-2xl font-bold text-gray-900">{data.companyName}</h2>
-          <span className="text-xs text-gray-400">
-            {new Date(data.createdAt).toLocaleString('ko-KR')}
-          </span>
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <span className="text-xs text-gray-400">
+              {new Date(data.createdAt).toLocaleString('ko-KR')}
+            </span>
+            <DataSourceBadge source={data.dataSource ?? 'web_search'} />
+          </div>
         </div>
       </div>
 

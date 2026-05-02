@@ -109,6 +109,8 @@ export interface AnalysisSummary {
   createdAt: string;
 }
 
+export type DataSource = 'dart' | 'edgar' | 'web_search';
+
 export interface AnalysisDetail {
   id: string;
   companyName: string;
@@ -123,6 +125,7 @@ export interface AnalysisDetail {
   strategy: StrategyAnalysis | null;
   financials: string;
   sources: AnalysisSources;
+  dataSource?: DataSource;
   createdAt: string;
   valuechainPlayers: ValueChainPlayer[];
   linkedinDrafts: LinkedInDraft[];

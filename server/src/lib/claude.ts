@@ -210,7 +210,10 @@ function extractJson<T>(text: string): T | null {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function analyzeCompany(companyName: string): Promise<AnalysisData> {
+export async function analyzeCompany(
+  companyName: string,
+  financialContext?: string,
+): Promise<AnalysisData> {
   const systemPrompt = `당신은 균형 잡힌 시각을 가진 전문 기업 분석가입니다. 웹 검색으로 기업을 충분히 조사한 후, 아래 JSON 형식으로만 응답하세요. 마크다운, 코드블록, 추가 설명 없이 순수 JSON만 출력하세요.
 
 균형 잡힌 분석 원칙 (반드시 준수):
@@ -324,11 +327,11 @@ sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 
 competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
 모든 텍스트 내용은 한국어로 작성하세요.`;
 
-  const raw = await runWithWebSearch(
-    systemPrompt,
-    `기업명: ${companyName}\n\n이 기업의 최신 정보를 웹에서 검색하여 균형 잡힌 분석을 해주세요.`,
-    'claude-sonnet-4-6',
-  );
+  const userMessage = financialContext
+    ? `[공시 데이터]\n${financialContext}\n\n[분석 요청]\n기업명: ${companyName}\n\n위 공시 데이터의 재무수치를 재무 섹션에 우선 반영하고 출처를 "(DART 공시)" 또는 "(SEC EDGAR)"로 명시하세요. 웹 검색으로 나머지 섹션을 보완하여 균형 잡힌 분석을 완성해주세요.`
+    : `기업명: ${companyName}\n\n이 기업의 최신 정보를 웹에서 검색하여 균형 잡힌 분석을 해주세요.`;
+
+  const raw = await runWithWebSearch(systemPrompt, userMessage, 'claude-sonnet-4-6');
 
   const parsed = extractJson<AnalysisData>(raw);
 

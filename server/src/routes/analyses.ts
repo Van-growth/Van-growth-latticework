@@ -74,6 +74,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       strategy: row.strategy ?? {},
       financials: row.financials,
       sources: row.sources ?? {},
+      dataSource: (row.data_source ?? 'web_search') as 'dart' | 'edgar' | 'web_search',
       createdAt: row.created_at,
       valuechainPlayers: playersRes.data ?? [],
       linkedinDrafts: draftsRes.data ?? [],
