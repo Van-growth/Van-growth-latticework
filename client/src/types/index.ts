@@ -96,6 +96,41 @@ export interface StrategyAnalysis {
   financial: FinancialStrategy;
 }
 
+export interface Metric {
+  label: string;
+  value: string;
+  unit?: string;
+}
+
+export interface IncomeStatementRow {
+  item: string;
+  fy2023?: string;
+  fy2024?: string;
+  fy2025?: string;
+  yoy?: string;
+}
+
+export interface BalanceSheetRow {
+  item: string;
+  fy2023?: string;
+  fy2024?: string;
+  fy2025?: string;
+}
+
+export interface CashFlow {
+  operating: string;
+  investing: string;
+  financing: string;
+  free_cash_flow: string;
+  notes?: string;
+}
+
+export interface StructuredFinancials {
+  income_statement: IncomeStatementRow[];
+  balance_sheet: BalanceSheetRow[];
+  cash_flow: CashFlow;
+}
+
 export interface LinkedInDraft {
   id: string;
   draft_number: number;
@@ -115,6 +150,9 @@ export interface AnalysisDetail {
   id: string;
   companyName: string;
   summary: string;
+  metrics?: Metric[];
+  strengths?: string[];
+  risks?: string[];
   industry_history: string;
   tech_evolution: string;
   value_chain_overview: string;
@@ -124,6 +162,7 @@ export interface AnalysisDetail {
   competitors: CompetitorsAnalysis | null;
   strategy: StrategyAnalysis | null;
   financials: string;
+  financials_structured?: StructuredFinancials;
   sources: AnalysisSources;
   dataSource?: DataSource;
   createdAt: string;

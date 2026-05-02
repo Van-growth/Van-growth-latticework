@@ -37,6 +37,9 @@ router.post('/', async (req: Request, res: Response) => {
       .insert({
         company_id: company.id,
         summary: analysis.summary,
+        metrics: analysis.metrics,
+        strengths: analysis.strengths,
+        risks: analysis.risks,
         industry_history: analysis.industry_history,
         tech_evolution: analysis.tech_evolution,
         value_chain_overview: analysis.value_chain_overview,
@@ -46,6 +49,7 @@ router.post('/', async (req: Request, res: Response) => {
         competitors: analysis.competitors,
         strategy: analysis.strategy,
         financials: analysis.financials,
+        financials_structured: analysis.financials_structured,
         sources: analysis.sources,
         data_source: dataSource,
       })

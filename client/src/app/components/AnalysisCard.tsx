@@ -9,10 +9,12 @@ import {
 } from 'lucide-react';
 import {
   AnalysisDetail,
+  Metric,
   MoatAnalysis,
   RiskAnalysis,
   CompetitorsAnalysis,
   StrategyAnalysis,
+  StructuredFinancials,
   DataSource,
   Source,
 } from '@/types';
@@ -138,9 +140,9 @@ function DataSourceBadge({ source }: { source: DataSource }) {
 
 // ── Metric extraction from text ───────────────────────────────────────────────
 
-function extractMetrics(text: string): Array<{ value: string; label: string }> {
+function extractMetrics(text: string): Metric[] {
   const lines = splitLines(text);
-  const results: Array<{ value: string; label: string }> = [];
+  const results: Metric[] = [];
   for (const line of lines) {
     const m = line.match(/([$₩]?[\d,]+(?:\.\d+)?(?:조|억|만|B|M|K|%|배|원|x|T)+)/);
     if (m) {
@@ -157,16 +159,20 @@ function extractMetrics(text: string): Array<{ value: string; label: string }> {
 // ── Tab: 요약 ─────────────────────────────────────────────────────────────────
 
 function SummaryTab({ data }: { data: AnalysisDetail }) {
-  const metrics = extractMetrics(data.summary);
   const lines = splitLines(data.summary);
 
-  // Heuristic: lines with positive words → 강점, negative words → 약점
-  const strengthLines = lines.filter(l =>
-    /강점|경쟁|성장|우위|확대|증가|선두|핵심|차별|혁신/.test(l)
-  ).slice(0, 3);
-  const weaknessLines = lines.filter(l =>
-    /리스크|약점|우려|감소|하락|손실|부채|불확실|경쟁 심화|위험/.test(l)
-  ).slice(0, 3);
+  // Use structured fields when available, fall back to heuristic extraction
+  const metrics = (data.metrics && data.metrics.length > 0)
+    ? data.metrics
+    : extractMetrics(data.summary);
+
+  const strengths = (data.strengths && data.strengths.length > 0)
+    ? data.strengths
+    : lines.filter(l => /강점|경쟁|성장|우위|확대|증가|선두|핵심|차별|혁신/.test(l)).slice(0, 3);
+
+  const risks = (data.risks && data.risks.length > 0)
+    ? data.risks
+    : lines.filter(l => /리스크|약점|우려|감소|하락|손실|부채|불확실|경쟁 심화|위험/.test(l)).slice(0, 3);
 
   return (
     <div className="space-y-5">
@@ -174,8 +180,12 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
       {metrics.length > 0 && (
         <div className={`grid gap-3 ${metrics.length >= 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'}`}>
           {metrics.map((m, i) => (
-            <MetricCard key={i} value={m.value} label={m.label}
-              icon={[DollarSign, TrendingUp, BarChart2, Activity][i % 4]} />
+            <MetricCard
+              key={i}
+              value={m.value}
+              label={m.unit ? `${m.label} (${m.unit})` : m.label}
+              icon={[DollarSign, TrendingUp, BarChart2, Activity][i % 4]}
+            />
           ))}
         </div>
       )}
@@ -185,17 +195,17 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
         <div className="sm:col-span-2">
           <SectionCard title="경영 요약" icon={Briefcase}>
             <div className="space-y-2">
-              {lines.slice(0, 5).map((l, i) => (
+              {lines.map((l, i) => (
                 <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
               ))}
             </div>
           </SectionCard>
         </div>
         <div className="flex flex-col gap-4">
-          {strengthLines.length > 0 && (
+          {strengths.length > 0 && (
             <SectionCard title="핵심 강점" icon={Award}>
               <div className="space-y-2">
-                {strengthLines.map((l, i) => (
+                {strengths.map((l, i) => (
                   <div key={i} className="flex gap-2 items-start">
                     <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                     <p className="text-xs text-gray-700 leading-relaxed">{l}</p>
@@ -204,10 +214,10 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
               </div>
             </SectionCard>
           )}
-          {weaknessLines.length > 0 && (
+          {risks.length > 0 && (
             <SectionCard title="주요 리스크" icon={AlertTriangle}>
               <div className="space-y-2">
-                {weaknessLines.map((l, i) => (
+                {risks.map((l, i) => (
                   <div key={i} className="flex gap-2 items-start">
                     <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
                     <p className="text-xs text-gray-700 leading-relaxed">{l}</p>
@@ -770,50 +780,151 @@ function FinTable({ title, rows, years, icon: Icon }: {
 }
 
 function FinancialsTab({ data }: { data: AnalysisDetail }) {
-  const metrics = extractMetrics(data.financials);
+  const fs = data.financials_structured as StructuredFinancials | null | undefined;
+  const hasStructured = !!(
+    fs &&
+    ((fs.income_statement?.length ?? 0) > 0 ||
+     (fs.balance_sheet?.length ?? 0) > 0 ||
+     fs.cash_flow?.operating)
+  );
+
+  // Fallback: text parsing for old analyses without financials_structured
   const { isRows, bsRows, cfRows, notes, years } = parseFinancials(data.financials);
   const rawLines = splitLines(data.financials);
 
+  const IS_COLS = ['FY2023', 'FY2024', 'FY2025'];
+  const yoyColor = (v?: string) => {
+    if (!v || v === '—') return 'text-gray-400';
+    return v.startsWith('▲') ? 'text-emerald-600' : v.startsWith('▼') ? 'text-red-500' : 'text-gray-500';
+  };
+
   return (
     <div className="space-y-5">
-      {/* Key metrics */}
-      {metrics.length > 0 && (
-        <div className={`grid gap-3 ${metrics.length >= 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'}`}>
-          {metrics.map((m, i) => (
-            <MetricCard key={i} value={m.value} label={m.label}
-              icon={[DollarSign, TrendingUp, BarChart2, Activity][i % 4]} />
-          ))}
-        </div>
-      )}
-
-      {/* Structured tables */}
-      {isRows.length > 0 && <FinTable title="손익계산서 (I/S)" rows={isRows} years={years} icon={TrendingUp} />}
-      {bsRows.length > 0 && <FinTable title="재무상태표 (B/S)" rows={bsRows} years={years} icon={BarChart2} />}
-      {cfRows.length > 0 && <FinTable title="현금흐름 (C/F)" rows={cfRows} years={years} icon={Activity} />}
-
-      {/* If structured parsing yielded nothing, show raw prose */}
-      {isRows.length === 0 && bsRows.length === 0 && cfRows.length === 0 && (
-        <SectionCard title="재무 현황" icon={DollarSign}>
-          <div className="space-y-2">
-            {rawLines.map((l, i) => (
+      {/* Prose / narrative */}
+      {data.financials && (
+        <SectionCard title="재무 서사" icon={Briefcase}>
+          <div className="space-y-1.5">
+            {splitLines(data.financials).map((l, i) => (
               <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
             ))}
           </div>
         </SectionCard>
       )}
 
-      {/* Notes */}
-      {notes.length > 0 && (
-        <SectionCard title="특이사항 / 코멘트" icon={AlertTriangle}>
-          <div className="space-y-2">
-            {notes.map((n, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <ChevronRight size={14} className="text-gray-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-gray-700 leading-relaxed">{n}</p>
+      {hasStructured ? (
+        <>
+          {/* Income Statement */}
+          {fs!.income_statement?.length > 0 && (
+            <SectionCard title="손익계산서 (I/S)" icon={TrendingUp}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide min-w-[100px]">항목</th>
+                      {IS_COLS.map(y => (
+                        <th key={y} className="text-right py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{y}</th>
+                      ))}
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">YoY</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {fs!.income_statement.map((row, i) => (
+                      <tr key={i} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 pr-4 text-xs font-semibold text-gray-700">{row.item}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-600 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-700 whitespace-nowrap">{row.fy2024 ?? '—'}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
+                        <td className={`py-2.5 px-3 text-right font-mono text-xs font-bold whitespace-nowrap ${yoyColor(row.yoy)}`}>{row.yoy ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
-        </SectionCard>
+            </SectionCard>
+          )}
+
+          {/* Balance Sheet */}
+          {fs!.balance_sheet?.length > 0 && (
+            <SectionCard title="재무상태표 (B/S)" icon={BarChart2}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide min-w-[100px]">항목</th>
+                      {IS_COLS.map(y => (
+                        <th key={y} className="text-right py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{y}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {fs!.balance_sheet.map((row, i) => (
+                      <tr key={i} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 pr-4 text-xs font-semibold text-gray-700">{row.item}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-600 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-700 whitespace-nowrap">{row.fy2024 ?? '—'}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Cash Flow */}
+          {fs!.cash_flow && (
+            <SectionCard title="현금흐름 (C/F)" icon={Activity}>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: '영업활동',    value: fs!.cash_flow.operating },
+                  { label: '투자활동',    value: fs!.cash_flow.investing },
+                  { label: '재무활동',    value: fs!.cash_flow.financing },
+                  { label: 'Free CF',   value: fs!.cash_flow.free_cash_flow },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-center">
+                    <div className="text-[11px] font-semibold text-gray-400 mb-1">{label}</div>
+                    <div className="text-sm font-bold text-gray-800">{value || '—'}</div>
+                  </div>
+                ))}
+              </div>
+              {fs!.cash_flow.notes && (
+                <p className="mt-3 text-xs text-gray-500 leading-relaxed border-t border-gray-100 pt-3">
+                  {fs!.cash_flow.notes}
+                </p>
+              )}
+            </SectionCard>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Fallback: text-parsed tables */}
+          {isRows.length > 0 && <FinTable title="손익계산서 (I/S)" rows={isRows} years={years} icon={TrendingUp} />}
+          {bsRows.length > 0 && <FinTable title="재무상태표 (B/S)" rows={bsRows} years={years} icon={BarChart2} />}
+          {cfRows.length > 0 && <FinTable title="현금흐름 (C/F)" rows={cfRows} years={years} icon={Activity} />}
+
+          {isRows.length === 0 && bsRows.length === 0 && cfRows.length === 0 && (
+            <SectionCard title="재무 현황" icon={DollarSign}>
+              <div className="space-y-2">
+                {rawLines.map((l, i) => (
+                  <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {notes.length > 0 && (
+            <SectionCard title="특이사항" icon={AlertTriangle}>
+              <div className="space-y-2">
+                {notes.map((n, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <ChevronRight size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-gray-700 leading-relaxed">{n}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+        </>
       )}
 
       <SourcesList sources={data.sources?.financials} />

@@ -106,8 +106,46 @@ export interface StrategyAnalysis {
   financial: FinancialStrategy;
 }
 
+export interface Metric {
+  label: string;
+  value: string;
+  unit?: string;
+}
+
+export interface IncomeStatementRow {
+  item: string;
+  fy2023?: string;
+  fy2024?: string;
+  fy2025?: string;
+  yoy?: string;
+}
+
+export interface BalanceSheetRow {
+  item: string;
+  fy2023?: string;
+  fy2024?: string;
+  fy2025?: string;
+}
+
+export interface CashFlow {
+  operating: string;
+  investing: string;
+  financing: string;
+  free_cash_flow: string;
+  notes?: string;
+}
+
+export interface StructuredFinancials {
+  income_statement: IncomeStatementRow[];
+  balance_sheet: BalanceSheetRow[];
+  cash_flow: CashFlow;
+}
+
 export interface AnalysisData {
   summary: string;
+  metrics: Metric[];
+  strengths: string[];
+  risks: string[];
   industry_history: string;
   tech_evolution: string;
   value_chain_overview: string;
@@ -118,6 +156,7 @@ export interface AnalysisData {
   competitors: CompetitorsAnalysis;
   strategy: StrategyAnalysis;
   financials: string;
+  financials_structured: StructuredFinancials;
   sources: AnalysisSources;
 }
 
@@ -149,6 +188,12 @@ const DEFAULT_STRATEGY: StrategyAnalysis = {
   corporate: { portfolio_direction: '', ma_partnership: '', regional_expansion: '' },
   business:  { competitive_advantage: '', customer_channel: '', product_roadmap: '' },
   financial: { capital_raising: '', investment_priority: '', dividend_buyback: '', profitability_target: '' },
+};
+
+const DEFAULT_FINANCIALS_STRUCTURED: StructuredFinancials = {
+  income_statement: [],
+  balance_sheet: [],
+  cash_flow: { operating: '', investing: '', financing: '', free_cash_flow: '' },
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -241,7 +286,23 @@ export async function analyzeCompany(
 
 출력 JSON 형식:
 {
-  "summary": "경영 요약 (200-300자) — 강점과 약점 균형 포함",
+  "summary": "핵심 포지션 서술 (100-200자). 수치는 metrics 필드에 분리할 것",
+  "metrics": [
+    {"label": "매출", "value": "실제 수치", "unit": "KRW 또는 USD 등"},
+    {"label": "영업이익률", "value": "실제 수치", "unit": "%"},
+    {"label": "시가총액", "value": "실제 수치", "unit": "KRW 또는 USD"},
+    {"label": "YoY 성장률", "value": "실제 수치", "unit": "%"}
+  ],
+  "strengths": [
+    "강점1 — 1문장, 구체적 근거 포함",
+    "강점2 — 1문장, 구체적 근거 포함",
+    "강점3 — 1문장, 구체적 근거 포함"
+  ],
+  "risks": [
+    "리스크1 — 1문장, 구체적 근거 포함",
+    "리스크2 — 1문장, 구체적 근거 포함",
+    "리스크3 — 1문장, 구체적 근거 포함"
+  ],
   "industry_history": "글로벌 산업 역사 및 발전 과정 (600-800자). 미국·유럽·아시아 주요 플레이어 등장 타임라인, 글로벌 규제 변화, 주요 M&A 이벤트, 기술 전환점을 포함할 것. 한국 기업만이 아닌 글로벌 산업 흐름 속에서 분석 대상 기업의 위치를 파악할 것.",
   "tech_evolution": "기술 변화 및 혁신 트렌드 (300-500자)",
   "value_chain_overview": "글로벌 밸류체인 전체 개요 (200-300자) — 원재료 공급국, 제조 허브, 주요 시장 지역을 포함할 것",
@@ -326,7 +387,27 @@ export async function analyzeCompany(
       "profitability_target": "목표 수익성 지표 — 마진율, ROE, EBITDA 등. 확인 불가 항목은 '확인 필요' 명시"
     }
   },
-  "financials": "재무 현황 및 주요 지표 (400-600자) — 공개된 수치만 사용, 없으면 '공개 데이터 없음' 명시",
+  "financials": "재무 맥락 서사 (150-250자) — 수치는 financials_structured에 분리. 추세·특이사항·자본배분 의도 등 서술",
+  "financials_structured": {
+    "income_statement": [
+      {"item": "매출",     "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
+      {"item": "영업이익", "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
+      {"item": "순이익",   "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
+      {"item": "EBITDA",  "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"}
+    ],
+    "balance_sheet": [
+      {"item": "총자산",  "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
+      {"item": "총부채",  "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
+      {"item": "자본총계","fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"}
+    ],
+    "cash_flow": {
+      "operating":       "값 또는 '공개 없음'",
+      "investing":       "값 또는 '공개 없음'",
+      "financing":       "값 또는 '공개 없음'",
+      "free_cash_flow":  "값 또는 '공개 없음'",
+      "notes":           "FCF 특이사항 (SBC 조정, CAPEX 성격 등) 또는 빈 문자열"
+    }
+  },
   "sources": {
     "summary":          [{"url": "https://...", "title": "페이지 제목"}],
     "industry_history": [{"url": "https://...", "title": "페이지 제목"}],
@@ -341,6 +422,9 @@ export async function analyzeCompany(
 
 sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 URL만 포함하세요. 없으면 빈 배열 []로 두세요.
 competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
+metrics는 검증된 수치만 포함하세요. 수치 없으면 빈 배열 [].
+strengths와 risks는 각 3~5개, 1문장씩, 구체적 근거 포함.
+financials_structured는 공개 재무제표 기반으로 작성하세요. 수치 없는 항목은 '공개 없음'으로 표시.
 모든 텍스트 내용은 한국어로 작성하세요.`;
 
   const userMessage = financialContext
@@ -354,16 +438,23 @@ competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
   if (parsed && parsed.summary) {
     return {
       ...parsed,
-      moat_analysis: parsed.moat_analysis ?? DEFAULT_MOAT,
-      risk_analysis: parsed.risk_analysis ?? DEFAULT_RISK,
-      competitors:   parsed.competitors   ?? DEFAULT_COMPETITORS,
-      strategy:      parsed.strategy      ?? DEFAULT_STRATEGY,
-      sources:       parsed.sources ?? {},
+      metrics:                parsed.metrics                ?? [],
+      strengths:              parsed.strengths              ?? [],
+      risks:                  parsed.risks                  ?? [],
+      moat_analysis:          parsed.moat_analysis          ?? DEFAULT_MOAT,
+      risk_analysis:          parsed.risk_analysis          ?? DEFAULT_RISK,
+      competitors:            parsed.competitors            ?? DEFAULT_COMPETITORS,
+      strategy:               parsed.strategy               ?? DEFAULT_STRATEGY,
+      financials_structured:  parsed.financials_structured  ?? DEFAULT_FINANCIALS_STRUCTURED,
+      sources:                parsed.sources                ?? {},
     };
   }
 
   return {
     summary: raw.slice(0, 1000),
+    metrics: [],
+    strengths: [],
+    risks: [],
     industry_history: '',
     tech_evolution: '',
     value_chain_overview: '',
@@ -374,6 +465,7 @@ competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
     competitors: DEFAULT_COMPETITORS,
     strategy: DEFAULT_STRATEGY,
     financials: '',
+    financials_structured: DEFAULT_FINANCIALS_STRUCTURED,
     sources: {},
   };
 }
