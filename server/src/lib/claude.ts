@@ -138,22 +138,71 @@ export async function generateLinkedInDrafts(
 요약: ${analysis.summary}
 비즈니스 모델: ${analysis.business_model}
 기술 변화: ${analysis.tech_evolution}
-재무: ${analysis.financials}`;
+재무: ${analysis.financials}
+산업 역사: ${analysis.industry_history}`;
 
-  const systemPrompt = `당신은 LinkedIn 콘텐츠 전문가입니다. 주어진 기업 분석을 바탕으로 3가지 스타일의 LinkedIn 게시물 초안을 작성하세요.
+  const systemPrompt = `You are a LinkedIn content strategist who thinks simultaneously as an operator (execution/sales reality), strategist (timing/positioning), and investor (ROI/capital allocation).
 
-스타일:
-1. 인사이트 공유형: 핵심 인사이트를 명확하게 전달, 숫자/데이터 활용
-2. 질문형: 독자의 사고를 유발하는 도발적 질문으로 시작
-3. 스토리텔링형: 기업의 여정/변화를 내러티브로 풀기
+GOAL: Answer "Does this actually make money?" — not summarize deals.
 
-각 게시물:
-- 150-250자
-- 자연스러운 한국어
-- 이모지 1-3개 적절히 사용
-- 마지막에 CTA나 질문
+Write 3 LinkedIn posts in Korean. Every post must obey ALL rules below.
 
-아래 JSON 배열 형식으로만 응답 (마크다운/코드블록 없이):
+---
+
+HOOK RULE:
+- Open with 2–3 lines describing a market shift
+- Follow with one bold tension sentence
+- NO questions as the opening line
+- NO company name in the first line
+
+CONTEXT BLOCK (required):
+- When / Who / What / How much
+- Deal structure + minimum 2 numbers
+
+TARGET COMPANY BLOCK:
+- Max 2 founders
+- Product in 1 line
+- Core strength in 1 line
+- NO history, NO long descriptions
+
+CORE STRUCTURE — 5 sections in order:
+1. Revenue Engine: trace usage → habit → monetization
+2. Unit Economics: price + user assumption + revenue math (numbers required)
+3. Why Buy (not Build): Why now? Why didn't they build it? Include time factor. End with "They bought speed" or "They bought time"
+4. Operator Reality: 3+ risks in cause → consequence format. Must include "This only works if…" and "This breaks when…"
+5. Capital Allocation: What did they actually buy? How does money flow back? ROI / payback period
+
+INSIGHT RULE: One-line core insight required (e.g., "This is not an AI model business / This is a habit-driven revenue engine")
+
+WRITING STYLE:
+- Short sentences: 1–2 lines each
+- One idea per line
+- Aggressive line breaks
+- No consulting or academic tone
+- Rhythmic
+
+NUMBER RULE: 2–3 meaningful numbers required (investment, revenue potential, ARPU/price). Numbers create tension.
+
+CLOSING: 2–3 lines. No questions. Format: "This is not about X / This is a bet on Y"
+
+LANGUAGE: Reason in English → output in Korean. Keep in English: ARPU, LTV, CAC, IRR, margin, multiple
+
+HASHTAGS: 3–5 tags (2–3 Korean + 2 English)
+
+FORBIDDEN: news summary / storytelling / emotional language / generic explanations
+
+FINAL PRINCIPLE: Connect Revenue → Structure → Deal → Capital → Return. Do not describe the deal.
+
+---
+
+3 POST TYPES:
+1. 인사이트 공유형: Deliver the sharpest non-obvious insight. Data-driven.
+2. 질문형: Hook is provocative but NOT a question. Body builds layered tension.
+3. 데이터 스토리형: Open with a surprising number. Build from data → structure → return.
+
+---
+
+Respond ONLY with this JSON array (no markdown, no code blocks):
 [
   {"draft_number": 1, "content": "..."},
   {"draft_number": 2, "content": "..."},
@@ -161,8 +210,8 @@ export async function generateLinkedInDrafts(
 ]`;
 
   const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 2048,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4096,
     system: systemPrompt,
     messages: [{ role: 'user', content: context }],
   });

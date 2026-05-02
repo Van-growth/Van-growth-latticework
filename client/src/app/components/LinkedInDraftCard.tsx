@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { LinkedInDraft } from '@/types';
 
-const STYLE_LABELS = ['인사이트 공유형', '질문형', '스토리텔링형'];
+const STYLE_LABELS = ['인사이트 공유형', '질문형', '데이터 스토리형'];
 
 export default function LinkedInDraftCard({ draft }: { draft: LinkedInDraft }) {
   const [copied, setCopied] = useState(false);
