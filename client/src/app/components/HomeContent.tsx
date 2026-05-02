@@ -46,7 +46,7 @@ export default function HomeContent() {
       setIsShared(result.is_shared ?? false);
       setShareToken(result.share_token ?? null);
     }
-  }, [result?.id]);
+  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg: string) {
     setToast(msg);

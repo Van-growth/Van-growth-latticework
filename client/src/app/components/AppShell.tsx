@@ -15,10 +15,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { analysisData } = useAnalysis();
   const [showPanel, setShowPanel] = useState(false);
-
-  if (pathname?.startsWith('/share/')) {
-    return <>{children}</>;
-  }
   const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -79,6 +75,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       document.removeEventListener('touchend', onTouchEnd);
     };
   }, [isDragging, onDragMove, endDrag]);
+
+  if (pathname?.startsWith('/share/')) {
+    return <>{children}</>;
+  }
 
   function handleMouseDown(e: React.MouseEvent) {
     e.preventDefault();

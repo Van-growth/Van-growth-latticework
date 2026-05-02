@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
-  BookOpen, ExternalLink, ChevronRight, Building2, Clock, Briefcase,
+  BookOpen, ExternalLink, Building2, Clock, Briefcase,
 } from 'lucide-react';
 import {
   AnalysisDetail,
