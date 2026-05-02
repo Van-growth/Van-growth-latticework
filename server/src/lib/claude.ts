@@ -7,41 +7,7 @@ if (!process.env.ANTHROPIC_API_KEY) throw new Error('Missing ANTHROPIC_API_KEY')
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface ValueChainPlayer {
-  role: string;
-  player_name: string;
-  description: string;
-}
-
-export interface MoatType {
-  name: string;
-  strength: '강함' | '보통' | '약함';
-  basis: string;
-}
-
-export interface MoatAnalysis {
-  types: MoatType[];
-  sustain_conditions: string;
-  collapse_scenarios: string;
-}
-
-export interface RiskItem {
-  category: string;
-  description: string;
-}
-
-export interface RiskGroup {
-  severity: '높음' | '중간' | '낮음';
-  items: RiskItem[];
-}
-
-export interface RiskAnalysis {
-  business: RiskGroup;
-  financial: RiskGroup;
-  external: RiskGroup;
-}
+// ── Types (V2 schema) ─────────────────────────────────────────────────────────
 
 export interface Source {
   url: string;
@@ -59,113 +25,194 @@ export interface AnalysisSources {
   financials?: Source[];
 }
 
-export interface DirectCompetitor {
+export interface SummaryV2 {
+  company: string;
+  ticker: string | null;
+  industry: string;
+  hq: string;
+  value_chain_position: 'upstream' | 'midstream' | 'downstream';
+  products: { name: string; revenue_share: number }[];
+  key_metrics: { label: string; value: string; trend: 'up' | 'down' | 'flat' }[];
+  top_customers: string[];
+  key_markets: { country: string; revenue_share: number }[];
+  one_line: string;
+  bull_case: string;
+  bear_case: string;
+}
+
+export interface IndustryHistoryV2 {
+  industry_name: string;
+  timeline: {
+    period: string;
+    title: string;
+    technology: string;
+    market_need: string;
+    key_players: string[];
+    significance: string;
+  }[];
+  why_durable: string;
+  chasm_points: string[];
+}
+
+export interface TechEvolutionV2 {
+  tech_name: string;
+  stages: {
+    stage: number;
+    period: string;
+    title: string;
+    description: string;
+    hype_level: 'emerging' | 'hype' | 'trough' | 'recovery' | 'mainstream';
+    key_enablers: string[];
+    key_players: string[];
+  }[];
+  current_stage: string;
+  next_inflection: string;
+}
+
+export interface ValueChainLayerLeader {
+  name: string;
+  country: string;
+  why_leader: string;
+}
+
+export interface ValueChainLayer {
+  name: string;
+  description: string;
+  is_subject: boolean;
+  pricing_power: 'high' | 'medium' | 'low';
+  bottleneck: boolean;
+  global_leaders: ValueChainLayerLeader[];
+}
+
+export interface ValueChainV2 {
+  industry: string;
+  layers: ValueChainLayer[];
+  value_flow: string;
+  subject_position: string;
+}
+
+export interface RevenueStream {
+  name: string;
+  type: 'subscription' | 'transaction' | 'service' | 'license' | 'other';
+  revenue_share: number;
+  operating_margin: number;
+  growth_rate: number;
+}
+
+export interface BusinessSegment {
+  name: string;
+  revenue_share: number;
+  characteristics: string;
+}
+
+export interface MoatV2 {
+  type: string;
+  strength: 'strong' | 'medium' | 'weak';
+  description: string;
+}
+
+export interface BusinessModelV2 {
+  revenue_streams: RevenueStream[];
+  segments: BusinessSegment[];
+  growth_motion: 'PLG' | 'SLG' | 'FLG' | 'hybrid';
+  growth_motion_detail: string;
+  unit_economics: {
+    gross_margin: number;
+    operating_margin: number;
+    net_margin: number;
+    fcf_margin: number;
+    nrr: number;
+  };
+  moat: MoatV2[];
+}
+
+export interface DirectCompetitorV2 {
   name: string;
   country: string;
   market_share: string;
   strengths: string[];
-  differentiation: string;
+  weaknesses: string[];
+  vs_subject: string;
 }
 
-export interface IndirectCompetitor {
-  name: string;
-  type: string;
-  description: string;
+export interface CompetitorsV2 {
+  direct: DirectCompetitorV2[];
+  indirect: { name: string; threat: string }[];
+  substitutes: { name: string; threat: string }[];
+  competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
 }
 
-export interface CompetitorsAnalysis {
-  direct: DirectCompetitor[];
-  indirect: IndirectCompetitor[];
+export interface StrategyV2 {
+  corporate: {
+    direction: string;
+    portfolio: string;
+    ma_partnerships: string[];
+    geographic: string;
+  };
+  business: {
+    direction: string;
+    competitive_advantage: string;
+    go_to_market: string;
+    product_roadmap: string[];
+  };
+  financial: {
+    direction: string;
+    capital_allocation: string;
+    investment_priority: string;
+    return_target: string;
+  };
+  strategy_coherence: string;
+  ten_year_durability: string;
 }
 
-export interface CorporateStrategy {
-  portfolio_direction: string;
-  ma_partnership: string;
-  regional_expansion: string;
-  notes?: string;
-}
-
-export interface BusinessStrategy {
-  competitive_advantage: string;
-  customer_channel: string;
-  product_roadmap: string;
-  notes?: string;
-}
-
-export interface FinancialStrategy {
-  capital_raising: string;
-  investment_priority: string;
-  dividend_buyback: string;
-  profitability_target: string;
-  notes?: string;
-}
-
-export interface StrategyAnalysis {
-  corporate: CorporateStrategy;
-  business: BusinessStrategy;
-  financial: FinancialStrategy;
-}
-
-export interface Metric {
-  label: string;
-  value: string;
-  unit?: string;
-}
-
-export interface IncomeStatementRow {
+export interface FinancialsV2Row {
   item: string;
+  fy2021?: string;
+  fy2022?: string;
   fy2023?: string;
   fy2024?: string;
   fy2025?: string;
   yoy?: string;
 }
 
-export interface BalanceSheetRow {
+export interface FinancialsV2BSRow {
   item: string;
   fy2023?: string;
   fy2024?: string;
   fy2025?: string;
 }
 
-export interface CashFlow {
-  operating: string;
-  investing: string;
-  financing: string;
-  free_cash_flow: string;
-  notes?: string;
-}
-
-export interface UnitEconomics {
-  gross_margin?: string;
-  operating_margin?: string;
-  net_margin?: string;
-  fcf_margin?: string;
-  nrr?: string;
-}
-
-export interface StructuredFinancials {
-  income_statement: IncomeStatementRow[];
-  balance_sheet: BalanceSheetRow[];
-  cash_flow: CashFlow;
-  unit_economics?: UnitEconomics;
+export interface FinancialsV2 {
+  narrative: string;
+  income_statement: FinancialsV2Row[];
+  balance_sheet: FinancialsV2BSRow[];
+  cash_flow: {
+    operating: string;
+    investing: string;
+    financing: string;
+    fcf: string;
+    notes: string;
+  };
+  munger_buffett_metrics: {
+    roe: string;
+    roic: string;
+    owner_earnings: string;
+    debt_to_equity: string;
+    interest_coverage: string;
+    reinvestment_rate: string;
+  };
+  key_risks: string[];
 }
 
 export interface AnalysisData {
-  summary: string;
-  metrics: Metric[];
-  strengths: string[];
-  risks: string[];
-  industry_history: string;
-  tech_evolution: string;
-  value_chain_overview: string;
-  value_chain_players: ValueChainPlayer[];
-  business_model: string;
-  moat_analysis: MoatAnalysis;
-  risk_analysis: RiskAnalysis;
-  competitors: CompetitorsAnalysis;
-  strategy: StrategyAnalysis;
-  financials: string;
-  financials_structured: StructuredFinancials;
+  summary_v2: SummaryV2;
+  industry_history_v2: IndustryHistoryV2;
+  tech_evolution_v2: TechEvolutionV2;
+  value_chain_v2: ValueChainV2;
+  business_model_v2: BusinessModelV2;
+  competitors_v2: CompetitorsV2;
+  strategy_v2: StrategyV2;
+  financials_v2: FinancialsV2;
   sources: AnalysisSources;
 }
 
@@ -176,33 +223,37 @@ export interface LinkedInDraft {
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_MOAT: MoatAnalysis = {
-  types: [],
-  sustain_conditions: '',
-  collapse_scenarios: '',
-};
-
-const DEFAULT_RISK: RiskAnalysis = {
-  business:  { severity: '중간', items: [] },
-  financial: { severity: '중간', items: [] },
-  external:  { severity: '중간', items: [] },
-};
-
-const DEFAULT_COMPETITORS: CompetitorsAnalysis = {
-  direct: [],
-  indirect: [],
-};
-
-const DEFAULT_STRATEGY: StrategyAnalysis = {
-  corporate: { portfolio_direction: '', ma_partnership: '', regional_expansion: '' },
-  business:  { competitive_advantage: '', customer_channel: '', product_roadmap: '' },
-  financial: { capital_raising: '', investment_priority: '', dividend_buyback: '', profitability_target: '' },
-};
-
-const DEFAULT_FINANCIALS_STRUCTURED: StructuredFinancials = {
-  income_statement: [],
-  balance_sheet: [],
-  cash_flow: { operating: '', investing: '', financing: '', free_cash_flow: '' },
+const DEFAULT_ANALYSIS_DATA: AnalysisData = {
+  summary_v2: {
+    company: '', ticker: null, industry: '', hq: '',
+    value_chain_position: 'midstream',
+    products: [], key_metrics: [], top_customers: [], key_markets: [],
+    one_line: '', bull_case: '', bear_case: '',
+  },
+  industry_history_v2: { industry_name: '', timeline: [], why_durable: '', chasm_points: [] },
+  tech_evolution_v2: { tech_name: '', stages: [], current_stage: '', next_inflection: '' },
+  value_chain_v2: { industry: '', layers: [], value_flow: '', subject_position: '' },
+  business_model_v2: {
+    revenue_streams: [], segments: [],
+    growth_motion: 'hybrid', growth_motion_detail: '',
+    unit_economics: { gross_margin: 0, operating_margin: 0, net_margin: 0, fcf_margin: 0, nrr: 0 },
+    moat: [],
+  },
+  competitors_v2: { direct: [], indirect: [], substitutes: [], competitive_position: 'niche' },
+  strategy_v2: {
+    corporate: { direction: '', portfolio: '', ma_partnerships: [], geographic: '' },
+    business: { direction: '', competitive_advantage: '', go_to_market: '', product_roadmap: [] },
+    financial: { direction: '', capital_allocation: '', investment_priority: '', return_target: '' },
+    strategy_coherence: '', ten_year_durability: '',
+  },
+  financials_v2: {
+    narrative: '',
+    income_statement: [], balance_sheet: [],
+    cash_flow: { operating: '', investing: '', financing: '', fcf: '', notes: '' },
+    munger_buffett_metrics: { roe: '', roic: '', owner_earnings: '', debt_to_equity: '', interest_coverage: '', reinvestment_rate: '' },
+    key_risks: [],
+  },
+  sources: {},
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -233,7 +284,6 @@ async function runWithWebSearch(
 
     if (response.stop_reason === 'end_turn') return texts;
 
-    // Continue tool-use loop
     messages.push({ role: 'assistant', content: response.content });
 
     const toolResults = (response.content as Anthropic.ContentBlock[])
@@ -253,22 +303,18 @@ async function runWithWebSearch(
 function extractJson<T>(raw: string, label = 'response'): T | null {
   const text = raw.trim();
 
-  // 1. Direct parse — model followed instructions perfectly
   try { return JSON.parse(text) as T; } catch {}
 
-  // 2. Strip markdown code fence (```json...``` or ```...```) then retry
   const fenced = text.match(/```(?:json|typescript|js)?\s*\n?([\s\S]*?)\n?```/s);
   if (fenced?.[1]) {
     const inner = fenced[1].trim();
     try { return JSON.parse(inner) as T; } catch {}
-    // Greedy extraction inside the fence block
     const innerBlock = inner.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
     if (innerBlock) {
       try { return JSON.parse(innerBlock[0]) as T; } catch {}
     }
   }
 
-  // 3. Last-resort greedy extraction from the whole text
   const block = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
   if (block) {
     try { return JSON.parse(block[0]) as T; } catch {}
@@ -284,147 +330,193 @@ export async function analyzeCompany(
   companyName: string,
   financialContext?: string,
 ): Promise<AnalysisData> {
-  const systemPrompt = `당신은 균형 잡힌 시각을 가진 전문 기업 분석가입니다. 웹 검색으로 기업을 충분히 조사한 후, 아래 JSON 형식으로만 응답하세요. 마크다운, 코드블록, 추가 설명 없이 순수 JSON만 출력하세요.
+  const systemPrompt = `당신은 전문 기업 분석가입니다. 웹 검색으로 기업을 충분히 조사한 후, 아래 JSON 형식으로만 응답하세요.
+**중요**: 마크다운, 코드블록, 추가 설명 없이 순수 JSON만 출력하세요.
+**원칙**: 서술형 텍스트 최소화. 모든 데이터는 구조화된 배열/객체로 반환. 불확실한 수치는 null 또는 0 대신 "추정 불가"로 명시.
 
-균형 잡힌 분석 원칙 (반드시 준수):
-- 긍정적 측면과 부정적 측면을 반드시 균형 있게 서술할 것
-- 불확실하거나 검증되지 않은 정보는 "(추정)" 또는 "(확인 필요)"로 명시할 것
-- "혁신적인", "최고의", "선두적인" 등 근거 없는 과장된 수식어 사용 금지
-- 구체적 수치나 데이터가 없을 경우 "공개 데이터 없음" 또는 "추정 불가"로 명시할 것
-- 출처가 확인된 정보와 추정 정보를 구분하여 서술할 것
-
-출력 JSON 형식:
+출력 JSON 형식 (모든 텍스트는 한국어):
 {
-  "summary": "핵심 포지션 서술 (100-200자). 수치는 metrics 필드에 분리할 것",
-  "metrics": [
-    {"label": "매출", "value": "실제 수치", "unit": "KRW 또는 USD 등"},
-    {"label": "영업이익률", "value": "실제 수치", "unit": "%"},
-    {"label": "시가총액", "value": "실제 수치", "unit": "KRW 또는 USD"},
-    {"label": "YoY 성장률", "value": "실제 수치", "unit": "%"}
-  ],
-  "strengths": [
-    "강점1 — 1문장, 구체적 근거 포함",
-    "강점2 — 1문장, 구체적 근거 포함",
-    "강점3 — 1문장, 구체적 근거 포함"
-  ],
-  "risks": [
-    "리스크1 — 1문장, 구체적 근거 포함",
-    "리스크2 — 1문장, 구체적 근거 포함",
-    "리스크3 — 1문장, 구체적 근거 포함"
-  ],
-  "industry_history": "글로벌 산업 역사 및 발전 과정 (600-800자). 미국·유럽·아시아 주요 플레이어 등장 타임라인, 글로벌 규제 변화, 주요 M&A 이벤트, 기술 전환점을 포함할 것. 한국 기업만이 아닌 글로벌 산업 흐름 속에서 분석 대상 기업의 위치를 파악할 것.",
-  "tech_evolution": "기술 변화 및 혁신 트렌드 (300-500자)",
-  "value_chain_overview": "글로벌 밸류체인 전체 개요 (200-300자) — 원재료 공급국, 제조 허브, 주요 시장 지역을 포함할 것",
-  "value_chain_players": [
-    {
-      "role": "밸류체인 내 역할 (예: 원재료 공급 | 부품 제조 | 최종 조립 | 유통 | 최종 소비시장 등)",
-      "player_name": "글로벌 주요 기업/기관명 (국가 포함, 예: BASF(독일), CATL(중국))",
-      "description": "역할 설명 1-2문장 — 분석 대상 기업이 해당 단계에 있을 경우 포지션을 명시할 것"
-    }
-  ],
-  "business_model": "비즈니스 모델 및 수익 구조 (400-600자) — 수익화 방식과 한계 균형 포함",
-  "moat_analysis": {
-    "types": [
+  "summary_v2": {
+    "company": "기업명",
+    "ticker": "티커심볼 또는 null",
+    "industry": "산업분류 (예: 반도체 장비, SaaS, 2차전지)",
+    "hq": "본사 도시, 국가",
+    "value_chain_position": "upstream 또는 midstream 또는 downstream",
+    "products": [
+      {"name": "제품/서비스명", "revenue_share": 매출비중(0-100 숫자)}
+    ],
+    "key_metrics": [
+      {"label": "매출", "value": "실제 수치 또는 추정", "trend": "up 또는 down 또는 flat"},
+      {"label": "영업이익률", "value": "수치%", "trend": "up 또는 down 또는 flat"},
+      {"label": "시가총액", "value": "수치", "trend": "up 또는 down 또는 flat"},
+      {"label": "YoY 성장률", "value": "수치%", "trend": "up 또는 down 또는 flat"}
+    ],
+    "top_customers": ["고객사명 (최대 5개)"],
+    "key_markets": [
+      {"country": "국가명", "revenue_share": 비중(0-100 숫자)}
+    ],
+    "one_line": "투자자 관점 핵심 한줄 (20자 이내)",
+    "bull_case": "강세 시나리오 2줄 이내 — 구체적 촉매 기반",
+    "bear_case": "약세 시나리오 2줄 이내 — 현실적 리스크 기반"
+  },
+  "industry_history_v2": {
+    "industry_name": "산업명",
+    "timeline": [
       {
-        "name": "네트워크 효과 | 전환비용 | 규모의 경제 | 무형자산 | 비용우위 중 해당하는 것",
-        "strength": "강함 또는 보통 또는 약함",
-        "basis": "해당 해자의 근거 2-3문장 (반론 포함)"
+        "period": "시기 (예: 1960s~1980s, 1990년대)",
+        "title": "시대 제목 15자 이내",
+        "technology": "핵심 기술 1줄",
+        "market_need": "시장 수요 1줄",
+        "key_players": ["주요 기업명 (국가 포함)"],
+        "significance": "이 시기의 중요성 1줄"
       }
     ],
-    "sustain_conditions": "해자가 유지되는 조건 (2-3문장)",
-    "collapse_scenarios": "해자가 무너지는 시나리오 (2-3문장) — 현실적 리스크 기반"
+    "why_durable": "산업이 향후 10년 지속 가능한 이유 2줄 이내",
+    "chasm_points": ["캐즘 발생 시점과 이유 1줄씩 (최대 3개)"]
   },
-  "risk_analysis": {
-    "business": {
-      "severity": "높음 또는 중간 또는 낮음",
-      "items": [
-        {"category": "경쟁", "description": "구체적 리스크 내용"},
-        {"category": "시장", "description": "구체적 리스크 내용"},
-        {"category": "실행", "description": "구체적 리스크 내용"}
-      ]
-    },
-    "financial": {
-      "severity": "높음 또는 중간 또는 낮음",
-      "items": [
-        {"category": "수익성", "description": "구체적 리스크 내용"},
-        {"category": "현금흐름", "description": "구체적 리스크 내용"},
-        {"category": "부채", "description": "구체적 리스크 내용"}
-      ]
-    },
-    "external": {
-      "severity": "높음 또는 중간 또는 낮음",
-      "items": [
-        {"category": "규제", "description": "구체적 리스크 내용"},
-        {"category": "매크로", "description": "구체적 리스크 내용"},
-        {"category": "기술변화", "description": "구체적 리스크 내용"}
-      ]
-    }
+  "tech_evolution_v2": {
+    "tech_name": "핵심 기술명",
+    "stages": [
+      {
+        "stage": 단계번호(1부터),
+        "period": "시기",
+        "title": "단계 제목 15자 이내",
+        "description": "단계 설명 2줄 이내",
+        "hype_level": "emerging 또는 hype 또는 trough 또는 recovery 또는 mainstream",
+        "key_enablers": ["핵심 기술/요인 (최대 3개)"],
+        "key_players": ["주요 기업명 (최대 4개)"]
+      }
+    ],
+    "current_stage": "현재 단계 설명 1줄",
+    "next_inflection": "다음 변곡점 예측 1줄"
   },
-  "competitors": {
+  "value_chain_v2": {
+    "industry": "산업명",
+    "layers": [
+      {
+        "name": "레이어명 (예: 원재료, 부품, 완제품, 유통, 최종소비)",
+        "description": "레이어 설명 1줄",
+        "is_subject": true 또는 false (분석 대상 기업이 이 레이어에 속하면 true),
+        "pricing_power": "high 또는 medium 또는 low",
+        "bottleneck": true 또는 false (공급 병목 여부),
+        "global_leaders": [
+          {"name": "기업명", "country": "국가", "why_leader": "선도 이유 1줄"}
+        ]
+      }
+    ],
+    "value_flow": "가격전가 메커니즘 2줄 이내",
+    "subject_position": "분석 기업의 밸류체인 내 포지션 및 경쟁력 2줄 이내"
+  },
+  "business_model_v2": {
+    "revenue_streams": [
+      {
+        "name": "수익원 이름",
+        "type": "subscription 또는 transaction 또는 service 또는 license 또는 other",
+        "revenue_share": 비중(0-100 숫자),
+        "operating_margin": 영업이익률(숫자, 없으면 0),
+        "growth_rate": YoY성장률(숫자, 없으면 0)
+      }
+    ],
+    "segments": [
+      {
+        "name": "세그먼트명",
+        "revenue_share": 비중(0-100 숫자),
+        "characteristics": "특성 1줄"
+      }
+    ],
+    "growth_motion": "PLG 또는 SLG 또는 FLG 또는 hybrid",
+    "growth_motion_detail": "성장 방식 설명 2줄 이내",
+    "unit_economics": {
+      "gross_margin": 매출총이익률(숫자, 없으면 0),
+      "operating_margin": 영업이익률(숫자, 없으면 0),
+      "net_margin": 순이익률(숫자, 없으면 0),
+      "fcf_margin": FCF마진(숫자, 없으면 0),
+      "nrr": NRR(숫자, 해당없으면 0)
+    },
+    "moat": [
+      {
+        "type": "해자 유형 (네트워크 효과/전환비용/규모의 경제/무형자산/비용우위)",
+        "strength": "strong 또는 medium 또는 weak",
+        "description": "해자 설명 1줄"
+      }
+    ]
+  },
+  "competitors_v2": {
     "direct": [
       {
         "name": "경쟁사명",
         "country": "본사 국가",
-        "market_share": "시장점유율 (추정) — 모르면 '확인 필요'",
-        "strengths": ["핵심 강점1", "핵심 강점2"],
-        "differentiation": "분석 대상 기업과의 주요 차별점 1-2문장"
+        "market_share": "시장점유율 (추정 포함)",
+        "strengths": ["핵심 강점 1줄씩 (최대 3개)"],
+        "weaknesses": ["핵심 약점 1줄씩 (최대 2개)"],
+        "vs_subject": "분석 기업 대비 차별점 한줄"
       }
     ],
-    "indirect": [
-      {
-        "name": "간접경쟁사 또는 대체재명",
-        "type": "간접경쟁사 또는 대체재",
-        "description": "경쟁 관계 설명 1문장"
-      }
-    ]
+    "indirect": [{"name": "간접경쟁사명", "threat": "위협 내용 1줄"}],
+    "substitutes": [{"name": "대체재명", "threat": "위협 내용 1줄"}],
+    "competitive_position": "leader 또는 challenger 또는 niche 또는 follower"
   },
-  "strategy": {
+  "strategy_v2": {
     "corporate": {
-      "portfolio_direction": "사업 포트폴리오 방향 — 집중/다각화/철수 중 어떤 방향인지 근거와 함께 서술. 확인 불가 항목은 '확인 필요' 명시",
-      "ma_partnership": "M&A/파트너십/JV 전략 — 주요 사례 포함. 확인 불가 항목은 '확인 필요' 명시",
-      "regional_expansion": "지역 확장 전략 — 주요 타깃 지역 및 방식. 확인 불가 항목은 '확인 필요' 명시"
+      "direction": "기업 전략 핵심 한줄",
+      "portfolio": "포트폴리오 방향 1줄",
+      "ma_partnerships": ["M&A/파트너십 사례 1줄씩 (최대 3개)"],
+      "geographic": "지역 확장 전략 1줄"
     },
     "business": {
-      "competitive_advantage": "경쟁 우위 방식 — 원가우위/차별화/집중 중 해당 유형과 근거. 확인 불가 항목은 '확인 필요' 명시",
-      "customer_channel": "고객 세그먼트 및 채널 전략. 확인 불가 항목은 '확인 필요' 명시",
-      "product_roadmap": "제품/서비스 로드맵 — 현재 라인업과 향후 방향. 확인 불가 항목은 '확인 필요' 명시"
+      "direction": "사업 전략 핵심 한줄",
+      "competitive_advantage": "경쟁 우위 방식 1줄",
+      "go_to_market": "GTM 전략 1줄",
+      "product_roadmap": ["제품 로드맵 항목 1줄씩 (최대 4개)"]
     },
     "financial": {
-      "capital_raising": "자본 조달 방식 — 자체/외부/IPO/채권 등. 확인 불가 항목은 '확인 필요' 명시",
-      "investment_priority": "투자 우선순위 — R&D/CAPEX/M&A 배분 방향. 확인 불가 항목은 '확인 필요' 명시",
-      "dividend_buyback": "배당/자사주 정책. 확인 불가 항목은 '확인 필요' 명시",
-      "profitability_target": "목표 수익성 지표 — 마진율, ROE, EBITDA 등. 확인 불가 항목은 '확인 필요' 명시"
-    }
+      "direction": "재무 전략 핵심 한줄",
+      "capital_allocation": "자본배분 방향 1줄",
+      "investment_priority": "투자 우선순위 1줄",
+      "return_target": "목표 수익성 지표 1줄"
+    },
+    "strategy_coherence": "3전략 수렴 방향 2줄 이내",
+    "ten_year_durability": "10년 지속 가능성 2줄 이내"
   },
-  "financials": "재무 맥락 서사 (150-250자) — 수치는 financials_structured에 분리. 추세·특이사항·자본배분 의도 등 서술",
-  "financials_structured": {
+  "financials_v2": {
+    "narrative": "재무 서사 3줄 이내 — 추세·특이사항·자본배분 의도",
     "income_statement": [
-      {"item": "매출",       "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
-      {"item": "매출총이익", "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
-      {"item": "영업이익",   "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
-      {"item": "순이익",     "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"},
-      {"item": "EBITDA",    "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'", "yoy": "▲N% 또는 ▼N% 또는 '—'"}
+      {
+        "item": "매출",
+        "fy2021": "값 또는 '공개 없음'",
+        "fy2022": "값 또는 '공개 없음'",
+        "fy2023": "값 또는 '공개 없음'",
+        "fy2024": "값 또는 '공개 없음'",
+        "fy2025": "값 또는 '추정' 또는 '공개 없음'",
+        "yoy": "▲N% 또는 ▼N% 또는 '—'"
+      },
+      {"item": "매출총이익", "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"},
+      {"item": "영업이익",   "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"},
+      {"item": "순이익",     "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"},
+      {"item": "EBITDA",    "fy2021": "값", "fy2022": "값", "fy2023": "값", "fy2024": "값", "fy2025": "값", "yoy": "값"}
     ],
     "balance_sheet": [
-      {"item": "현금·현금성자산", "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
-      {"item": "총자산",          "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
-      {"item": "총부채",          "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"},
-      {"item": "자본총계",        "fy2023": "값 또는 '공개 없음'", "fy2024": "값 또는 '공개 없음'", "fy2025": "값 또는 '추정' 또는 '공개 없음'"}
+      {"item": "현금·현금성자산", "fy2023": "값 또는 '공개 없음'", "fy2024": "값", "fy2025": "값"},
+      {"item": "총자산",          "fy2023": "값", "fy2024": "값", "fy2025": "값"},
+      {"item": "총부채",          "fy2023": "값", "fy2024": "값", "fy2025": "값"},
+      {"item": "자본총계",        "fy2023": "값", "fy2024": "값", "fy2025": "값"}
     ],
     "cash_flow": {
-      "operating":       "값 또는 '공개 없음'",
-      "investing":       "값 또는 '공개 없음'",
-      "financing":       "값 또는 '공개 없음'",
-      "free_cash_flow":  "값 또는 '공개 없음'",
-      "notes":           "FCF 특이사항 (SBC 조정, CAPEX 성격 등) 또는 빈 문자열"
+      "operating": "영업활동 CF 최신 연도 값",
+      "investing": "투자활동 CF 최신 연도 값",
+      "financing": "재무활동 CF 최신 연도 값",
+      "fcf": "FCF 값",
+      "notes": "특이사항 1줄 또는 빈 문자열"
     },
-    "unit_economics": {
-      "gross_margin":     "값% 또는 '공개 없음'",
-      "operating_margin": "값% 또는 '공개 없음'",
-      "net_margin":       "값% 또는 '공개 없음'",
-      "fcf_margin":       "값% 또는 '공개 없음'",
-      "nrr":              "값% (SaaS·구독 기업 해당 시) 또는 생략"
-    }
+    "munger_buffett_metrics": {
+      "roe": "ROE 값% 또는 '추정 불가'",
+      "roic": "ROIC 값% 또는 '추정 불가'",
+      "owner_earnings": "오너이익 값 또는 '추정 불가'",
+      "debt_to_equity": "부채비율 값 또는 '추정 불가'",
+      "interest_coverage": "이자보상배율 값 또는 '추정 불가'",
+      "reinvestment_rate": "재투자율 값% 또는 '추정 불가'"
+    },
+    "key_risks": ["리스크 1줄씩 (최대 5개)"]
   },
   "sources": {
     "summary":          [{"url": "https://...", "title": "페이지 제목"}],
@@ -438,54 +530,30 @@ export async function analyzeCompany(
   }
 }
 
-sources 필드에는 각 섹션 작성에 실제로 사용한 웹 검색 결과 URL만 포함하세요. 없으면 빈 배열 []로 두세요.
-competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
-metrics는 검증된 수치만 포함하세요. 수치 없으면 빈 배열 [].
-strengths와 risks는 각 3~5개, 1문장씩, 구체적 근거 포함.
-financials_structured는 SEC 10-K, DART 공시, 웹 검색에서 최대한 수집한 실제 수치를 기반으로 작성하세요. 빈칸 절대 금지 — 수치 없는 항목은 반드시 '공개 없음'으로 표시하세요. FY2023/FY2024/FY2025 3개년 데이터를 반드시 채울 것.
-unit_economics는 SaaS·구독 서비스가 아닌 경우 nrr을 생략해도 됩니다. 나머지 마진 지표는 반드시 포함하세요.
-모든 텍스트 내용은 한국어로 작성하세요.`;
+추가 지침:
+- competitors_v2.direct: 글로벌 직접 경쟁사 3~5개 필수
+- financials_v2.income_statement: 빈칸 절대 금지 — 수치 없으면 반드시 '공개 없음'
+- key_metrics: 검증된 수치만. 수치 없으면 빈 배열 []
+- 모든 텍스트는 한국어로 작성 (기업명·티커·기술명은 원어 유지)`;
 
   const userMessage = financialContext
-    ? `[공시 데이터]\n${financialContext}\n\n[분석 요청]\n기업명: ${companyName}\n\n위 공시 데이터의 재무수치를 재무 섹션에 우선 반영하고 출처를 "(DART 공시)" 또는 "(SEC EDGAR)"로 명시하세요. 웹 검색으로 나머지 섹션을 보완하여 균형 잡힌 분석을 완성해주세요.`
-    : `기업명: ${companyName}\n\n이 기업의 최신 정보를 웹에서 검색하여 균형 잡힌 분석을 해주세요.`;
+    ? `[공시 데이터]\n${financialContext}\n\n[분석 요청]\n기업명: ${companyName}\n\n위 공시 데이터의 재무수치를 financials_v2에 우선 반영하고 웹 검색으로 나머지 섹션을 완성해주세요.`
+    : `기업명: ${companyName}\n\n이 기업의 최신 정보를 웹에서 검색하여 분석해주세요.`;
 
   const raw = await runWithWebSearch(systemPrompt, userMessage, 'claude-sonnet-4-6');
-
   const parsed = extractJson<AnalysisData>(raw, 'analyzeCompany');
 
-  if (parsed && parsed.summary) {
+  if (parsed?.summary_v2?.company) {
     return {
+      ...DEFAULT_ANALYSIS_DATA,
       ...parsed,
-      metrics:                parsed.metrics                ?? [],
-      strengths:              parsed.strengths              ?? [],
-      risks:                  parsed.risks                  ?? [],
-      moat_analysis:          parsed.moat_analysis          ?? DEFAULT_MOAT,
-      risk_analysis:          parsed.risk_analysis          ?? DEFAULT_RISK,
-      competitors:            parsed.competitors            ?? DEFAULT_COMPETITORS,
-      strategy:               parsed.strategy               ?? DEFAULT_STRATEGY,
-      financials_structured:  parsed.financials_structured  ?? DEFAULT_FINANCIALS_STRUCTURED,
-      sources:                parsed.sources                ?? {},
+      sources: parsed.sources ?? {},
     };
   }
 
   return {
-    summary: raw.slice(0, 1000),
-    metrics: [],
-    strengths: [],
-    risks: [],
-    industry_history: '',
-    tech_evolution: '',
-    value_chain_overview: '',
-    value_chain_players: [],
-    business_model: '',
-    moat_analysis: DEFAULT_MOAT,
-    risk_analysis: DEFAULT_RISK,
-    competitors: DEFAULT_COMPETITORS,
-    strategy: DEFAULT_STRATEGY,
-    financials: '',
-    financials_structured: DEFAULT_FINANCIALS_STRUCTURED,
-    sources: {},
+    ...DEFAULT_ANALYSIS_DATA,
+    summary_v2: { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName, one_line: raw.slice(0, 50) },
   };
 }
 
@@ -493,12 +561,19 @@ export async function generateLinkedInDrafts(
   analysis: AnalysisData,
   companyName: string,
 ): Promise<LinkedInDraft[]> {
+  const s = analysis.summary_v2;
+  const bm = analysis.business_model_v2;
+  const fin = analysis.financials_v2;
+
   const context = `기업명: ${companyName}
-요약: ${analysis.summary}
-비즈니스 모델: ${analysis.business_model}
-기술 변화: ${analysis.tech_evolution}
-재무: ${analysis.financials}
-산업 역사: ${analysis.industry_history}`;
+한줄 요약: ${s.one_line}
+산업: ${s.industry}
+강세 시나리오: ${s.bull_case}
+약세 시나리오: ${s.bear_case}
+성장 방식: ${bm.growth_motion} — ${bm.growth_motion_detail}
+Gross Margin: ${bm.unit_economics.gross_margin}%
+재무 서사: ${fin.narrative}
+핵심 리스크: ${fin.key_risks.slice(0, 3).join(' / ')}`;
 
   const systemPrompt = `You are a LinkedIn content strategist who thinks simultaneously as an operator (execution/sales reality), strategist (timing/positioning), and investor (ROI/capital allocation).
 
@@ -540,7 +615,7 @@ WRITING STYLE:
 - No consulting or academic tone
 - Rhythmic
 
-NUMBER RULE: 2–3 meaningful numbers required (investment, revenue potential, ARPU/price). Numbers create tension.
+NUMBER RULE: 2–3 meaningful numbers required. Numbers create tension.
 
 CLOSING: 2–3 lines. No questions. Format: "This is not about X / This is a bet on Y"
 
@@ -549,8 +624,6 @@ LANGUAGE: Reason in English → output in Korean. Keep in English: ARPU, LTV, CA
 HASHTAGS: 3–5 tags (2–3 Korean + 2 English)
 
 FORBIDDEN: news summary / storytelling / emotional language / generic explanations
-
-FINAL PRINCIPLE: Connect Revenue → Structure → Deal → Capital → Return. Do not describe the deal.
 
 ---
 
@@ -585,7 +658,7 @@ Respond ONLY with this JSON array (no markdown, no code blocks):
 
   return [1, 2, 3].map(n => ({
     draft_number: n,
-    content: `${companyName} 분석 초안 ${n}\n\n${analysis.summary.slice(0, 100)}...`,
+    content: `${companyName} 분석 초안 ${n}\n\n${s.one_line}`,
   }));
 }
 

@@ -18,7 +18,7 @@ function normalizeResponse(data: AnalyzeResponse): AnalysisDetail {
   return {
     ...data,
     id: data.analysisId ?? data.id,
-    valuechainPlayers: data.value_chain_players?.map((p, i) => ({ ...p, id: String(i) })) ?? data.valuechainPlayers ?? [],
+    valuechainPlayers: data.valuechainPlayers ?? [],
   };
 }
 

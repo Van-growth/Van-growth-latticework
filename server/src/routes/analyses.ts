@@ -63,6 +63,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.json({
       id: row.id,
       companyName: (row.companies as unknown as CompanyRef)?.name ?? '',
+      // Legacy fields
       summary: row.summary,
       metrics: row.metrics ?? [],
       strengths: row.strengths ?? [],
@@ -71,17 +72,26 @@ router.get('/:id', async (req: Request, res: Response) => {
       tech_evolution: row.tech_evolution,
       value_chain_overview: row.value_chain_overview,
       business_model: row.business_model,
-      moat_analysis: row.moat_analysis ?? {},
-      risk_analysis: row.risk_analysis ?? {},
-      competitors: row.competitors ?? {},
-      strategy: row.strategy ?? {},
+      moat_analysis: row.moat_analysis ?? null,
+      risk_analysis: row.risk_analysis ?? null,
+      competitors: row.competitors ?? null,
+      strategy: row.strategy ?? null,
       financials: row.financials,
-      financials_structured: row.financials_structured ?? {},
+      financials_structured: row.financials_structured ?? null,
       sources: row.sources ?? {},
       dataSource: (row.data_source ?? 'web_search') as 'dart' | 'edgar' | 'web_search',
       createdAt: row.created_at,
       valuechainPlayers: playersRes.data ?? [],
       linkedinDrafts: draftsRes.data ?? [],
+      // V2 fields
+      summary_v2:          row.summary_v2          ?? null,
+      industry_history_v2: row.industry_history_v2 ?? null,
+      tech_evolution_v2:   row.tech_evolution_v2   ?? null,
+      value_chain_v2:      row.value_chain_v2      ?? null,
+      business_model_v2:   row.business_model_v2   ?? null,
+      competitors_v2:      row.competitors_v2      ?? null,
+      strategy_v2:         row.strategy_v2         ?? null,
+      financials_v2:       row.financials_v2        ?? null,
     });
   } catch (err) {
     console.error('[GET /api/analyses/:id]', err);

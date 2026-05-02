@@ -28,49 +28,47 @@ router.post('/', async (req: Request, res: Response) => {
     // 2. Fetch financial context (DART / EDGAR) — graceful fallback to web_search
     const { source: dataSource, contextText } = await fetchFinancialContext(name);
 
-    // 3. Run AI analysis (inject financial context when available)
+    // 3. Run AI analysis
     const analysis = await analyzeCompany(name, contextText || undefined);
 
-    // 4. Save analysis
+    // 4. Save analysis — new _v2 columns + minimal legacy text columns
     const { data: savedAnalysis, error: analysisErr } = await supabase
       .from('analyses')
       .insert({
         company_id: company.id,
-        summary: analysis.summary,
-        metrics: analysis.metrics,
-        strengths: analysis.strengths,
-        risks: analysis.risks,
-        industry_history: analysis.industry_history,
-        tech_evolution: analysis.tech_evolution,
-        value_chain_overview: analysis.value_chain_overview,
-        business_model: analysis.business_model,
-        moat_analysis: analysis.moat_analysis,
-        risk_analysis: analysis.risk_analysis,
-        competitors: analysis.competitors,
-        strategy: analysis.strategy,
-        financials: analysis.financials,
-        financials_structured: analysis.financials_structured,
-        sources: analysis.sources,
-        data_source: dataSource,
+        // Legacy columns (minimal values for backward compat)
+        summary:              analysis.summary_v2?.one_line ?? '',
+        industry_history:     analysis.industry_history_v2?.industry_name ?? '',
+        tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
+        value_chain_overview: analysis.value_chain_v2?.industry ?? '',
+        business_model:       analysis.business_model_v2?.growth_motion_detail ?? '',
+        financials:           analysis.financials_v2?.narrative ?? '',
+        metrics:              [],
+        strengths:            [],
+        risks:                [],
+        moat_analysis:        null,
+        risk_analysis:        null,
+        competitors:          null,
+        strategy:             null,
+        financials_structured: null,
+        sources:              analysis.sources ?? {},
+        data_source:          dataSource,
+        // V2 columns
+        summary_v2:          analysis.summary_v2,
+        industry_history_v2: analysis.industry_history_v2,
+        tech_evolution_v2:   analysis.tech_evolution_v2,
+        value_chain_v2:      analysis.value_chain_v2,
+        business_model_v2:   analysis.business_model_v2,
+        competitors_v2:      analysis.competitors_v2,
+        strategy_v2:         analysis.strategy_v2,
+        financials_v2:       analysis.financials_v2,
       })
       .select('id, created_at')
       .single();
 
     if (analysisErr) throw analysisErr;
 
-    // 5. Save value chain players
-    if (analysis.value_chain_players.length > 0) {
-      await supabase.from('value_chain_players').insert(
-        analysis.value_chain_players.map(p => ({
-          analysis_id: savedAnalysis.id,
-          role: p.role,
-          player_name: p.player_name,
-          description: p.description,
-        })),
-      );
-    }
-
-    // 6. Generate & save LinkedIn drafts
+    // 5. Generate & save LinkedIn drafts
     const drafts = await generateLinkedInDrafts(analysis, name);
     if (drafts.length > 0) {
       await supabase.from('linkedin_drafts').insert(
@@ -86,7 +84,32 @@ router.post('/', async (req: Request, res: Response) => {
       analysisId: savedAnalysis.id,
       companyName: name,
       createdAt: savedAnalysis.created_at,
-      ...analysis,
+      // Legacy fields
+      summary:              analysis.summary_v2?.one_line ?? '',
+      industry_history:     analysis.industry_history_v2?.industry_name ?? '',
+      tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
+      value_chain_overview: analysis.value_chain_v2?.industry ?? '',
+      business_model:       analysis.business_model_v2?.growth_motion_detail ?? '',
+      financials:           analysis.financials_v2?.narrative ?? '',
+      metrics:              [],
+      strengths:            [],
+      risks:                [],
+      moat_analysis:        null,
+      risk_analysis:        null,
+      competitors:          null,
+      strategy:             null,
+      financials_structured: null,
+      sources:              analysis.sources ?? {},
+      valuechainPlayers:    [],
+      // V2 fields
+      summary_v2:          analysis.summary_v2,
+      industry_history_v2: analysis.industry_history_v2,
+      tech_evolution_v2:   analysis.tech_evolution_v2,
+      value_chain_v2:      analysis.value_chain_v2,
+      business_model_v2:   analysis.business_model_v2,
+      competitors_v2:      analysis.competitors_v2,
+      strategy_v2:         analysis.strategy_v2,
+      financials_v2:       analysis.financials_v2,
       dataSource,
       linkedinDrafts: drafts,
     });
