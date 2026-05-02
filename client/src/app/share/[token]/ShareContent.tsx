@@ -68,10 +68,8 @@ export default function ShareContent({ token }: { token: string }) {
 
       {/* Watermark */}
       {!loading && data && (
-        <div className="text-center py-8 border-t border-gray-100 mt-4">
-          <Link href="/" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-            Powered by Latticework · 분석일: {date}
-          </Link>
+        <div className="text-xs text-gray-400 text-center border-t border-gray-100 pt-4 mt-8 pb-8">
+          Ben의 개인 프로젝트 · 특정 기업 분석 열람 목적으로만 활용 부탁드립니다 · Powered by Latticework
         </div>
       )}
     </div>
