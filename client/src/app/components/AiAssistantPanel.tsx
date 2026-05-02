@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, KeyboardEvent, FormEvent } from 'react';
 import { MessageCircle, Send } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { AnalysisDetail } from '@/types';
 
 interface Message {
@@ -57,7 +58,6 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // Reset conversation when company changes
   useEffect(() => {
     setMessages([]);
     setInput('');
@@ -110,7 +110,7 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
   }
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl shadow-sm flex flex-col h-[calc(100vh-52px)] overflow-hidden">
+    <div className="bg-white border border-gray-100 rounded-xl shadow-sm flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-100 shrink-0">
         <div className="flex items-center gap-2">
@@ -151,13 +151,32 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[88%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[88%] rounded-xl px-3 py-2 text-xs ${
                     msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-sm'
+                      ? 'bg-blue-600 text-white rounded-br-sm leading-relaxed'
                       : 'bg-gray-100 text-gray-800 rounded-bl-sm'
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === 'assistant' ? (
+                    <ReactMarkdown
+                      components={{
+                        h1: ({ children }) => <div className="text-xs font-bold text-gray-900 mt-1 mb-0.5">{children}</div>,
+                        h2: ({ children }) => <div className="text-xs font-semibold text-gray-900 mt-1.5 mb-0.5 border-b border-gray-200 pb-0.5">{children}</div>,
+                        h3: ({ children }) => <div className="text-[11px] font-semibold text-gray-700 mt-1 mb-0.5">{children}</div>,
+                        strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                        p: ({ children }) => <p className="text-xs leading-relaxed mb-1 last:mb-0">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-1 pl-3 space-y-0.5">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-1 pl-3 space-y-0.5 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="text-xs leading-relaxed list-disc">{children}</li>,
+                        code: ({ children }) => <code className="bg-gray-200 text-gray-700 px-1 py-0.5 rounded text-[10px] font-mono">{children}</code>,
+                        blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-300 pl-2 text-gray-600 italic my-1">{children}</blockquote>,
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <span className="leading-relaxed">{msg.content}</span>
+                  )}
                 </div>
               </div>
             ))}

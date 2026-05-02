@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { MessageCircle, X } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import AnalysisLoader from './AnalysisLoader';
-import LinkedInDraftCard from './LinkedInDraftCard';
 import AiAssistantPanel from './AiAssistantPanel';
-import { AnalysisDetail, AnalyzeResponse, LinkedInDraft } from '@/types';
+import { AnalysisDetail, AnalyzeResponse } from '@/types';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -32,9 +32,8 @@ export default function HomeContent() {
   const [loading, setLoading] = useState(false);
   const [fetchingId, setFetchingId] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showLinkedIn, setShowLinkedIn] = useState(false);
+  const [showPanel, setShowPanel] = useState(false);
 
-  // Tracks which id was loaded by POST so useEffect skips a redundant GET
   const loadedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -48,7 +47,6 @@ export default function HomeContent() {
       .then((data: AnalysisDetail) => {
         setResult(data);
         loadedIdRef.current = urlId;
-        setShowLinkedIn(false);
       })
       .catch(() => setError('분석 결과를 불러오지 못했습니다.'))
       .finally(() => setFetchingId(false));
@@ -61,7 +59,6 @@ export default function HomeContent() {
     setLoading(true);
     setError(null);
     setResult(null);
-    setShowLinkedIn(false);
 
     try {
       const res = await fetch(`${API_URL}/api/analyze`, {
@@ -83,12 +80,10 @@ export default function HomeContent() {
     }
   }
 
-  const linkedinDrafts = (result?.linkedinDrafts ?? []) as LinkedInDraft[];
-
   return (
-    <div className="max-w-[1280px] mx-auto px-4 py-8 lg:flex lg:gap-6 lg:items-start">
+    <div className="max-w-[1440px] mx-auto px-4 py-8 lg:flex lg:items-start">
       {/* Left: main content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 lg:pr-6">
         {/* Hero */}
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-gray-900 mb-3">기업 심층 분석</h1>
@@ -133,35 +128,36 @@ export default function HomeContent() {
 
         {/* Result */}
         {result && !loading && !fetchingId && (
-          <div className="space-y-6">
-            <AnalysisCard data={result} />
-
-            {linkedinDrafts.length > 0 && (
-              <div>
-                <button
-                  onClick={() => setShowLinkedIn(v => !v)}
-                  className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
-                >
-                  <span>{showLinkedIn ? '▲' : '▼'}</span>
-                  LinkedIn 초안 {linkedinDrafts.length}개 {showLinkedIn ? '닫기' : '보기'}
-                </button>
-                {showLinkedIn && (
-                  <div className="mt-4 space-y-4">
-                    {linkedinDrafts.map(d => (
-                      <LinkedInDraftCard key={d.draft_number} draft={d} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <AnalysisCard data={result} />
         )}
       </div>
 
-      {/* Right: AI assistant panel (lg+) */}
-      <div className="hidden lg:block lg:w-72 xl:w-80 shrink-0 sticky top-[52px] self-start">
+      {/* Right: AI assistant panel — desktop sticky column */}
+      <div className="hidden lg:block w-[340px] shrink-0 sticky top-[52px] h-[calc(100vh-52px)]">
         <AiAssistantPanel analysisData={result} />
       </div>
+
+      {/* Mobile: floating toggle button */}
+      <button
+        className="lg:hidden fixed bottom-6 right-4 z-30 w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center"
+        onClick={() => setShowPanel(v => !v)}
+        aria-label="AI 비서 열기"
+      >
+        {showPanel ? <X size={20} /> : <MessageCircle size={20} />}
+      </button>
+
+      {/* Mobile: full-screen overlay panel */}
+      {showPanel && (
+        <div className="lg:hidden fixed inset-0 z-20 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/20"
+            onClick={() => setShowPanel(false)}
+          />
+          <div className="relative w-full max-w-sm h-full">
+            <AiAssistantPanel analysisData={result} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

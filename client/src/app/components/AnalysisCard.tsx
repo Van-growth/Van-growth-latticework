@@ -2,10 +2,8 @@
 
 import { useState } from 'react';
 import {
-  BarChart2, TrendingUp, Layers, Users, Briefcase, Target,
-  DollarSign, Clock, Globe, Shield, AlertTriangle, ChevronRight,
-  ExternalLink, Zap, Award, Activity, BookOpen, GitBranch,
-  Building2,
+  BarChart2, Zap, GitBranch, Users, DollarSign, Target,
+  BookOpen, ExternalLink, ChevronRight, Building2, Clock, Briefcase,
 } from 'lucide-react';
 import {
   AnalysisDetail,
@@ -13,6 +11,7 @@ import {
   MoatAnalysis,
   RiskAnalysis,
   CompetitorsAnalysis,
+  DirectCompetitor,
   StrategyAnalysis,
   StructuredFinancials,
   DataSource,
@@ -66,14 +65,24 @@ function MetricCard({ value, label }: { value: string; label: string }) {
   );
 }
 
+function splitCfValue(raw: string): [string, string] {
+  const m = raw.match(/^([$₩]?[\d,]+(?:\.\d+)?(?:억|조|B|M|K|T|%|배|원|x)?)(.*)$/);
+  if (m && m[1] && m[2].trim()) {
+    return [m[1].trim(), m[2].replace(/^\s*[\(\[·,]+\s*|\s*[\)\]]+\s*$/g, '').trim()];
+  }
+  return [raw, ''];
+}
+
 function CfMetricCard({ label, value, dotColor }: { label: string; value: string; dotColor: string }) {
+  const [numPart, descPart] = splitCfValue(value);
   return (
     <div className="bg-gray-50 rounded-lg p-3">
-      <div className="flex items-center gap-1.5 mb-1">
+      <div className="flex items-center gap-1.5 mb-1.5">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
         <span className="text-[11px] text-gray-400 leading-tight">{label}</span>
       </div>
-      <div className="text-xl font-medium text-gray-900 leading-none">{value}</div>
+      <div className="text-sm font-medium text-gray-900 leading-snug break-words">{numPart}</div>
+      {descPart && <div className="text-xs text-gray-500 leading-snug mt-0.5 break-words">{descPart}</div>}
     </div>
   );
 }
@@ -217,20 +226,28 @@ function Timeline({ text, sourcesKey, data }: {
 }) {
   const lines = splitLines(text);
 
-  type Item = { period: string; content: string };
+  type Item = { period: string; sortYear: number; content: string };
   const items: Item[] = [];
   for (const line of lines) {
     const m = line.match(/^((?:19|20)\d{2}(?:년대?|s)?(?:\s*[~\-–]\s*(?:(?:19|20)\d{2}(?:년대?|s)?|현재))?)\s*[:·]?\s*/);
     if (m) {
-      items.push({ period: m[1], content: line.slice(m[0].length) });
+      const yearNum = parseInt(m[1].match(/\d{4}/)?.[0] ?? '0');
+      items.push({ period: m[1], sortYear: yearNum, content: line.slice(m[0].length) });
     } else if (items.length > 0) {
       items[items.length - 1].content += ' ' + line;
     } else {
-      items.push({ period: '', content: line });
+      items.push({ period: '', sortYear: 0, content: line });
     }
   }
 
   const hasYears = items.some(it => it.period !== '');
+  if (hasYears) {
+    items.sort((a, b) => {
+      if (!a.period) return 1;
+      if (!b.period) return -1;
+      return a.sortYear - b.sortYear;
+    });
+  }
 
   return (
     <>
@@ -271,14 +288,16 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
 
 // ── Tab: 기술 변화 ─────────────────────────────────────────────────────────────
 
+const TECH_BULLET_RE = /^(\d+[.)]\s|[①②③④⑤⑥⑦⑧⑨]\s?|\d+단계[:\s]|[•·▶→■◆]\s?)/;
+
 function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
   const lines = splitLines(data.tech_evolution);
   const points: string[] = [];
   let buf = '';
   for (const line of lines) {
-    if (/^(\d+[.)]\s|[•·▶→■◆]\s?)/.test(line)) {
+    if (TECH_BULLET_RE.test(line)) {
       if (buf) points.push(buf.trim());
-      buf = line.replace(/^(\d+[.)]\s|[•·▶→■◆]\s?)/, '');
+      buf = line.replace(TECH_BULLET_RE, '');
     } else {
       buf = buf ? buf + ' ' + line : line;
     }
@@ -357,7 +376,6 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
 
       {players.length > 0 && (
         <SectionCard title="주요 플레이어" dotColor="bg-indigo-400">
-          {/* Flow bar */}
           <div className="flex items-center gap-2 mb-5 flex-wrap">
             {flowNodes.flatMap((node, i) => [
               <div
@@ -410,6 +428,47 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
 
 // ── Tab: 경쟁사 ───────────────────────────────────────────────────────────────
 
+function CompetitorCard({ comp }: { comp: DirectCompetitor }) {
+  const [expanded, setExpanded] = useState(false);
+  const diff = comp.differentiation ?? '';
+  const showToggle = diff.length > 100;
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-4 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
+        {comp.country && (
+          <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{comp.country}</span>
+        )}
+      </div>
+      {comp.market_share && (
+        <div className="text-blue-600 font-medium text-sm">{comp.market_share}</div>
+      )}
+      {(comp.strengths?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {comp.strengths.slice(0, 3).map((s, j) => (
+            <Tag key={j} label={s} color="green" />
+          ))}
+        </div>
+      )}
+      {diff && (
+        <>
+          <p className={`text-xs text-gray-500 leading-relaxed ${!expanded && showToggle ? 'line-clamp-2' : ''}`}>
+            {diff}
+          </p>
+          {showToggle && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              className="text-[11px] text-blue-500 hover:text-blue-700 self-start"
+            >
+              {expanded ? '접기' : '더보기'}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CompetitorsTab({ data }: { data: AnalysisDetail }) {
   const c = data.competitors as CompetitorsAnalysis | null;
   const direct = c?.direct ?? [];
@@ -423,37 +482,10 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
     <div className="space-y-4">
       {direct.length > 0 && (
         <SectionCard title="직접 경쟁사" dotColor="bg-orange-400">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {['기업명', '국가', '점유율', '핵심 강점', '차별점'].map(h => (
-                    <th key={h} className="text-left py-2 px-3 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {direct.map((comp, i) => (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                    <td className="py-3 px-3 font-semibold text-gray-900 whitespace-nowrap">{comp.name}</td>
-                    <td className="py-3 px-3">
-                      <span className="bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{comp.country}</span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="text-blue-600 font-medium text-sm">{comp.market_share}</span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="flex flex-wrap gap-1">
-                        {comp.strengths?.slice(0, 2).map((s, j) => (
-                          <Tag key={j} label={s} color="green" />
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 text-sm text-gray-600 max-w-[200px]">{comp.differentiation}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {direct.map((comp, i) => (
+              <CompetitorCard key={i} comp={comp} />
+            ))}
           </div>
         </SectionCard>
       )}
@@ -491,7 +523,45 @@ function MoatBar({ strength }: { strength: string }) {
   );
 }
 
+const RE_BAR_COLORS = ['bg-blue-400', 'bg-indigo-400', 'bg-purple-400', 'bg-violet-400', 'bg-emerald-400'];
+
+function parseRevenueRatios(lines: string[]): Array<{ label: string; pct: number; color: string }> {
+  const results: Array<{ label: string; pct: number; color: string }> = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const regex = /([가-힣A-Za-z][가-힣A-Za-z\s\/&\(\)]{1,20}?)\s+(\d{1,3})%/g;
+    let m;
+    while ((m = regex.exec(line)) !== null && results.length < 5) {
+      const label = m[1].trim();
+      const pct = parseInt(m[2]);
+      if (pct > 0 && pct <= 100 && label.length >= 2 && !seen.has(label)) {
+        seen.add(label);
+        results.push({ label, pct, color: RE_BAR_COLORS[results.length % RE_BAR_COLORS.length] });
+      }
+    }
+    if (results.length >= 5) break;
+  }
+  return results;
+}
+
+function extractKeyFinancialMetrics(lines: string[]): Array<{ label: string; value: string }> {
+  const KEY_RE = /NRR|ARR|ARPU|CAC|LTV|Gross\s*Margin|Operating\s*Margin|마진율|수수료율|구독료|평균.*가격|평균.*단가/i;
+  const results: Array<{ label: string; value: string }> = [];
+  for (const line of lines) {
+    if (KEY_RE.test(line)) {
+      const numMatch = line.match(/([$₩]?[\d,]+(?:\.\d+)?(?:%|억|조|B|M|K|원|달러)?)/);
+      if (numMatch) {
+        const label = line.replace(numMatch[0], '').replace(/[:：\s·\-–]+/g, ' ').trim().slice(0, 22);
+        results.push({ label: label || line.slice(0, 22), value: numMatch[0] });
+        if (results.length >= 4) break;
+      }
+    }
+  }
+  return results;
+}
+
 function BusinessModelTab({ data }: { data: AnalysisDetail }) {
+  const [reExpanded, setReExpanded] = useState(false);
   const moat = data.moat_analysis as MoatAnalysis | null;
   const risk = data.risk_analysis as RiskAnalysis | null;
   const ls = splitLines(data.business_model);
@@ -510,6 +580,16 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
     const mid = Math.ceil(reLines.length / 2);
     ueTextLines.push(...reLines.splice(mid));
   }
+
+  const ratios = parseRevenueRatios(reLines);
+  const lineMetrics = extractKeyFinancialMetrics(reLines);
+  const RATIO_RE = /[가-힣A-Za-z][가-힣A-Za-z\s\/&\(\)]{1,20}?\s+\d{1,3}%/;
+  const narrativeLines = reLines.filter(
+    l => !RATIO_RE.test(l) && !lineMetrics.some(m => l.includes(m.value))
+  );
+  const COLLAPSE_LIMIT = 3;
+  const showExpand = narrativeLines.length > COLLAPSE_LIMIT;
+  const visibleNarrative = reExpanded ? narrativeLines : narrativeLines.slice(0, COLLAPSE_LIMIT);
 
   const ueData = data.financials_structured?.unit_economics;
   const ueMetrics = ueData ? [
@@ -533,20 +613,64 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
     '낮음': { bg: 'bg-emerald-50', text: 'text-emerald-700' },
   };
 
-  const riskGroups = risk ? [
+  const riskGroups = risk ? ([
     { label: '비즈니스', data: risk.business },
     { label: '재무',     data: risk.financial },
     { label: '외부',     data: risk.external },
-  ].filter(g => (g.data?.items?.length ?? 0) > 0) : [];
+  ] as const).filter(g => (g.data?.items?.length ?? 0) > 0) : [];
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SectionCard title="Revenue Engine" dotColor="bg-green-400">
-          <div className="space-y-2">
-            {reLines.map((l, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
-            ))}
+          <div className="space-y-3">
+            {ratios.length > 0 && (
+              <div className="space-y-2.5">
+                {ratios.map((r, i) => (
+                  <div key={i}>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs text-gray-600">{r.label}</span>
+                      <span className="text-xs font-medium text-gray-800">{r.pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-1.5 rounded-full ${r.color}`} style={{ width: `${r.pct}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {lineMetrics.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {lineMetrics.map((m, i) => (
+                  <MetricCard key={i} label={m.label} value={m.value} />
+                ))}
+              </div>
+            )}
+
+            {visibleNarrative.length > 0 && (
+              <div className="space-y-1.5">
+                {visibleNarrative.map((l, i) => (
+                  <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+                ))}
+                {showExpand && (
+                  <button
+                    onClick={() => setReExpanded(v => !v)}
+                    className="text-[11px] text-blue-500 hover:text-blue-700"
+                  >
+                    {reExpanded ? '접기 ▲' : `전체보기 (${narrativeLines.length}줄) ▼`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {ratios.length === 0 && lineMetrics.length === 0 && visibleNarrative.length === 0 && (
+              <div className="space-y-2">
+                {reLines.map((l, i) => (
+                  <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+                ))}
+              </div>
+            )}
           </div>
         </SectionCard>
 
@@ -643,30 +767,30 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
 
 // ── Tab: 전략 ─────────────────────────────────────────────────────────────────
 
+function HighlightNumbers({ text }: { text: string }) {
+  const parts = text.split(/([$₩]?[\d,]+(?:\.\d+)?(?:조|억|만|B|M|K|T|%|배|원|x)+)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        /\d/.test(p)
+          ? <span key={i} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-medium mx-0.5">{p}</span>
+          : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+}
+
 function StrategyTab({ data }: { data: AnalysisDetail }) {
   const s = data.strategy as StrategyAnalysis | null;
   if (!s || (!s.corporate && !s.business && !s.financial)) {
     return <p className="text-sm text-gray-500 py-4 text-center">전략 데이터가 없습니다.</p>;
   }
 
-  function HighlightNumbers({ text }: { text: string }) {
-    const parts = text.split(/([$₩]?[\d,]+(?:\.\d+)?(?:조|억|만|B|M|K|T|%|배|원|x)+)/g);
-    return (
-      <>
-        {parts.map((p, i) =>
-          /\d/.test(p)
-            ? <span key={i} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-medium mx-0.5">{p}</span>
-            : <span key={i}>{p}</span>
-        )}
-      </>
-    );
-  }
-
   const sections = [
     {
       label: '기업 전략', dotColor: 'bg-violet-400',
+      headline: s.corporate?.portfolio_direction,
       items: s.corporate ? [
-        { label: '포트폴리오',     value: s.corporate.portfolio_direction },
         { label: 'M&A / 파트너십', value: s.corporate.ma_partnership },
         { label: '지역 확장',      value: s.corporate.regional_expansion },
         ...(s.corporate.notes ? [{ label: '비고', value: s.corporate.notes }] : []),
@@ -674,8 +798,8 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
     },
     {
       label: '사업 전략', dotColor: 'bg-blue-400',
+      headline: s.business?.competitive_advantage,
       items: s.business ? [
-        { label: '경쟁 우위',   value: s.business.competitive_advantage },
         { label: '고객 / 채널', value: s.business.customer_channel },
         { label: '제품 로드맵', value: s.business.product_roadmap },
         ...(s.business.notes ? [{ label: '비고', value: s.business.notes }] : []),
@@ -683,9 +807,9 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
     },
     {
       label: '재무 전략', dotColor: 'bg-emerald-400',
+      headline: s.financial?.investment_priority,
       items: s.financial ? [
         { label: '자본 조달',     value: s.financial.capital_raising },
-        { label: '투자 우선순위', value: s.financial.investment_priority },
         { label: '배당 / 자사주', value: s.financial.dividend_buyback },
         { label: '목표 수익성',   value: s.financial.profitability_target },
         ...(s.financial.notes ? [{ label: '비고', value: s.financial.notes }] : []),
@@ -693,27 +817,59 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
     },
   ];
 
+  const filledSections = sections.filter(sec =>
+    sec.headline || sec.items.some(it => it.value)
+  );
+
   return (
-    <div className="space-y-3">
-      {sections.map(sec => {
-        const filled = sec.items.filter(it => it.value);
-        if (!filled.length) return null;
+    <div>
+      {filledSections.map((sec, si) => {
+        const filledItems = sec.items.filter(it => it.value);
+        const headlineTrunc = sec.headline
+          ? sec.headline.length > 80 ? sec.headline.slice(0, 80) + '…' : sec.headline
+          : null;
+
         return (
-          <SectionCard key={sec.label} title={sec.label} dotColor={sec.dotColor}>
-            <div>
-              {filled.map((item, i) => (
-                <div key={i} className={`flex gap-3 items-start py-2.5 ${i < filled.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                  <span className="shrink-0 w-24 text-[11px] text-gray-400 pt-0.5 leading-tight">{item.label}</span>
-                  <p className="text-sm text-gray-700 leading-relaxed flex-1">
-                    <HighlightNumbers text={item.value!} />
-                  </p>
+          <div key={sec.label}>
+            <div className="bg-white border border-gray-100 rounded-xl p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${sec.dotColor}`} />
+                {sec.label}
+              </div>
+              {headlineTrunc && (
+                <p className="text-sm font-medium text-gray-800 leading-snug mb-3 pl-3.5">
+                  <HighlightNumbers text={headlineTrunc} />
+                </p>
+              )}
+              {filledItems.length > 0 && (
+                <div>
+                  {filledItems.map((item, i) => (
+                    <div key={i} className={`flex gap-3 items-start py-2.5 ${i < filledItems.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                      <span className="shrink-0 w-24 text-[11px] text-gray-400 pt-0.5 leading-tight">{item.label}</span>
+                      <p className="text-sm text-gray-700 leading-relaxed flex-1">
+                        <HighlightNumbers text={item.value!} />
+                      </p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </SectionCard>
+            {si < filledSections.length - 1 && (
+              <div className="flex justify-center py-2">
+                <div className="flex flex-col items-center gap-0.5">
+                  <div className="w-px h-3 bg-gray-200" />
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="opacity-40">
+                    <path d="M5 6L0 0h10L5 6z" fill="#6b7280" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </div>
         );
       })}
-      <SourcesList sources={data.sources?.strategy} />
+      <div className="mt-3">
+        <SourcesList sources={data.sources?.strategy} />
+      </div>
     </div>
   );
 }
