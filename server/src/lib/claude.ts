@@ -265,13 +265,14 @@ async function runWithWebSearch(
   userMessage: string,
   model: string,
   maxRounds = 10,
+  maxTokens = 16000,
 ): Promise<string> {
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userMessage }];
 
   for (let round = 0; round < maxRounds; round++) {
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 16000,
+      max_tokens: maxTokens,
       system: systemPrompt,
       tools: WEB_SEARCH_TOOL,
       messages,
@@ -380,25 +381,45 @@ income_statement·balance_sheet 빈칸 절대 금지 — 공시 수치 없으면
 // ── Research gathering (1 web-search pass) ────────────────────────────────────
 
 async function gatherResearch(companyName: string): Promise<string> {
-  const systemPrompt = `당신은 기업 분석 리서처입니다. 아래 기업에 대해 웹 검색으로 종합적인 정보를 수집하고, 수집된 사실을 상세히 정리해주세요.
+  const systemPrompt = `당신은 기업 분석 리서처입니다. 아래 기업에 대해 웹 검색으로 핵심 정보를 수집하고, 수집된 사실을 항목별로 정리해주세요.
 
-수집 항목:
+[소스 신뢰도 우선순위]
+1순위 — 공식 공시: SEC 10-K/10-Q, DART, 기업 IR 자료, 공식 프레스릴리즈
+2순위 — 주요 금융 데이터: Bloomberg, Reuters, Yahoo Finance, Macrotrends
+3순위 — 산업 리서치: CB Insights, Gartner, IDC, Statista
+4순위 — 주요 언론: Financial Times, WSJ, Forbes, 한국경제, 매일경제
+5순위 — 일반 뉴스/블로그: 추정/미확인 레이블 필수
+
+우선순위 높은 소스에서 데이터를 찾지 못한 경우에만 다음 순위로 이동.
+수치 데이터(매출, 마진, 점유율 등)는 반드시 1~2순위 소스에서만 확정값으로 사용.
+3순위 이하 소스의 수치는 반드시 '(추정)' 레이블 명시.
+소스에서 찾을 수 없는 데이터는 null 반환. 절대 임의로 채우지 말 것.
+
+[검색 순서]
+1. "${companyName} SEC 10-K annual report 2024 2025" (또는 DART 공시)
+2. "${companyName} IR earnings revenue financials"
+3. "${companyName} market share competitors industry analysis"
+4. "${companyName} business model strategy"
+5. "${companyName} recent news 2025"
+
+[수집 항목]
 1. 기업 개요 (설립연도, 본사, 사업영역, 주요 제품/서비스, 시가총액, 티커)
-2. 최근 3~5년 재무 데이터 (매출, 영업이익, 순이익, FCF, 이익률)
+2. 최근 3~5년 재무 데이터 (매출, 영업이익, 순이익, FCF, 이익률) — 1~2순위 소스 우선
 3. 사업 모델 (수익 구조, 고객 세그먼트, 성장 방식)
-4. 밸류체인 위치 (핵심 공급사, 주요 고객사)
-5. 경쟁 현황 (주요 경쟁사, 시장점유율)
+4. 밸류체인 위치 (핵심 공급사, 주요 고객사) — 공시 확인된 것만
+5. 경쟁 현황 (주요 경쟁사, 시장점유율) — 출처 명시
 6. 전략 방향 (최근 M&A, 투자, 신규 사업, 지역 확장)
-7. 산업/기술 트렌드 (산업 역사, 기술 발전 단계)
-8. 리스크 요소 (규제, 경쟁, 기술 교체 위험)
+7. 산업/기술 트렌드
+8. 리스크 요소
 
-JSON 불필요. 수집된 사실과 수치를 최대한 구체적으로 서술해주세요.`;
+JSON 불필요. 각 수치에 출처 소스명 병기. 확인 불가 항목은 "확인 필요"로 명시.`;
 
   return runWithWebSearch(
     systemPrompt,
-    `기업명: ${companyName}\n\n이 기업의 종합적인 정보를 웹에서 수집해주세요.`,
+    `기업명: ${companyName}\n\n위 검색 순서에 따라 정보를 수집해주세요.`,
     'claude-sonnet-4-6',
-    8,
+    5,
+    6000,
   );
 }
 
