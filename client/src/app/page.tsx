@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import AnalysisCard from './components/AnalysisCard';
+import AnalysisLoader from './components/AnalysisLoader';
 import LinkedInDraftCard from './components/LinkedInDraftCard';
 import { AnalysisDetail, LinkedInDraft } from '@/types';
 
@@ -91,13 +92,7 @@ export default function Home() {
         </form>
 
         {/* Loading */}
-        {loading && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
-            <div className="inline-block w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4" />
-            <p className="text-gray-700 font-medium">{companyName} 분석 중...</p>
-            <p className="text-sm text-gray-400 mt-1">웹 검색 + AI 분석 (약 30–90초)</p>
-          </div>
-        )}
+        {loading && <AnalysisLoader companyName={companyName.trim()} />}
 
         {/* Error */}
         {error && (
