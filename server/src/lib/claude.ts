@@ -324,6 +324,15 @@ function extractJson<T>(raw: string, label = 'response'): T | null {
   return null;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[timeout] ${label} exceeded ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 // ── Section prompts ───────────────────────────────────────────────────────────
 
 const SECTION_SYSTEM = `당신은 전문 기업 분석가입니다. 제공된 리서치 데이터를 바탕으로 지정된 섹션만 분석합니다.
@@ -388,6 +397,7 @@ JSON 불필요. 수집된 사실과 수치를 최대한 구체적으로 서술�
 // ── Section call (no web search, uses shared context) ─────────────────────────
 
 async function callSection<T>(context: string, sectionKey: string): Promise<T | null> {
+  const t0 = Date.now();
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -402,9 +412,11 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map(b => b.text)
       .join('');
-    return extractJson<T>(raw, sectionKey);
+    const result = extractJson<T>(raw, sectionKey);
+    console.log(`[claude] ${sectionKey} OK  ${Date.now() - t0}ms`);
+    return result;
   } catch (err) {
-    console.error(`[claude] ${sectionKey} failed:`, err);
+    console.error(`[claude] ${sectionKey} FAIL ${Date.now() - t0}ms`, err);
     return null;
   }
 }
@@ -416,7 +428,9 @@ export async function analyzeCompany(
   financialContext?: string,
 ): Promise<AnalysisData> {
   // Step 1: One web-search pass to gather research context
+  const t0 = Date.now();
   const researchText = await gatherResearch(companyName);
+  console.log(`[claude] gatherResearch done ${Date.now() - t0}ms`);
 
   const sharedContext = [
     `기업명: ${companyName}`,
@@ -424,36 +438,35 @@ export async function analyzeCompany(
     `\n[웹 리서치]\n${researchText}`,
   ].filter(Boolean).join('\n');
 
-  // Step 2: 8 sections in parallel
-  const [
-    summary_v2,
-    industry_history_v2,
-    tech_evolution_v2,
-    value_chain_v2,
-    business_model_v2,
-    competitors_v2,
-    strategy_v2,
-    financials_v2,
-  ] = await Promise.all([
-    callSection<SummaryV2>(sharedContext, 'summary_v2'),
-    callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'),
-    callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),
-    callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
-    callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
-    callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
-    callSection<StrategyV2>(sharedContext, 'strategy_v2'),
-    callSection<FinancialsV2>(sharedContext, 'financials_v2'),
+  // Step 2: 8 sections in parallel — allSettled so one hang/fail doesn't block others
+  const SECTION_TIMEOUT = 30_000;
+  const t1 = Date.now();
+  const results = await Promise.allSettled([
+    withTimeout(callSection<SummaryV2>(sharedContext, 'summary_v2'),                 SECTION_TIMEOUT, 'summary_v2'),
+    withTimeout(callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'), SECTION_TIMEOUT, 'industry_history_v2'),
+    withTimeout(callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),     SECTION_TIMEOUT, 'tech_evolution_v2'),
+    withTimeout(callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),           SECTION_TIMEOUT, 'value_chain_v2'),
+    withTimeout(callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),     SECTION_TIMEOUT, 'business_model_v2'),
+    withTimeout(callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),          SECTION_TIMEOUT, 'competitors_v2'),
+    withTimeout(callSection<StrategyV2>(sharedContext, 'strategy_v2'),               SECTION_TIMEOUT, 'strategy_v2'),
+    withTimeout(callSection<FinancialsV2>(sharedContext, 'financials_v2'),            SECTION_TIMEOUT, 'financials_v2'),
   ]);
+  console.log(`[claude] parallel sections done ${Date.now() - t1}ms`);
 
+  function settled<T>(r: PromiseSettledResult<T | null>, fallback: T): T {
+    return r.status === 'fulfilled' && r.value !== null ? r.value : fallback;
+  }
+
+  const [r0, r1, r2, r3, r4, r5, r6, r7] = results;
   return {
-    summary_v2:          summary_v2          ?? { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName },
-    industry_history_v2: industry_history_v2 ?? DEFAULT_ANALYSIS_DATA.industry_history_v2,
-    tech_evolution_v2:   tech_evolution_v2   ?? DEFAULT_ANALYSIS_DATA.tech_evolution_v2,
-    value_chain_v2:      value_chain_v2      ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
-    business_model_v2:   business_model_v2   ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
-    competitors_v2:      competitors_v2      ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
-    strategy_v2:         strategy_v2         ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
-    financials_v2:       financials_v2       ?? DEFAULT_ANALYSIS_DATA.financials_v2,
+    summary_v2:          settled(r0, { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName }),
+    industry_history_v2: settled(r1, DEFAULT_ANALYSIS_DATA.industry_history_v2),
+    tech_evolution_v2:   settled(r2, DEFAULT_ANALYSIS_DATA.tech_evolution_v2),
+    value_chain_v2:      settled(r3, DEFAULT_ANALYSIS_DATA.value_chain_v2),
+    business_model_v2:   settled(r4, DEFAULT_ANALYSIS_DATA.business_model_v2),
+    competitors_v2:      settled(r5, DEFAULT_ANALYSIS_DATA.competitors_v2),
+    strategy_v2:         settled(r6, DEFAULT_ANALYSIS_DATA.strategy_v2),
+    financials_v2:       settled(r7, DEFAULT_ANALYSIS_DATA.financials_v2),
     sources: {},
   };
 }
