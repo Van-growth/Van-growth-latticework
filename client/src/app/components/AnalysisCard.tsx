@@ -339,8 +339,8 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
 
 function BusinessModelTab({ data }: { data: AnalysisDetail }) {
   const ls = splitLines(data.business_model);
-  let reLines: string[] = [];
-  let ueLines: string[] = [];
+  const reLines: string[] = [];
+  const ueLines: string[] = [];
   let section = 0;
 
   for (const line of ls) {
@@ -354,7 +354,7 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
 
   if (ueLines.length === 0 && reLines.length > 1) {
     const mid = Math.ceil(reLines.length / 2);
-    ueLines = reLines.splice(mid);
+    ueLines.push(...reLines.splice(mid));
   }
 
   return (
