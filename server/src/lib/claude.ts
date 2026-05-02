@@ -196,16 +196,32 @@ async function runWithWebSearch(
   throw new Error('Max conversation rounds exceeded');
 }
 
-function extractJson<T>(text: string): T | null {
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    const match = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-    if (match) {
-      try { return JSON.parse(match[0]) as T; } catch { /* fall through */ }
+function extractJson<T>(raw: string, label = 'response'): T | null {
+  const text = raw.trim();
+
+  // 1. Direct parse — model followed instructions perfectly
+  try { return JSON.parse(text) as T; } catch {}
+
+  // 2. Strip markdown code fence (```json...``` or ```...```) then retry
+  const fenced = text.match(/```(?:json|typescript|js)?\s*\n?([\s\S]*?)\n?```/s);
+  if (fenced?.[1]) {
+    const inner = fenced[1].trim();
+    try { return JSON.parse(inner) as T; } catch {}
+    // Greedy extraction inside the fence block
+    const innerBlock = inner.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (innerBlock) {
+      try { return JSON.parse(innerBlock[0]) as T; } catch {}
     }
-    return null;
   }
+
+  // 3. Last-resort greedy extraction from the whole text
+  const block = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (block) {
+    try { return JSON.parse(block[0]) as T; } catch {}
+  }
+
+  console.error(`[claude] ${label}: JSON parse failed. Preview:\n${text.slice(0, 400)}`);
+  return null;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -333,7 +349,7 @@ competitors.direct는 글로벌 직접 경쟁사 3~5개를 포함하세요.
 
   const raw = await runWithWebSearch(systemPrompt, userMessage, 'claude-sonnet-4-6');
 
-  const parsed = extractJson<AnalysisData>(raw);
+  const parsed = extractJson<AnalysisData>(raw, 'analyzeCompany');
 
   if (parsed && parsed.summary) {
     return {
@@ -453,7 +469,7 @@ Respond ONLY with this JSON array (no markdown, no code blocks):
     .map(b => b.text)
     .join('');
 
-  const parsed = extractJson<LinkedInDraft[]>(raw);
+  const parsed = extractJson<LinkedInDraft[]>(raw, 'generateLinkedInDrafts');
   if (Array.isArray(parsed) && parsed.length > 0) return parsed;
 
   return [1, 2, 3].map(n => ({
