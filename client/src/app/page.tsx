@@ -7,7 +7,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-between">
           <span className="font-bold text-gray-900 text-lg">Latticework</span>
           <div className="flex gap-4 text-sm">
             <Link href="/" className="text-blue-600 font-medium">분석</Link>
