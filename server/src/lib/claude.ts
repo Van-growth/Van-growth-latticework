@@ -391,7 +391,7 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 4000,
       system: SECTION_SYSTEM,
       messages: [{
         role: 'user',
