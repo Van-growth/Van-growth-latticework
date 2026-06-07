@@ -80,6 +80,26 @@ router.post('/', async (req: Request, res: Response) => {
       );
     }
 
+    // 6. Save sources to analysis_sources table (versioned accumulation)
+    const sourceRows = (Object.entries(analysis.sources ?? {}) as [string, any[]][])
+      .flatMap(([tab, srcs]) =>
+        (srcs ?? []).map(s => ({
+          analysis_id:  savedAnalysis.id,
+          company_name: name,
+          tab_name:     tab,
+          source_index: s.index,
+          level:        s.level,
+          organization: s.organization,
+          date:         s.date,
+          content:      s.content,
+          is_estimate:  s.isEstimate ?? (s.level === 'L3'),
+          url:          s.url ?? null,
+        })),
+      );
+    if (sourceRows.length > 0) {
+      await supabase.from('analysis_sources').insert(sourceRows);
+    }
+
     res.json({
       analysisId: savedAnalysis.id,
       companyName: name,

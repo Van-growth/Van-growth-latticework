@@ -139,22 +139,46 @@ function CfMetricCard({ label, value, dotColor }: { label: string; value: string
   );
 }
 
+const LEVEL_BADGE: Record<string, { label: string; cls: string }> = {
+  L1: { label: 'L1 공식', cls: 'bg-blue-50 text-blue-700 border border-blue-100' },
+  L2: { label: 'L2 기관', cls: 'bg-gray-100 text-gray-600 border border-gray-200' },
+  L3: { label: 'L3 추정', cls: 'bg-amber-50 text-amber-700 border border-amber-100' },
+};
+
 function SourcesList({ sources }: { sources: Source[] | undefined }) {
   if (!sources?.length) return null;
   return (
-    <div className="mt-4 pt-3 border-t border-gray-50">
+    <div className="mt-4 pt-3 border-t border-gray-100">
       <div className="flex items-center gap-1.5 mb-2">
         <BookOpen size={11} className="text-gray-400" />
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">참고 출처</span>
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">출처</span>
       </div>
-      <div className="flex flex-col gap-1">
-        {sources.map((s, i) => (
-          <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 truncate">
-            <ExternalLink size={10} className="shrink-0" />
-            {s.title || s.url}
-          </a>
-        ))}
+      <div className="flex flex-col gap-1.5">
+        {sources.map((s, i) => {
+          const badge = LEVEL_BADGE[s.level] ?? LEVEL_BADGE.L2;
+          const inner = (
+            <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
+              <span className="shrink-0 text-[10px] text-gray-400 w-4 text-right mt-0.5">[{s.index ?? i + 1}]</span>
+              <span className={`shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none mt-0.5 ${badge.cls}`}>
+                {badge.label}
+              </span>
+              <span className="leading-snug">
+                <span className="font-medium text-gray-700">{s.organization}</span>
+                {s.date && <span className="text-gray-400 ml-1">{s.date}</span>}
+                {' — '}
+                <span>{s.content}</span>
+                {s.isEstimate && <span className="ml-1 text-amber-600 font-medium">(추정)</span>}
+              </span>
+              {s.url && (
+                <a href={s.url} target="_blank" rel="noopener noreferrer"
+                  className="shrink-0 mt-0.5 text-blue-400 hover:text-blue-600">
+                  <ExternalLink size={10} />
+                </a>
+              )}
+            </div>
+          );
+          return inner;
+        })}
       </div>
     </div>
   );

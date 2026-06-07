@@ -35,9 +35,20 @@ export interface RiskAnalysis {
   external: RiskGroup;
 }
 
+// L1: 공식 출처 (기업 공시, CFO/CEO 공식 발표, SEC, DART)
+// L2: 신뢰 기관 보도 (Bloomberg, Reuters, WSJ, Fortune, CNBC, Sacra 등)
+// L3: 추정/분석 (기관 추정치, 2차 분석) — isEstimate 항상 true
+export type SourceLevel = 'L1' | 'L2' | 'L3';
+
 export interface Source {
-  url: string;
-  title: string;
+  index: number;
+  level: SourceLevel;
+  organization: string;
+  date: string;
+  content: string;
+  isEstimate: boolean;
+  url?: string;
+  title?: string;
 }
 
 export interface AnalysisSources {
@@ -157,6 +168,7 @@ export interface SummaryV2 {
   one_line: string;
   bull_case: string;
   bear_case: string;
+  oneLiner: string;
 }
 
 export interface IndustryHistoryV2 {
@@ -321,6 +333,11 @@ export interface FinancialsV2 {
     reinvestment_rate: string;
   };
   key_risks: string[];
+  outlook: {
+    shortTerm: string;
+    midLongTerm: string;
+    keyRisks: string[];
+  };
 }
 
 // ── Common ────────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -9,9 +10,19 @@ export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }
 
 // ── Types (V2 schema) ─────────────────────────────────────────────────────────
 
+// L1: 공식 출처 (기업 공시, CFO/CEO 공식 발표, SEC, DART)
+// L2: 신뢰 기관 보도 (Bloomberg, Reuters, WSJ, Fortune, CNBC, Sacra 등)
+// L3: 추정/분석 (기관 추정치, 2차 분석) — isEstimate 항상 true
+export type SourceLevel = 'L1' | 'L2' | 'L3';
+
 export interface Source {
-  url: string;
-  title: string;
+  index: number;
+  level: SourceLevel;
+  organization: string;
+  date: string;
+  content: string;
+  isEstimate: boolean;
+  url?: string;
 }
 
 export interface AnalysisSources {
@@ -38,6 +49,7 @@ export interface SummaryV2 {
   one_line: string;
   bull_case: string;
   bear_case: string;
+  oneLiner: string;
 }
 
 export interface IndustryHistoryV2 {
@@ -202,6 +214,11 @@ export interface FinancialsV2 {
     reinvestment_rate: string;
   };
   key_risks: string[];
+  outlook: {
+    shortTerm: string;
+    midLongTerm: string;
+    keyRisks: string[];
+  };
 }
 
 export interface AnalysisData {
@@ -228,7 +245,7 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     company: '', ticker: null, industry: '', hq: '',
     value_chain_position: 'midstream',
     products: [], key_metrics: [], top_customers: [], key_markets: [],
-    one_line: '', bull_case: '', bear_case: '',
+    one_line: '', bull_case: '', bear_case: '', oneLiner: '',
   },
   industry_history_v2: { industry_name: '', timeline: [], why_durable: '', chasm_points: [] },
   tech_evolution_v2: { tech_name: '', stages: [], current_stage: '', next_inflection: '' },
@@ -252,13 +269,63 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     cash_flow: { operating: '', investing: '', financing: '', fcf: '', notes: '' },
     munger_buffett_metrics: { roe: '', roic: '', owner_earnings: '', debt_to_equity: '', interest_coverage: '', reinvestment_rate: '' },
     key_risks: [],
+    outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
   },
   sources: {},
 };
 
 // ── Low-level helpers ─────────────────────────────────────────────────────────
 
-const WEB_SEARCH_TOOL = [{ type: 'web_search_20250305', name: 'web_search' }] as any;
+async function fetchUrlContent(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      },
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return `HTTP ${res.status} — could not fetch ${url}`;
+
+    const contentType = res.headers.get('content-type') ?? '';
+    if (contentType.includes('application/pdf')) return `PDF document at ${url} — cannot extract text directly`;
+
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    // Remove non-content elements
+    $('script, style, nav, footer, header, aside, noscript, iframe, .ad, .ads, .advertisement, [aria-hidden="true"]').remove();
+
+    // Prefer semantic main content
+    const main = $('main, article, [role="main"], .content, #content, .article-body, .post-body').first();
+    const raw = (main.length ? main : $('body')).text();
+    const text = raw.replace(/\s+/g, ' ').trim();
+
+    return text.length > 0 ? text.slice(0, 10_000) : `No readable content found at ${url}`;
+  } catch (err: any) {
+    return `Error fetching ${url}: ${err.message}`;
+  }
+}
+
+const WEB_SEARCH_TOOL = [
+  { type: 'web_search_20250305', name: 'web_search' },
+  {
+    name: 'fetch_url',
+    description: 'Fetch and read the full text content of a specific web page. Use this after web_search to get complete content from important sources — SEC filings, annual reports, IR pages, news articles, etc. — instead of relying on short snippets.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'Full URL to fetch (https://...)' },
+      },
+      required: ['url'],
+    },
+  },
+] as any;
 
 async function runWithWebSearch(
   systemPrompt: string,
@@ -287,15 +354,29 @@ async function runWithWebSearch(
 
     messages.push({ role: 'assistant', content: response.content });
 
-    const toolResults = (response.content as Anthropic.ContentBlock[])
-      .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-      .map(b => ({ type: 'tool_result' as const, tool_use_id: b.id }));
+    const toolUseBlocks = (response.content as Anthropic.ContentBlock[])
+      .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
 
-    if (toolResults.length > 0) {
-      messages.push({ role: 'user', content: toolResults });
-    } else if (texts) {
-      return texts;
+    if (toolUseBlocks.length === 0) {
+      if (texts) return texts;
+      continue;
     }
+
+    // web_search_20250305 is server-side — pass only tool_use_id (no content).
+    // fetch_url is client-side — fetch the page and return its content.
+    const toolResults = await Promise.all(
+      toolUseBlocks.map(async (b) => {
+        if (b.name === 'fetch_url') {
+          const { url } = b.input as { url: string };
+          console.log(`[fetch_url] ${url}`);
+          const content = await fetchUrlContent(url);
+          return { type: 'tool_result' as const, tool_use_id: b.id, content };
+        }
+        return { type: 'tool_result' as const, tool_use_id: b.id };
+      }),
+    );
+
+    messages.push({ role: 'user', content: toolResults });
   }
 
   throw new Error('Max conversation rounds exceeded');
@@ -348,9 +429,10 @@ const SECTION_SYSTEM = `당신은 전문 기업 분석가입니다. 제공된 �
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `아래 스키마의 JSON 객체만 출력:
-{"company":"기업명","ticker":"TradingView 형식 티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"one_line":"투자자 관점 핵심 한줄 20자이내","bull_case":"강세 시나리오 2줄이내","bear_case":"약세 시나리오 2줄이내"}
+{"company":"기업명","ticker":"TradingView 형식 티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"one_line":"투자자 관점 핵심 한줄 20자이내","bull_case":"강세 시나리오 2줄이내","bear_case":"약세 시나리오 2줄이내","oneLiner":"이 기업의 현재 상황을 투자자·실무자가 바로 이해할 수 있는 1~2문장 핵심 해석"}
 top_customers: IR·공시에서 확인된 것만. 추정이면 빈 배열. key_markets.revenue_share: 공시 수치 없으면 해당 국가 항목 자체를 제외.
-ticker 필드는 반드시 TradingView 형식으로 반환: 미국 NASDAQ 상장 → "NASDAQ:심볼" (예: NASDAQ:NVDA), 미국 NYSE 상장 → "NYSE:심볼" (예: NYSE:PLTR), 한국 코스피 → "KRX:종목코드" (예: KRX:005930), 한국 코스닥 → "KOSDAQ:종목코드" (예: KOSDAQ:388130), 비상장 또는 불확실하면 null.`,
+ticker 필드는 반드시 TradingView 형식으로 반환: 미국 NASDAQ 상장 → "NASDAQ:심볼" (예: NASDAQ:NVDA), 미국 NYSE 상장 → "NYSE:심볼" (예: NYSE:PLTR), 한국 코스피 → "KRX:종목코드" (예: KRX:005930), 한국 코스닥 → "KOSDAQ:종목코드" (예: KOSDAQ:388130), 비상장 또는 불확실하면 null.
+oneLiner 규칙: 숫자 나열 금지. "왜 이 숫자가 의미있는가"를 서사로 설명. 예시 스타일: "매출은 늘었는데 이익은 줄었다 — 글로벌 인프라에 돈을 쏟아붓는 투자 시즌".`,
 
   industry_history_v2: `아래 스키마의 JSON 객체만 출력:
 {"industry_name":"산업명","timeline":[{"period":"시기","title":"시대제목 15자이내","technology":"핵심기술 1줄","market_need":"시장수요 1줄","key_players":["기업명(국가)"],"significance":"중요성 1줄"}],"why_durable":"지속가능이유 2줄이내","chasm_points":["캐즘시점과이유 1줄 최대3개"]}
@@ -375,14 +457,36 @@ direct는 글로벌 직접 경쟁사 3~5개 필수.`,
 {"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내"}`,
 
   financials_v2: `아래 스키마의 JSON 객체만 출력:
-{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요'","fy2022":"공시값 or '확인 필요'","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"공시값% or '수치% (추정)' or '확인 필요'","roic":"공시값% or '수치% (추정)' or '확인 필요'","owner_earnings":"공시값 or '확인 필요'","debt_to_equity":"공시값 or '확인 필요'","interest_coverage":"공시값 or '확인 필요'","reinvestment_rate":"공시값% or '수치% (추정)' or '확인 필요'"},"key_risks":["리스크 1줄 최대5개"]}
-income_statement·balance_sheet 빈칸 절대 금지 — 공시 수치 없으면 반드시 '확인 필요'. 추정값은 반드시 '숫자 (추정)' 형식.`,
+{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요'","fy2022":"공시값 or '확인 필요'","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"공시값% or '수치% (추정)' or '확인 필요'","roic":"공시값% or '수치% (추정)' or '확인 필요'","owner_earnings":"공시값 or '확인 필요'","debt_to_equity":"공시값 or '확인 필요'","interest_coverage":"공시값 or '확인 필요'","reinvestment_rate":"공시값% or '수치% (추정)' or '확인 필요'"},"key_risks":["리스크 1줄 최대5개"],"outlook":{"shortTerm":"단기 전망 (3~6개월) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","midLongTerm":"중장기 전망 (1~3년) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","keyRisks":["핵심 리스크 1줄 최대3개"]}}
+income_statement·balance_sheet 빈칸 절대 금지 — 공시 수치 없으면 반드시 '확인 필요'. 추정값은 반드시 '숫자 (추정)' 형식.
+outlook 규칙: 재무 데이터 기반으로 작성. 근거 없는 낙관 금지. shortTerm·midLongTerm 앞에 반드시 ○/△/▼ 심볼 명시.`,
+
+  sources: `아래 스키마의 JSON 객체만 출력. 리서치에서 실제로 참조한 출처를 탭별로 정리:
+{"summary":[{"index":1,"level":"L1","organization":"기관명","date":"Mon YYYY","content":"핵심 내용 1줄","isEstimate":false,"url":"https://... or null"}],"industry_history":[...],"tech_evolution":[...],"value_chain":[...],"business_model":[...],"competitors":[...],"strategy":[...],"financials":[...]}
+
+신뢰 등급 기준:
+- L1: 기업 공식 발표, CFO/CEO 블로그, SEC 10-K/10-Q, DART 공시, 기업 IR 자료
+- L2: Bloomberg, Reuters, WSJ, Fortune, CNBC, Financial Times, HSBC, Sacra, Menlo Ventures, CB Insights, Gartner
+- L3: 기관 추정치, 2차 분석, 일반 뉴스/블로그 — 반드시 isEstimate:true
+
+규칙:
+- 각 탭당 1~5개 출처. 실제로 참조한 출처만 포함 (없으면 빈 배열 []).
+- organization은 출처 기관명만 (예: "Bloomberg", "OpenAI 공식", "SEC EDGAR", "DART").
+- date는 "Mar 2026" 형식.
+- content는 해당 출처에서 가져온 핵심 내용 1줄 (수치·사실 중심).
+- url은 실제 검색에서 확인된 URL만. 없으면 null.
+- L3 항목은 반드시 isEstimate:true.`,
 };
 
 // ── Research gathering (1 web-search pass) ────────────────────────────────────
 
 async function gatherResearch(companyName: string): Promise<string> {
-  const systemPrompt = `당신은 기업 분석 리서처입니다. 아래 기업에 대해 웹 검색으로 핵심 정보를 수집하고, 수집된 사실을 항목별로 정리해주세요.
+  const systemPrompt = `당신은 기업 분석 리서처입니다. 아래 기업에 대해 웹 검색 및 페이지 전체 내용 읽기를 통해 핵심 정보를 수집하고, 수집된 사실을 항목별로 정리해주세요.
+
+[도구 사용 방법]
+- web_search: 검색 쿼리로 관련 URL과 스니펫을 찾습니다
+- fetch_url: 검색 결과에서 중요한 URL의 전체 내용을 읽습니다
+  → SEC EDGAR 공시, DART 공시, 기업 IR 페이지, 주요 뉴스 기사 등은 반드시 fetch_url로 전체 내용을 읽어서 정확한 수치를 확보하세요
 
 [소스 신뢰도 우선순위]
 1순위 — 공식 공시: SEC 10-K/10-Q, DART, 기업 IR 자료, 공식 프레스릴리즈
@@ -396,12 +500,12 @@ async function gatherResearch(companyName: string): Promise<string> {
 3순위 이하 소스의 수치는 반드시 '(추정)' 레이블 명시.
 소스에서 찾을 수 없는 데이터는 null 반환. 절대 임의로 채우지 말 것.
 
-[검색 순서]
-1. "${companyName} SEC 10-K annual report 2024 2025" (또는 DART 공시)
-2. "${companyName} IR earnings revenue financials"
-3. "${companyName} market share competitors industry analysis"
-4. "${companyName} business model strategy"
-5. "${companyName} recent news 2025"
+[검색 및 읽기 순서]
+1. web_search: "${companyName} SEC 10-K annual report 2024 2025" → 결과 중 SEC EDGAR URL 있으면 fetch_url로 전체 읽기
+2. web_search: "${companyName} IR earnings revenue financials" → IR 페이지 URL 있으면 fetch_url로 전체 읽기
+3. web_search: "${companyName} market share competitors industry analysis"
+4. web_search: "${companyName} business model strategy"
+5. web_search: "${companyName} recent news 2025" → 중요 기사 1~2개 fetch_url로 전체 읽기
 
 [수집 항목]
 1. 기업 개요 (설립연도, 본사, 사업영역, 주요 제품/서비스, 시가총액, 티커)
@@ -417,10 +521,10 @@ JSON 불필요. 각 수치에 출처 소스명 병기. 확인 불가 항목은 "
 
   return runWithWebSearch(
     systemPrompt,
-    `기업명: ${companyName}\n\n위 검색 순서에 따라 정보를 수집해주세요.`,
+    `기업명: ${companyName}\n\n위 검색 및 읽기 순서에 따라 정보를 수집해주세요.`,
     'claude-sonnet-4-6',
-    5,
-    6000,
+    10,
+    8000,
   );
 }
 
@@ -468,7 +572,7 @@ export async function analyzeCompany(
     `\n[웹 리서치]\n${researchText}`,
   ].filter(Boolean).join('\n');
 
-  // Step 2: 8 sections in parallel — allSettled so one hang/fail doesn't block others
+  // Step 2: 9 sections in parallel — allSettled so one hang/fail doesn't block others
   const SECTION_TIMEOUT = 30_000;
   const t1 = Date.now();
   const results = await Promise.allSettled([
@@ -480,6 +584,7 @@ export async function analyzeCompany(
     withTimeout(callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),          SECTION_TIMEOUT, 'competitors_v2'),
     withTimeout(callSection<StrategyV2>(sharedContext, 'strategy_v2'),               SECTION_TIMEOUT, 'strategy_v2'),
     withTimeout(callSection<FinancialsV2>(sharedContext, 'financials_v2'),            SECTION_TIMEOUT, 'financials_v2'),
+    withTimeout(callSection<AnalysisSources>(sharedContext, 'sources'),               SECTION_TIMEOUT, 'sources'),
   ]);
   console.log(`[claude] parallel sections done ${Date.now() - t1}ms`);
 
@@ -487,7 +592,7 @@ export async function analyzeCompany(
     return r.status === 'fulfilled' && r.value !== null ? r.value : fallback;
   }
 
-  const [r0, r1, r2, r3, r4, r5, r6, r7] = results;
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8] = results;
   return {
     summary_v2:          settled(r0, { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName }),
     industry_history_v2: settled(r1, DEFAULT_ANALYSIS_DATA.industry_history_v2),
@@ -497,7 +602,7 @@ export async function analyzeCompany(
     competitors_v2:      settled(r5, DEFAULT_ANALYSIS_DATA.competitors_v2),
     strategy_v2:         settled(r6, DEFAULT_ANALYSIS_DATA.strategy_v2),
     financials_v2:       settled(r7, DEFAULT_ANALYSIS_DATA.financials_v2),
-    sources: {},
+    sources:             settled(r8, DEFAULT_ANALYSIS_DATA.sources),
   };
 }
 
