@@ -9,7 +9,7 @@ const STEPS = [
   { message: 'Claude가 산업 역사 분석 중...',          color: 'text-blue-600',    dot: 'bg-blue-500'    },
   { message: '밸류체인 구조 파악 중...',               color: 'text-violet-600',  dot: 'bg-violet-500'  },
   { message: '경쟁사 스캔 중...',                      color: 'text-orange-500',  dot: 'bg-orange-500'  },
-  { message: 'LinkedIn 초안 작성 중...',               color: 'text-sky-600',     dot: 'bg-sky-500'     },
+  { message: '재무 전망 분석 중...',                   color: 'text-sky-600',     dot: 'bg-sky-500'     },
 ] as const;
 
 const SUB_MESSAGES = [

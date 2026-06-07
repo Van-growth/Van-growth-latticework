@@ -233,10 +233,6 @@ export interface AnalysisData {
   sources: AnalysisSources;
 }
 
-export interface LinkedInDraft {
-  draft_number: number;
-  content: string;
-}
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -606,110 +602,6 @@ export async function analyzeCompany(
   };
 }
 
-export async function generateLinkedInDrafts(
-  analysis: AnalysisData,
-  companyName: string,
-): Promise<LinkedInDraft[]> {
-  const s = analysis.summary_v2;
-  const bm = analysis.business_model_v2;
-  const fin = analysis.financials_v2;
-
-  const context = `기업명: ${companyName}
-한줄 요약: ${s.one_line}
-산업: ${s.industry}
-강세 시나리오: ${s.bull_case}
-약세 시나리오: ${s.bear_case}
-성장 방식: ${bm.growth_motion} — ${bm.growth_motion_detail}
-Gross Margin: ${bm.unit_economics.gross_margin}%
-재무 서사: ${fin.narrative}
-핵심 리스크: ${fin.key_risks.slice(0, 3).join(' / ')}`;
-
-  const systemPrompt = `You are a LinkedIn content strategist who thinks simultaneously as an operator (execution/sales reality), strategist (timing/positioning), and investor (ROI/capital allocation).
-
-GOAL: Answer "Does this actually make money?" — not summarize deals.
-
-Write 3 LinkedIn posts in Korean. Every post must obey ALL rules below.
-
----
-
-HOOK RULE:
-- Open with 2–3 lines describing a market shift
-- Follow with one bold tension sentence
-- NO questions as the opening line
-- NO company name in the first line
-
-CONTEXT BLOCK (required):
-- When / Who / What / How much
-- Deal structure + minimum 2 numbers
-
-TARGET COMPANY BLOCK:
-- Max 2 founders
-- Product in 1 line
-- Core strength in 1 line
-- NO history, NO long descriptions
-
-CORE STRUCTURE — 5 sections in order:
-1. Revenue Engine: trace usage → habit → monetization
-2. Unit Economics: price + user assumption + revenue math (numbers required)
-3. Why Buy (not Build): Why now? Why didn't they build it? Include time factor. End with "They bought speed" or "They bought time"
-4. Operator Reality: 3+ risks in cause → consequence format. Must include "This only works if…" and "This breaks when…"
-5. Capital Allocation: What did they actually buy? How does money flow back? ROI / payback period
-
-INSIGHT RULE: One-line core insight required (e.g., "This is not an AI model business / This is a habit-driven revenue engine")
-
-WRITING STYLE:
-- Short sentences: 1–2 lines each
-- One idea per line
-- Aggressive line breaks
-- No consulting or academic tone
-- Rhythmic
-
-NUMBER RULE: 2–3 meaningful numbers required. Numbers create tension.
-
-CLOSING: 2–3 lines. No questions. Format: "This is not about X / This is a bet on Y"
-
-LANGUAGE: Reason in English → output in Korean. Keep in English: ARPU, LTV, CAC, IRR, margin, multiple
-
-HASHTAGS: 3–5 tags (2–3 Korean + 2 English)
-
-FORBIDDEN: news summary / storytelling / emotional language / generic explanations
-
----
-
-3 POST TYPES:
-1. 인사이트 공유형: Deliver the sharpest non-obvious insight. Data-driven.
-2. 질문형: Hook is provocative but NOT a question. Body builds layered tension.
-3. 데이터 스토리형: Open with a surprising number. Build from data → structure → return.
-
----
-
-Respond ONLY with this JSON array (no markdown, no code blocks):
-[
-  {"draft_number": 1, "content": "..."},
-  {"draft_number": 2, "content": "..."},
-  {"draft_number": 3, "content": "..."}
-]`;
-
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: context }],
-  });
-
-  const raw = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map(b => b.text)
-    .join('');
-
-  const parsed = extractJson<LinkedInDraft[]>(raw, 'generateLinkedInDrafts');
-  if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-
-  return [1, 2, 3].map(n => ({
-    draft_number: n,
-    content: `${companyName} 분석 초안 ${n}\n\n${s.one_line}`,
-  }));
-}
 
 export async function selectDailyCompany(): Promise<string> {
   const systemPrompt = `당신은 기업 분석 전문가입니다. 오늘 분석하기에 흥미로운 글로벌 또는 한국 기업 하나를 선정하세요.

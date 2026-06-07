@@ -22,18 +22,11 @@ router.get('/:token', async (req: Request, res: Response) => {
       return;
     }
 
-    const [playersRes, draftsRes] = await Promise.all([
-      supabase
-        .from('value_chain_players')
-        .select('id, role, player_name, description')
-        .eq('analysis_id', row.id)
-        .order('created_at'),
-      supabase
-        .from('linkedin_drafts')
-        .select('id, draft_number, content')
-        .eq('analysis_id', row.id)
-        .order('draft_number'),
-    ]);
+    const playersRes = await supabase
+      .from('value_chain_players')
+      .select('id, role, player_name, description')
+      .eq('analysis_id', row.id)
+      .order('created_at');
 
     res.json({
       id: row.id,
@@ -58,7 +51,6 @@ router.get('/:token', async (req: Request, res: Response) => {
       is_shared: true,
       share_token: row.share_token,
       valuechainPlayers: playersRes.data ?? [],
-      linkedinDrafts: draftsRes.data ?? [],
       summary_v2:          row.summary_v2          ?? null,
       industry_history_v2: row.industry_history_v2 ?? null,
       tech_evolution_v2:   row.tech_evolution_v2   ?? null,

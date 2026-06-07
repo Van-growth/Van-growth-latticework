@@ -11,7 +11,6 @@ export default function Home() {
           <div className="flex gap-4 text-sm">
             <Link href="/" className="text-blue-600 font-medium">분석</Link>
             <Link href="/history" className="text-gray-500 hover:text-gray-800">히스토리</Link>
-            <Link href="/linkedin" className="text-gray-500 hover:text-gray-800">LinkedIn</Link>
           </div>
         </div>
       </nav>

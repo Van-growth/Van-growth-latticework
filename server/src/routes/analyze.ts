@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
-import { analyzeCompany, generateLinkedInDrafts } from '../lib/claude';
+import { analyzeCompany } from '../lib/claude';
 import { fetchFinancialContext } from '../lib/financialContext';
 
 const router = Router();
@@ -68,19 +68,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (analysisErr) throw analysisErr;
 
-    // 5. Generate & save LinkedIn drafts
-    const drafts = await generateLinkedInDrafts(analysis, name);
-    if (drafts.length > 0) {
-      await supabase.from('linkedin_drafts').insert(
-        drafts.map(d => ({
-          analysis_id: savedAnalysis.id,
-          draft_number: d.draft_number,
-          content: d.content,
-        })),
-      );
-    }
-
-    // 6. Save sources to analysis_sources table (versioned accumulation)
+    // 5. Save sources to analysis_sources table (versioned accumulation)
     const sourceRows = (Object.entries(analysis.sources ?? {}) as [string, any[]][])
       .flatMap(([tab, srcs]) =>
         (srcs ?? []).map(s => ({
@@ -131,7 +119,6 @@ router.post('/', async (req: Request, res: Response) => {
       strategy_v2:         analysis.strategy_v2,
       financials_v2:       analysis.financials_v2,
       dataSource,
-      linkedinDrafts: drafts,
     });
   } catch (err) {
     console.error('[POST /api/analyze]', err);

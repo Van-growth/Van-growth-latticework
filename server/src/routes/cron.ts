@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
-import { selectDailyCompany, analyzeCompany, generateLinkedInDrafts } from '../lib/claude';
+import { selectDailyCompany, analyzeCompany } from '../lib/claude';
 
 const router = Router();
 
@@ -61,18 +61,6 @@ router.post('/daily', async (_req: Request, res: Response) => {
       .single();
 
     if (analysisErr) throw analysisErr;
-
-    // 5. Generate & save LinkedIn drafts
-    const drafts = await generateLinkedInDrafts(analysis, companyName);
-    if (drafts.length > 0) {
-      await supabase.from('linkedin_drafts').insert(
-        drafts.map(d => ({
-          analysis_id: savedAnalysis.id,
-          draft_number: d.draft_number,
-          content: d.content,
-        })),
-      );
-    }
 
     res.json({
       success: true,

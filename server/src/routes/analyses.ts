@@ -36,7 +36,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const [analysisRes, playersRes, draftsRes] = await Promise.all([
+    const [analysisRes, playersRes] = await Promise.all([
       supabase
         .from('analyses')
         .select('*, companies(name)')
@@ -47,11 +47,6 @@ router.get('/:id', async (req: Request, res: Response) => {
         .select('id, role, player_name, description')
         .eq('analysis_id', id)
         .order('created_at'),
-      supabase
-        .from('linkedin_drafts')
-        .select('id, draft_number, content')
-        .eq('analysis_id', id)
-        .order('draft_number'),
     ]);
 
     if (analysisRes.error) throw analysisRes.error;
@@ -85,7 +80,6 @@ router.get('/:id', async (req: Request, res: Response) => {
       is_shared: row.is_shared ?? false,
       share_token: row.share_token ?? null,
       valuechainPlayers: playersRes.data ?? [],
-      linkedinDrafts: draftsRes.data ?? [],
       // V2 fields
       summary_v2:          row.summary_v2          ?? null,
       industry_history_v2: row.industry_history_v2 ?? null,

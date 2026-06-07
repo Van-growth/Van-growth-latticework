@@ -342,12 +342,6 @@ export interface FinancialsV2 {
 
 // ── Common ────────────────────────────────────────────────────────────────────
 
-export interface LinkedInDraft {
-  id: string;
-  draft_number: number;
-  content: string;
-}
-
 export interface AnalysisSummary {
   id: string;
   companyName: string;
@@ -391,7 +385,6 @@ export interface AnalysisDetail {
   is_shared?: boolean;
   share_token?: string | null;
   valuechainPlayers: ValueChainPlayer[];
-  linkedinDrafts: LinkedInDraft[];
 }
 
 export interface AnalyzeResponse extends AnalysisDetail {
