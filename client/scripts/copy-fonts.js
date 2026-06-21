@@ -7,9 +7,8 @@ const destDir = path.join(__dirname, '..', 'public', 'fonts');
 fs.mkdirSync(destDir, { recursive: true });
 
 const files = [
-  { src: 'noto-sans-kr-korean-400-normal.woff2', dest: 'noto-sans-kr-400.woff2' },
-  { src: 'noto-sans-kr-korean-700-normal.woff2', dest: 'noto-sans-kr-700.woff2' },
-  { src: 'noto-sans-kr-latin-400-normal.woff2',  dest: 'noto-sans-kr-latin-400.woff2' },
+  { src: 'noto-sans-kr-korean-400-normal.woff', dest: 'noto-sans-kr-400.woff' },
+  { src: 'noto-sans-kr-korean-700-normal.woff', dest: 'noto-sans-kr-700.woff' },
 ];
 
 let copied = 0;

@@ -23,11 +23,14 @@ import type {
   FinancialsV2BSRow,
 } from '@/types';
 
+// Absolute URL required: react-pdf fetches fonts via URL at render time,
+// and relative paths may not resolve correctly in all environments.
+const _origin = typeof window !== 'undefined' ? window.location.origin : '';
 Font.register({
   family: 'NotoSansKR',
   fonts: [
-    { src: '/fonts/noto-sans-kr-400.woff2', fontWeight: 400 },
-    { src: '/fonts/noto-sans-kr-700.woff2', fontWeight: 700 },
+    { src: `${_origin}/fonts/noto-sans-kr-400.woff`, fontWeight: 400 },
+    { src: `${_origin}/fonts/noto-sans-kr-700.woff`, fontWeight: 700 },
   ],
 });
 Font.registerHyphenationCallback(w => [w]);
