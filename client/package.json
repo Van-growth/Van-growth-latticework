@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "node scripts/copy-fonts.js"
   },
   "dependencies": {
+    "@fontsource/noto-sans-kr": "^5.2.9",
+    "@react-pdf/renderer": "^4.5.1",
     "lucide-react": "^1.14.0",
     "next": "15.5.15",
     "react": "19.1.0",

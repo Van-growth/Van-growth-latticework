@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase,
 } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
+const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
 import {
   AnalysisDetail,
   Metric,
@@ -1772,7 +1774,10 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
               {new Date(data.createdAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
           </div>
-          <DataSourceBadge source={data.dataSource ?? 'web_search'} />
+          <div className="flex items-center gap-2">
+            <ExportPdfButton data={data} />
+            <DataSourceBadge source={data.dataSource ?? 'web_search'} />
+          </div>
         </div>
       </div>
 
