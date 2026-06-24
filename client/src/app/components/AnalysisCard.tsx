@@ -73,6 +73,9 @@ function SectionCard({ title, dotColor = 'bg-gray-300', children, className = ''
 
 function DataValue({ text, className = '' }: { text: string | null | undefined; className?: string }) {
   const str = text ?? '—';
+  if (isPlaceholder(str)) {
+    return <span className={`text-gray-400 ${className}`}>—</span>;
+  }
   if (str === '확인 필요' || str === '공개 없음') {
     return <span className={`text-gray-400 italic ${className}`}>{str}</span>;
   }
@@ -95,12 +98,13 @@ function MetricCard({ value, label, trend }: { value: string; label: string; tre
     : trend === 'flat'
     ? <span className="text-gray-400 text-[10px] ml-1">→</span>
     : null;
-  const isUnknown = value === '확인 필요' || value === '공개 없음';
+  const isUnknown = value === '확인 필요' || value === '공개 없음' || isPlaceholder(value);
+  const displayValue = isPlaceholder(value) ? '—' : value;
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <div className="text-[11px] text-gray-400 mb-1 leading-tight">{label}</div>
       <div className={`font-medium leading-none flex items-baseline ${isUnknown ? 'text-sm' : 'text-xl text-gray-900'}`}>
-        <DataValue text={value} />
+        <DataValue text={displayValue} />
         {!isUnknown && trendEl}
       </div>
     </div>
@@ -238,6 +242,11 @@ function CitedText({ text, className = '' }: { text: string | null | undefined; 
 }
 
 // ── Legacy Helpers ────────────────────────────────────────────────────────────
+
+function isPlaceholder(v: string | number | null | undefined): boolean {
+  if (v == null) return false;
+  return /^-999([.,]\d+)?([%\s]|$)/.test(String(v).trim());
+}
 
 function splitLines(text: string): string[] {
   return text.split('\n').map(s => s.trim()).filter(Boolean);
@@ -868,7 +877,7 @@ function BusinessModelV2Tab({ bm, sources }: { bm: BusinessModelV2; sources: Sou
     { label: 'Net Margin', value: `${ue.net_margin}%` },
     { label: 'FCF Margin', value: `${ue.fcf_margin}%` },
     ...(ue.nrr ? [{ label: 'NRR', value: `${ue.nrr}%` }] : []),
-  ].filter(m => m.value !== '0%');
+  ].filter(m => m.value !== '0%' && !isPlaceholder(m.value));
 
   return (
     <div className="space-y-4">
@@ -1484,7 +1493,7 @@ function FinancialsV2Tab({ f, sources, ticker, onRefresh, isRefreshing }: {
     { label: 'D/E Ratio',     value: f.munger_buffett_metrics.debt_to_equity },
     { label: 'Interest Coverage', value: f.munger_buffett_metrics.interest_coverage },
     { label: 'Reinvestment Rate', value: f.munger_buffett_metrics.reinvestment_rate },
-  ].filter(m => m.value && m.value !== '추정 불가' && m.value !== '확인 필요');
+  ].filter(m => m.value && m.value !== '추정 불가' && m.value !== '확인 필요' && !isPlaceholder(m.value));
 
   const cfDots: Record<string, string> = {
     'Operating CF':  'bg-blue-400',
