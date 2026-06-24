@@ -377,25 +377,58 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
         )}
       </div>
 
-      {/* Top customers */}
-      {s.top_customers.length > 0 && (
+      {/* Top customers + concentration */}
+      {(s.top_customers.length > 0 || s.customer_concentration) && (
         <SectionCard title="주요 고객사" dotColor="bg-violet-400">
-          <div className="flex flex-wrap gap-2">
-            {s.top_customers.map((c, i) => (
-              <Tag key={i} label={c} color="violet" />
-            ))}
-          </div>
+          {s.top_customers.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {s.top_customers.map((c, i) => (
+                <Tag key={i} label={c} color="violet" />
+              ))}
+            </div>
+          )}
+          {s.customer_concentration && (
+            <div className="space-y-2 mt-2">
+              {/* Concentration badge */}
+              <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg font-medium ${
+                s.customer_concentration.is_concentrated
+                  ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                  : 'bg-green-50 text-green-700 border border-green-100'
+              }`}>
+                <span>{s.customer_concentration.is_concentrated ? '⚠️' : '✅'}</span>
+                <span>
+                  상위 {s.customer_concentration.top_n}개 고객이 매출 {s.customer_concentration.top_n_share}% 차지
+                  {s.customer_concentration.trend === 'diversifying' && ' — 다변화 진행 중'}
+                  {s.customer_concentration.trend === 'concentrating' && ' — 집중도 심화'}
+                </span>
+              </div>
+              {/* Per-customer bar chart */}
+              {s.customer_concentration.customers.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {s.customer_concentration.customers.map((c, i) => (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="text-gray-600">{c.name}</span>
+                        <span className="font-medium text-gray-700">{c.revenue_share}%</span>
+                      </div>
+                      <ProgressBar value={c.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </SectionCard>
       )}
 
-      {/* Bull / Bear */}
+      {/* 성장 모멘텀 / 핵심 리스크 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">Bull Case</div>
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">성장 모멘텀</div>
           <p className="text-sm text-gray-700 leading-relaxed">{s.bull_case}</p>
         </div>
         <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-widest text-red-500 mb-2">Bear Case</div>
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-red-500 mb-2">핵심 리스크</div>
           <p className="text-sm text-gray-700 leading-relaxed">{s.bear_case}</p>
         </div>
       </div>
@@ -470,11 +503,10 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 산업역사 ──────────────────────────────────────────────────────────
 
-function IndustryHistoryV2Tab({ h, sources, ticker }: { h: IndustryHistoryV2; sources: Source[] | undefined; ticker: string | null }) {
+function IndustryHistoryV2Tab({ h, sources }: { h: IndustryHistoryV2; sources: Source[] | undefined }) {
   return (
     <div className="space-y-4">
       <OneLinerBlock text={h.one_liner} />
-      <TradingViewWidget symbol={ticker} />
       <div>
         {h.timeline.map((item, i) => {
           const isLast = i === h.timeline.length - 1;
@@ -1505,9 +1537,6 @@ function FinancialsV2Tab({ f, sources, ticker, onRefresh, isRefreshing }: {
   return (
     <div className="space-y-4">
       <OneLinerBlock text={f.one_liner} />
-      {/* Stock chart */}
-      <TradingViewWidget symbol={ticker} />
-
       {/* Refresh button */}
       <div className="flex justify-end">
         <button
@@ -2043,7 +2072,7 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
         )}
         {tab === 'industry_history' && (
           data.industry_history_v2
-            ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} ticker={ticker} />
+            ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
             : <IndustryHistoryTab data={data} />
         )}
         {tab === 'tech_evolution' && (

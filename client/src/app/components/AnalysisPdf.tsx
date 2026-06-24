@@ -576,25 +576,55 @@ function SummarySection({ v }: { v: SummaryV2 }) {
         </>
       )}
 
-      {/* Top customers */}
-      {v.top_customers?.length > 0 && (
+      {/* Top customers + concentration */}
+      {(v.top_customers?.length > 0 || v.customer_concentration) && (
         <>
-          <SubHeader>주요 고객</SubHeader>
-          <Text style={s.para}>{v.top_customers.join(' · ')}</Text>
+          <SubHeader>주요 고객사</SubHeader>
+          {v.top_customers?.length > 0 && (
+            <Text style={[s.para, { marginBottom: 4 }]}>{v.top_customers.join(' · ')}</Text>
+          )}
+          {v.customer_concentration && (
+            <View style={{ marginBottom: 6 }}>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+                backgroundColor: v.customer_concentration.is_concentrated ? '#FFFBEB' : '#F0FDF4',
+                borderRadius: 4, padding: 5, marginBottom: 5,
+              }}>
+                <Text style={{ fontSize: 7, color: v.customer_concentration.is_concentrated ? '#D97706' : '#16A34A' }}>
+                  {v.customer_concentration.is_concentrated ? '⚠' : '✓'} 상위 {v.customer_concentration.top_n}개 고객 매출 {v.customer_concentration.top_n_share}% 차지
+                  {v.customer_concentration.trend === 'diversifying' ? ' — 다변화 진행 중' : v.customer_concentration.trend === 'concentrating' ? ' — 집중도 심화' : ''}
+                </Text>
+              </View>
+              {v.customer_concentration.customers.length > 0 && (
+                <View style={s.table}>
+                  <View style={s.tHead}>
+                    <Text style={[s.th, { flex: 2 }]}>고객사</Text>
+                    <Text style={s.th}>매출 비중</Text>
+                  </View>
+                  {v.customer_concentration.customers.map((c, i) => (
+                    <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
+                      <Text style={[s.td, { flex: 2 }]}>{c.name}</Text>
+                      <Text style={s.td}>{c.revenue_share}%</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </>
       )}
 
-      {/* Bull / Bear */}
+      {/* 성장 모멘텀 / 핵심 리스크 */}
       <View style={s.grid2}>
         {v.bull_case && (
           <View style={[s.gridLeft, s.card, { borderLeftColor: C.green }]}>
-            <Text style={s.cardTitle}>Bull Case</Text>
+            <Text style={s.cardTitle}>성장 모멘텀</Text>
             <Text style={s.cardText}>{v.bull_case}</Text>
           </View>
         )}
         {v.bear_case && (
           <View style={[s.gridRight, s.card, { borderLeftColor: C.red }]}>
-            <Text style={s.cardTitle}>Bear Case</Text>
+            <Text style={s.cardTitle}>핵심 리스크</Text>
             <Text style={s.cardText}>{v.bear_case}</Text>
           </View>
         )}

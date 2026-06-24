@@ -164,6 +164,13 @@ export interface SummaryV2 {
   products: { name: string; revenue_share: number }[];
   key_metrics: { label: string; value: string; trend: 'up' | 'down' | 'flat' }[];
   top_customers: string[];
+  customer_concentration?: {
+    customers: { name: string; revenue_share: number }[];
+    top_n: number;
+    top_n_share: number;
+    is_concentrated: boolean;
+    trend: 'concentrating' | 'diversifying' | 'stable';
+  };
   key_markets: { country: string; revenue_share: number }[];
   one_line: string;
   bull_case: string;

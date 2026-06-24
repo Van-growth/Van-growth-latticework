@@ -54,11 +54,19 @@ export interface SummaryV2 {
   products: { name: string; revenue_share: number }[];
   key_metrics: { label: string; value: string; trend: 'up' | 'down' | 'flat' }[];
   top_customers: string[];
+  customer_concentration?: {
+    customers: { name: string; revenue_share: number }[];
+    top_n: number;
+    top_n_share: number;
+    is_concentrated: boolean;
+    trend: 'concentrating' | 'diversifying' | 'stable';
+  };
   key_markets: { country: string; revenue_share: number }[];
   one_line: string;
   bull_case: string;
   bear_case: string;
   oneLiner: string;
+  sources?: SectionSource[];
 }
 
 export interface IndustryHistoryV2 {
@@ -275,6 +283,7 @@ export interface FounderV2 {
     cofounders: string[];
   };
   one_liner: string;
+  sources?: SectionSource[];
 }
 
 export interface AnalysisData {
@@ -298,7 +307,7 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     company: '', ticker: null, industry: '', hq: '',
     value_chain_position: 'midstream',
     products: [], key_metrics: [], top_customers: [], key_markets: [],
-    one_line: '', bull_case: '', bear_case: '', oneLiner: '',
+    one_line: '', bull_case: '', bear_case: '', oneLiner: '', sources: [],
   },
   industry_history_v2: { industry_name: '', timeline: [], why_durable: '', chasm_points: [], one_liner: '', sources: [] },
   tech_evolution_v2: { tech_name: '', stages: [], current_stage: '', next_inflection: '', one_liner: '', sources: [] },
@@ -333,6 +342,7 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     reputation: { sns_style: '-', media_exposure: '-', blind_glassdoor: '-' },
     network: { investors: [], advisors_board: [], cofounders: [] },
     one_liner: '-',
+    sources: [],
   },
   sources: {},
 };
@@ -492,9 +502,11 @@ const SECTION_SYSTEM = `당신은 전문 기업 분석가입니다. 제공된 �
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `아래 스키마의 JSON 객체만 출력:
-{"company":"기업명","ticker":"TradingView 형식 티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"one_line":"투자자 관점 핵심 한줄 20자이내","bull_case":"강세 시나리오 2줄이내","bear_case":"약세 시나리오 2줄이내","oneLiner":"이 기업의 현재 상황을 투자자·실무자가 바로 이해할 수 있는 1~2문장 핵심 해석"}
+{"company":"기업명","ticker":"TradingView 형식 티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"customer_concentration":{"customers":[{"name":"고객사명","revenue_share":공시 확인된 숫자}],"top_n":숫자,"top_n_share":숫자,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"one_line":"전략·실무 관점 핵심 한줄 20자이내","bull_case":"성장 모멘텀: 시장 확장·파트너십 기회·경쟁 우위 관점 2줄이내","bear_case":"핵심 리스크: 실행 리스크·경쟁 위협·규제/시장 변수 관점 2줄이내","oneLiner":"이 기업의 현재 상황을 전략·실무 담당자가 바로 이해할 수 있는 1~2문장 핵심 해석","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 top_customers: IR·공시에서 확인된 것만. 추정이면 빈 배열. key_markets.revenue_share: 공시 수치 없으면 해당 국가 항목 자체를 제외.
 ticker 필드는 반드시 TradingView 형식으로 반환: 미국 NASDAQ 상장 → "NASDAQ:심볼" (예: NASDAQ:NVDA), 미국 NYSE 상장 → "NYSE:심볼" (예: NYSE:PLTR), 한국 코스피 → "KRX:종목코드" (예: KRX:005930), 한국 코스닥 → "KOSDAQ:종목코드" (예: KOSDAQ:388130), 비상장 또는 불확실하면 null.
+bull_case/bear_case: 전략·실무 담당자 관점으로 작성. 주가·밸류에이션·투자 수익률 언급 금지.
+customer_concentration.customers: 공시에서 확인된 고객사별 매출 비중만. 없으면 빈 배열 []. top_n_share: 상위 N개 고객 합산 비중. is_concentrated: top_n_share >= 30이면 true.
 oneLiner 규칙: 숫자 나열 금지. "왜 이 숫자가 의미있는가"를 서사로 설명. 예시 스타일: "매출은 늘었는데 이익은 줄었다 — 글로벌 인프라에 돈을 쏟아붓는 투자 시즌".`,
 
   industry_history_v2: `아래 스키마의 JSON 객체만 출력:
@@ -506,18 +518,20 @@ timeline은 연대순 4~6개. 본문 내 중요 사실에는 [n] 형식으로 �
 stages는 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.`,
 
   value_chain_v2: `아래 스키마의 JSON 객체만 출력:
-{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내","one_liner":"분석기업 밸류체인 포지션 핵심 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true 설정.`,
+{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내","one_liner":"분석기업 밸류체인 포지션 핵심 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
+layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true 설정. value_flow·subject_position 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   business_model_v2: `아래 스키마의 JSON 객체만 출력:
-{"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}],"one_liner":"비즈니스모델 핵심 경쟁우위 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}`,
+{"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}],"one_liner":"비즈니스모델 핵심 경쟁우위 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
+growth_motion_detail·moat.description 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   competitors_v2: `아래 스키마의 JSON 객체만 출력:
-{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율","strengths":["강점 1줄 최대3개"],"weaknesses":["약점 1줄 최대2개"],"vs_subject":"차별점 1줄"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower","one_liner":"경쟁구도 핵심 포지션 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-direct는 글로벌 직접 경쟁사 3~5개 필수.`,
+{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율","strengths":["강점 1줄 최대3개"],"weaknesses":["약점 1줄 최대2개"],"vs_subject":"차별점 1줄"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower","one_liner":"경쟁구도 핵심 포지션 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
+direct는 글로벌 직접 경쟁사 3~5개 필수. 시장점유율·강점·약점 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   strategy_v2: `아래 스키마의 JSON 객체만 출력:
-{"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내","one_liner":"전략 핵심 방향성 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}`,
+{"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내","one_liner":"전략 핵심 방향성 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
+strategy_coherence·ten_year_durability 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   financials_v2: `아래 스키마의 JSON 객체만 출력:
 {"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요'","fy2022":"공시값 or '확인 필요'","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"공시값% or '수치% (추정)' or '확인 필요'","roic":"공시값% or '수치% (추정)' or '확인 필요'","owner_earnings":"공시값 or '확인 필요'","debt_to_equity":"공시값 or '확인 필요'","interest_coverage":"공시값 or '확인 필요'","reinvestment_rate":"공시값% or '수치% (추정)' or '확인 필요'"},"key_risks":["리스크 1줄 최대5개"],"outlook":{"shortTerm":"단기 전망 (3~6개월) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","midLongTerm":"중장기 전망 (1~3년) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","keyRisks":["핵심 리스크 1줄 최대3개"]},"one_liner":"재무 현황 핵심 투자 포인트 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
@@ -629,8 +643,8 @@ async function callFounderSection(companyName: string): Promise<FounderV2 | null
 정보가 없는 항목은 반드시 "-" 표시. 비상장사일 경우 재무보다 이 섹션 분량을 더 깊게 조사.`;
 
     const schema = `아래 스키마의 JSON 객체만 출력:
-{"founders":[{"name":"이름","title":"직책","education":"출신학교 또는 '-'","major":"전공 또는 '-'"}],"career_trajectory":[{"period":"기간(예: 2018–현재)","company":"기업명","role":"직책/역할"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"기업명","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"SNS 스타일 1줄 또는 '-'","media_exposure":"주요 미디어 노출 1줄 또는 '-'","blind_glassdoor":"Blind/Glassdoor 평판 요약 1줄 또는 '-'"},"network":{"investors":["투자자 이름/기관 최대 5개"],"advisors_board":["어드바이저/보드 최대 5개"],"cofounders":["공동창업자 이름 최대 5개"]},"one_liner":"N회차 창업자, [강점] / [리스크] 형식의 1문장 요약"}
-career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventures가 없으면 빈 배열 [].`;
+{"founders":[{"name":"이름","title":"직책","education":"출신학교 또는 '-'","major":"전공 또는 '-'"}],"career_trajectory":[{"period":"기간(예: 2018–현재)","company":"기업명","role":"직책/역할"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"기업명","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"SNS 스타일 1줄 또는 '-'","media_exposure":"주요 미디어 노출 1줄 또는 '-'","blind_glassdoor":"Blind/Glassdoor 평판 요약 1줄 또는 '-'"},"network":{"investors":["투자자 이름/기관 최대 5개"],"advisors_board":["어드바이저/보드 최대 5개"],"cofounders":["공동창업자 이름 최대 5개"]},"one_liner":"N회차 창업자, [강점] / [리스크] 형식의 1문장 요약","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
+career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventures가 없으면 빈 배열 []. 검색에서 확인한 LinkedIn·뉴스·Crunchbase URL은 sources[].url에 반드시 포함.`;
 
     const raw = await runWithWebSearch(
       systemPrompt,
