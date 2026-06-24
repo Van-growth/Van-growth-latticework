@@ -1,9 +1,9 @@
 // Orchestrates DART+KIS / EDGAR+FMP data fetch and formats as Claude prompt context
 
-import { fetchDartData, DartData }   from './dart';
-import { fetchEdgarData, EdgarData } from './edgar';
-import { fetchKisQuote, KisQuote }   from './kis';
-import { fetchFmpData, buildFmpContext } from './fmp';
+import { fetchDartData, DartData }          from './dart';
+import { fetchEdgarData, EdgarData }        from './edgar';
+import { fetchKisQuote, KisQuote }          from './kis';
+import { fetchFmpData, FmpData, buildFmpContext } from './fmp';
 
 export type DataSource = 'dart' | 'edgar' | 'web_search';
 
@@ -74,23 +74,77 @@ function buildDartContext(d: DartData, kis: KisQuote | null): string {
 
 // ── EDGAR + FMP 컨텍스트 ──────────────────────────────────────────────────────
 
-function buildEdgarContext(e: EdgarData, fmpText: string | null): string {
+function fmpUsd(n: number | undefined | null): string | undefined {
+  if (n == null || isNaN(n)) return undefined;
+  const sign = n < 0 ? '-' : '';
+  const abs  = Math.abs(n);
+  const b    = abs / 1_000_000_000;
+  return b >= 1
+    ? `${sign}${b.toFixed(1)}B USD`
+    : `${sign}${(abs / 1_000_000).toFixed(0)}M USD`;
+}
+
+function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
+  const ef = e.financials;
+  const fi = fmp?.income?.[0];
+  const fb = fmp?.balance?.[0];
+  const fc = fmp?.cashflow?.[0];
+
+  // 항목별 EDGAR 우선, FMP 폴백
+  const row = (label: string, edgarVal: string | undefined, fmpVal: number | undefined | null) => {
+    const v = edgarVal ?? fmpUsd(fmpVal);
+    if (!v) return null;
+    const src = edgarVal ? '(EDGAR)' : '(FMP)';
+    return `· ${label.padEnd(14)} ${v}  ${src}`;
+  };
+
   const lines: string[] = [
-    '=== SEC EDGAR 공시 데이터 (미국 증권거래위원회) ===',
+    '=== SEC EDGAR / FMP 재무 데이터 ===',
     `기업: ${e.companyName}  (CIK: ${e.cik}${e.ticker ? `  ticker: ${e.ticker}` : ''})`,
   ];
 
-  if (e.financials.year) {
-    lines.push(`\n[${e.financials.year} 10-K 재무 수치 — XBRL 기준]`);
-    if (e.financials.revenue)        lines.push(`· Revenue:          ${e.financials.revenue}`);
-    if (e.financials.operatingIncome) lines.push(`· Operating Income: ${e.financials.operatingIncome}`);
-    if (e.financials.netIncome)      lines.push(`· Net Income:       ${e.financials.netIncome}`);
-    lines.push('→ 재무 섹션에 이 수치를 우선 사용하고 "(SEC EDGAR)" 출처를 명시하세요.');
+  const year = ef.year ?? fi?.date?.slice(0, 4);
+  if (year) {
+    lines.push(`\n[${year} 연간 손익계산서]`);
+    const r: (string | null)[] = [
+      row('Revenue',        ef.revenue,          fi?.revenue),
+      row('Gross Profit',   ef.grossProfit,       fi?.grossProfit),
+      row('Operating Inc.', ef.operatingIncome,   fi?.operatingIncome),
+      row('Net Income',     ef.netIncome,         fi?.netIncome),
+      row('EBITDA',         ef.ebitda,            fi?.ebitda),
+    ];
+    r.filter(Boolean).forEach(l => lines.push(l!));
+
+    lines.push(`\n[재무상태표]`);
+    const b: (string | null)[] = [
+      row('Cash',           ef.cash,              fb?.cashAndEquivalents),
+      row('Total Assets',   ef.totalAssets,       fb?.totalAssets),
+      row('Total Liab.',    ef.totalLiabilities,  fb?.totalLiabilities),
+      row('Total Equity',   ef.totalEquity,       fb?.totalEquity),
+    ];
+    b.filter(Boolean).forEach(l => lines.push(l!));
+
+    lines.push(`\n[현금흐름]`);
+    const cf: (string | null)[] = [
+      row('Operating CF',   ef.operatingCF,       fc?.operatingCashFlow),
+      row('Investing CF',   ef.investingCF,       fc?.capitalExpenditure != null ? -Math.abs(fc.capitalExpenditure) : undefined),
+      row('Financing CF',   ef.financingCF,       fc?.dividendsPaid      != null ? -Math.abs(fc.dividendsPaid)      : undefined),
+    ];
+    cf.filter(Boolean).forEach(l => lines.push(l!));
+
+    lines.push('→ 재무 섹션에 이 수치들을 사용하고 각 출처((EDGAR) 또는 (FMP))를 명시하세요.');
   }
 
-  if (fmpText) {
-    lines.push('');
-    lines.push(fmpText);
+  // FMP key metrics (valuation)
+  if (fmp?.keyMetrics) {
+    const km = fmp.keyMetrics;
+    lines.push('\n[Valuation — TTM]');
+    if (km.marketCap)           lines.push(`· Market Cap     ${fmpUsd(km.marketCap)}  (FMP)`);
+    if (km.peRatioTTM)          lines.push(`· P/E            ${km.peRatioTTM.toFixed(1)}x  (FMP)`);
+    if (km.priceToBookRatioTTM) lines.push(`· P/B            ${km.priceToBookRatioTTM.toFixed(2)}x  (FMP)`);
+    if (km.roeTTM)              lines.push(`· ROE            ${(km.roeTTM * 100).toFixed(1)}%  (FMP)`);
+    if (km.roicTTM)             lines.push(`· ROIC           ${(km.roicTTM * 100).toFixed(1)}%  (FMP)`);
+    if (km.debtToEquityTTM)     lines.push(`· D/E            ${km.debtToEquityTTM.toFixed(2)}  (FMP)`);
   }
 
   if (e.filings.length) {
@@ -122,8 +176,7 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
         const fmpData = edgar.ticker
           ? await fetchFmpData(companyName, edgar.ticker).catch(() => null)
           : null;
-        const fmpText = fmpData ? buildFmpContext(fmpData) : null;
-        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpText) };
+        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData) };
       }
     } else {
       // EDGAR + FMP 병렬
@@ -140,8 +193,7 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
         const fmpFinal = f ?? (e.ticker
           ? await fetchFmpData(companyName, e.ticker).catch(() => null)
           : null);
-        const fmpText = fmpFinal ? buildFmpContext(fmpFinal) : null;
-        return { source: 'edgar', contextText: buildEdgarContext(e, fmpText) };
+        return { source: 'edgar', contextText: buildEdgarContext(e, fmpFinal) };
       }
       if (f) {
         // EDGAR 없이 FMP만 있는 경우
