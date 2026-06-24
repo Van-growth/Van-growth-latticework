@@ -21,6 +21,7 @@ import type {
   FinancialsV2,
   FinancialsV2Row,
   FinancialsV2BSRow,
+  FounderV2,
   Source,
   AnalysisSources,
 } from '@/types';
@@ -503,6 +504,7 @@ function SummarySection({ v }: { v: SummaryV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={1} title="기업 개요" />
+      <OneLinerBoxPdf text={v.one_line} />
 
       {/* Basic info */}
       <FieldRow label="기업명" value={v.company} />
@@ -511,7 +513,7 @@ function SummarySection({ v }: { v: SummaryV2 }) {
       <FieldRow label="본사" value={v.hq} />
       <FieldRow label="밸류체인 위치" value={v.value_chain_position} />
 
-      {/* One-liner */}
+      {/* Narrative */}
       {v.oneLiner && (
         <>
           <Divider />
@@ -597,6 +599,7 @@ function SummarySection({ v }: { v: SummaryV2 }) {
           </View>
         )}
       </View>
+      <SectionSources sources={v.sources} />
     </View>
   );
 }
@@ -1129,6 +1132,138 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
   );
 }
 
+// ── Section 9: 창업자 분석 ────────────────────────────────────────────────────
+
+function FounderSection({ v }: { v: FounderV2 }) {
+  const isSerial = v.founding_history.type === 'serial';
+  return (
+    <View style={s.section}>
+      <SectionHeader num={9} title="창업자 분석" />
+      <OneLinerBoxPdf text={v.one_liner} />
+
+      {/* Founder profiles */}
+      {v.founders.length > 0 && (
+        <>
+          <SubHeader>창업자 기본 정보</SubHeader>
+          <View style={s.table}>
+            <View style={s.tHead}>
+              <Text style={[s.th, { flex: 1.5 }]}>이름</Text>
+              <Text style={s.th}>직함</Text>
+              <Text style={[s.th, { flex: 2 }]}>학교</Text>
+              <Text style={s.th}>전공</Text>
+            </View>
+            {v.founders.map((fd, i) => (
+              <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
+                <Text style={[s.td, { flex: 1.5 }]}>{fd.name}</Text>
+                <Text style={s.td}>{fd.title && fd.title !== '-' ? fd.title : '—'}</Text>
+                <Text style={[s.td, { flex: 2 }]}>{fd.education && fd.education !== '-' ? fd.education : '—'}</Text>
+                <Text style={s.td}>{fd.major && fd.major !== '-' ? fd.major : '—'}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* Career trajectory */}
+      {v.career_trajectory.length > 0 && (
+        <>
+          <SubHeader>커리어 궤적</SubHeader>
+          {v.career_trajectory.map((ct, i) => (
+            <View key={i} style={[s.row, { marginBottom: 4, paddingBottom: 4, borderBottom: `1 solid ${C.border}` }]}>
+              <Text style={[s.label, { width: 80 }]}>{ct.period}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.value, { fontWeight: 700 }]}>{ct.company}</Text>
+                <Text style={[s.value, { color: C.mid }]}>{ct.role}</Text>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {/* Founding history */}
+      <SubHeader>창업 이력</SubHeader>
+      <View style={[s.tagsRow, { marginBottom: 4 }]}>
+        <Text style={[s.tag, {
+          backgroundColor: isSerial ? '#EDE9FE' : C.bg,
+          color: isSerial ? '#7C3AED' : C.mid,
+        }]}>
+          {isSerial ? 'Serial Founder' : '1st Time Founder'}
+        </Text>
+      </View>
+      {v.founding_history.previous_ventures.length > 0 ? (
+        <View style={s.table}>
+          <View style={s.tHead}>
+            <Text style={[s.th, { flex: 2 }]}>기업명</Text>
+            <Text style={s.th}>결과</Text>
+            <Text style={s.th}>엑싯 유형</Text>
+          </View>
+          {v.founding_history.previous_ventures.map((pv, i) => (
+            <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
+              <Text style={[s.td, { flex: 2 }]}>{pv.name}</Text>
+              <Text style={s.td}>{pv.result}</Text>
+              <Text style={s.td}>{pv.exit_type ?? '—'}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={[s.para, { color: C.light }]}>이전 창업 이력 없음</Text>
+      )}
+
+      {/* Reputation */}
+      {(v.reputation.sns_style !== '-' || v.reputation.media_exposure !== '-' || v.reputation.blind_glassdoor !== '-') && (
+        <>
+          <SubHeader>평판 & 퍼블릭 시그널</SubHeader>
+          {v.reputation.sns_style !== '-' && (
+            <View style={s.row}>
+              <Text style={s.label}>SNS 스타일</Text>
+              <Text style={s.value}>{v.reputation.sns_style}</Text>
+            </View>
+          )}
+          {v.reputation.media_exposure !== '-' && (
+            <View style={s.row}>
+              <Text style={s.label}>미디어 노출</Text>
+              <Text style={s.value}>{v.reputation.media_exposure}</Text>
+            </View>
+          )}
+          {v.reputation.blind_glassdoor !== '-' && (
+            <View style={s.row}>
+              <Text style={s.label}>Blind/GD</Text>
+              <Text style={s.value}>{v.reputation.blind_glassdoor}</Text>
+            </View>
+          )}
+        </>
+      )}
+
+      {/* Network */}
+      {(v.network.investors.length > 0 || v.network.advisors_board.length > 0 || v.network.cofounders.length > 0) && (
+        <>
+          <SubHeader>네트워크</SubHeader>
+          {v.network.cofounders.length > 0 && (
+            <View style={s.row}>
+              <Text style={s.label}>공동창업팀</Text>
+              <Text style={s.value}>{v.network.cofounders.join(' · ')}</Text>
+            </View>
+          )}
+          {v.network.investors.length > 0 && (
+            <View style={s.row}>
+              <Text style={s.label}>투자자</Text>
+              <Text style={s.value}>{v.network.investors.join(' · ')}</Text>
+            </View>
+          )}
+          {v.network.advisors_board.length > 0 && (
+            <View style={s.row}>
+              <Text style={s.label}>어드바이저/보드</Text>
+              <Text style={s.value}>{v.network.advisors_board.join(' · ')}</Text>
+            </View>
+          )}
+        </>
+      )}
+
+      <SectionSources sources={v.sources} />
+    </View>
+  );
+}
+
 // ── Sources Page ─────────────────────────────────────────────────────────────
 
 const SRC_TAB_LABELS: Record<string, string> = {
@@ -1140,6 +1275,7 @@ const SRC_TAB_LABELS: Record<string, string> = {
   competitors:      '경쟁사',
   strategy:         '전략',
   financials:       '재무',
+  founder:          '창업자',
 };
 
 function SourceRow({ src, idx }: { src: Source; idx: number }) {
@@ -1166,15 +1302,16 @@ function SourceRow({ src, idx }: { src: Source; idx: number }) {
   );
 }
 
-function SourcesPage({ sources, company }: { sources: AnalysisSources; company: string }) {
+function SourcesPage({ sources, founderSources, company }: { sources: AnalysisSources; founderSources?: Source[] | null; company: string }) {
   const entries = Object.entries(sources) as [keyof AnalysisSources, Source[]][];
   const filled = entries.filter(([, srcs]) => srcs && srcs.length > 0);
-  if (filled.length === 0) return null;
+  const hasFounder = !!(founderSources && founderSources.length > 0);
+  if (filled.length === 0 && !hasFounder) return null;
 
   return (
     <Page size="A4" style={s.page}>
       <View style={s.section}>
-        <SectionHeader num={9} title="출처 목록" />
+        <SectionHeader num={10} title="출처 목록" />
         {filled.map(([key, srcs]) => (
           <View key={key}>
             <Text style={s.srcGroupLabel}>{SRC_TAB_LABELS[key] ?? key}</Text>
@@ -1183,6 +1320,14 @@ function SourcesPage({ sources, company }: { sources: AnalysisSources; company: 
             ))}
           </View>
         ))}
+        {hasFounder && (
+          <View>
+            <Text style={s.srcGroupLabel}>창업자</Text>
+            {founderSources!.map((src, i) => (
+              <SourceRow key={i} src={src} idx={i} />
+            ))}
+          </View>
+        )}
       </View>
       <PageFooter company={company} />
     </Page>
@@ -1208,7 +1353,7 @@ export default function AnalysisPdf({ data }: { data: AnalysisDetail }) {
   const hasV2 = !!(
     data.summary_v2 || data.industry_history_v2 || data.tech_evolution_v2 ||
     data.value_chain_v2 || data.business_model_v2 || data.competitors_v2 ||
-    data.strategy_v2 || data.financials_v2
+    data.strategy_v2 || data.financials_v2 || data.founder_v2
   );
 
   return (
@@ -1233,13 +1378,18 @@ export default function AnalysisPdf({ data }: { data: AnalysisDetail }) {
         {data.competitors_v2 && <CompetitorsSection v={data.competitors_v2} />}
         {data.strategy_v2 && <StrategySection v={data.strategy_v2} />}
         {data.financials_v2 && <FinancialsSection v={data.financials_v2} />}
+        {data.founder_v2 && <FounderSection v={data.founder_v2} />}
 
         <PageFooter company={data.companyName} />
       </Page>
 
       {/* Sources */}
       {data.sources && (
-        <SourcesPage sources={data.sources} company={data.companyName} />
+        <SourcesPage
+          sources={data.sources}
+          founderSources={data.founder_v2?.sources}
+          company={data.companyName}
+        />
       )}
     </Document>
   );
