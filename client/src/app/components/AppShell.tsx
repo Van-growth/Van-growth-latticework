@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { MessageCircle, X } from 'lucide-react';
 import AiAssistantPanel from './AiAssistantPanel';
@@ -89,12 +89,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     startDrag(e.touches[0].clientX);
   }
 
+  // panelWidth/isDragging 변화 시 children(AnalysisCard 등) 재렌더 차단
+  const leftContent = useMemo(() => (
+    <div className="flex-1 min-w-0">
+      {children}
+    </div>
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [children]);
+
   return (
     <div className="lg:flex lg:items-start min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Left: page content */}
-      <div className="flex-1 min-w-0">
-        {children}
-      </div>
+      {leftContent}
 
       {/* Right: desktop sticky panel with drag handle */}
       <div

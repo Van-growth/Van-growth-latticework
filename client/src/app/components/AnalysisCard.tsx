@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, memo } from 'react';
 import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
@@ -1890,10 +1890,10 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
-export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
+function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
   const [tab, setTab] = useState<TabKey>('summary');
 
-  const renderTab = () => {
+  const tabContent = useMemo(() => {
     switch (tab) {
       case 'summary':
         return data.summary_v2
@@ -1932,7 +1932,7 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
           ? <FounderV2Tab f={data.founder_v2} />
           : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>;
     }
-  };
+  }, [tab, data]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1977,10 +1977,13 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
         })}
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — only active tab is mounted */}
       <div className="p-5 bg-gray-50 min-h-[300px]">
-        {renderTab()}
+        {tabContent}
       </div>
     </div>
   );
 }
+
+const AnalysisCard = memo(AnalysisCardInner);
+export default AnalysisCard;
