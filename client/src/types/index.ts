@@ -441,6 +441,7 @@ export interface AnalysisDetail {
   sources: AnalysisSources;
   dataSource?: DataSource;
   createdAt: string;
+  cached?: boolean;
   is_shared?: boolean;
   share_token?: string | null;
   valuechainPlayers: ValueChainPlayer[];

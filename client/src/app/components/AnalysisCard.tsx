@@ -6,7 +6,6 @@ import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
 } from 'lucide-react';
-import TradingViewWidget from './TradingViewWidget';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
 import {
   AnalysisDetail,
@@ -312,6 +311,51 @@ const VC_POSITION_CFG: Record<string, { label: string; cls: string }> = {
 
 const BAR_COLORS = ['bg-blue-400', 'bg-indigo-400', 'bg-purple-400', 'bg-violet-400', 'bg-emerald-400'];
 
+// ── Static stock chart ────────────────────────────────────────────────────────
+
+function StockChart({ ticker }: { ticker: string | null }) {
+  if (!ticker) return null;
+  const parts = ticker.split(':');
+  const exchange = (parts[0] ?? '').toUpperCase();
+  const symbol = parts[1] ?? ticker;
+  const isKorean = ['KRX', 'KOSDAQ', 'KOSPI'].includes(exchange);
+  const isUS = ['NASDAQ', 'NYSE', 'AMEX'].includes(exchange);
+
+  if (isKorean) {
+    return (
+      <a href={`https://finance.naver.com/item/main.nhn?code=${symbol}`} target="_blank" rel="noopener noreferrer"
+        className="block rounded-xl overflow-hidden border border-gray-100">
+        <img
+          src={`https://fchart.stock.naver.com/sise.nhn?symbol=${symbol}&timeframe=day&count=250&requestType=0`}
+          alt={`${symbol} 주가 차트`}
+          className="w-full"
+          loading="lazy"
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      </a>
+    );
+  }
+  if (isUS) {
+    return (
+      <a href={`https://finviz.com/quote.ashx?t=${symbol}`} target="_blank" rel="noopener noreferrer"
+        className="block rounded-xl overflow-hidden border border-gray-100">
+        <img
+          src={`https://finviz.com/chart.ashx?t=${symbol}&ty=c&ta=1&p=d`}
+          alt={`${symbol} 주가 차트`}
+          className="w-full"
+          loading="lazy"
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      </a>
+    );
+  }
+  return (
+    <div className="text-xs text-gray-400 text-center py-3 bg-gray-50 rounded-xl border border-gray-100">
+      시세 정보 없음
+    </div>
+  );
+}
+
 // ── V2 Tab: 요약 ──────────────────────────────────────────────────────────────
 
 function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefined }) {
@@ -330,8 +374,8 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
         </span>
       </div>
 
-      {/* TradingView realtime chart — replaces 시가총액 MetricCard */}
-      {s.ticker && <TradingViewWidget symbol={s.ticker} />}
+      {/* Static stock chart */}
+      <StockChart ticker={s.ticker} />
 
       {/* Key metrics (without 시가총액 when ticker available) */}
       {filteredMetrics.length > 0 && (

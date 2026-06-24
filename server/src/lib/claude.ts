@@ -526,8 +526,8 @@ layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true �
 growth_motion_detail·moat.description 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   competitors_v2: `아래 스키마의 JSON 객체만 출력:
-{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율","strengths":["강점 1줄 최대3개"],"weaknesses":["약점 1줄 최대2개"],"vs_subject":"차별점 1줄"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower","one_liner":"경쟁구도 핵심 포지션 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-direct는 글로벌 직접 경쟁사 3~5개 필수. 시장점유율·강점·약점 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
+{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율%(추정 가능)","strengths":["강점 1줄 최대3개 — 전략·기술·시장지배력 중심"],"weaknesses":["약점 1줄 최대2개 — 구조적 약점 중심"],"vs_subject":"분석대상 대비 포지셔닝 차이 1줄 — '~보다 ~에서 강하나 ~에서 취약' 형식"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower","one_liner":"경쟁구도 핵심 포지션 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
+direct는 글로벌 직접 경쟁사 3~5개 필수. market_share는 공개 수치가 없으면 추정치+(추정) 표기; 아예 파악 불가일 때만 "-". vs_subject는 단순 나열 금지 — 전략적 포지셔닝 차이(가격·채널·기술·고객층 등)를 구체적으로 1줄로. 본문 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   strategy_v2: `아래 스키마의 JSON 객체만 출력:
 {"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내","one_liner":"전략 핵심 방향성 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
@@ -709,6 +709,7 @@ export async function refreshFinancials(companyName: string): Promise<Financials
 export async function analyzeCompany(
   companyName: string,
   financialContext?: string,
+  onSection?: (key: string, data: unknown, completed: number, total: number) => void,
 ): Promise<AnalysisData> {
   // Step 1: One web-search pass to gather research context
   const t0 = Date.now();
@@ -721,40 +722,63 @@ export async function analyzeCompany(
     `\n[웹 리서치]\n${researchText}`,
   ].filter(Boolean).join('\n');
 
-  // Step 2: 10 sections in parallel — allSettled so one hang/fail doesn't block others
+  // Step 2: 10 sections in parallel — individual error handling so one hang/fail doesn't block others
   const SECTION_TIMEOUT = 30_000;
   const FOUNDER_TIMEOUT = 60_000;
+  const TOTAL = 10;
+  let completedCount = 0;
+
+  async function runSection<T>(key: string, promise: Promise<T | null>, timeout: number, fallback: T): Promise<T> {
+    try {
+      const result = await withTimeout(promise, timeout, key);
+      const value = result ?? fallback;
+      completedCount++;
+      onSection?.(key, value, completedCount, TOTAL);
+      return value;
+    } catch {
+      completedCount++;
+      onSection?.(key, fallback, completedCount, TOTAL);
+      return fallback;
+    }
+  }
+
   const t1 = Date.now();
-  const results = await Promise.allSettled([
-    withTimeout(callSection<SummaryV2>(sharedContext, 'summary_v2'),                 SECTION_TIMEOUT, 'summary_v2'),
-    withTimeout(callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'), SECTION_TIMEOUT, 'industry_history_v2'),
-    withTimeout(callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),     SECTION_TIMEOUT, 'tech_evolution_v2'),
-    withTimeout(callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),           SECTION_TIMEOUT, 'value_chain_v2'),
-    withTimeout(callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),     SECTION_TIMEOUT, 'business_model_v2'),
-    withTimeout(callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),          SECTION_TIMEOUT, 'competitors_v2'),
-    withTimeout(callSection<StrategyV2>(sharedContext, 'strategy_v2'),               SECTION_TIMEOUT, 'strategy_v2'),
-    withTimeout(callSection<FinancialsV2>(sharedContext, 'financials_v2'),            SECTION_TIMEOUT, 'financials_v2'),
-    withTimeout(callSection<AnalysisSources>(sharedContext, 'sources'),               SECTION_TIMEOUT, 'sources'),
-    withTimeout(callFounderSection(companyName),                                      FOUNDER_TIMEOUT, 'founder_v2'),
+  const [
+    summary_v2,
+    industry_history_v2,
+    tech_evolution_v2,
+    value_chain_v2,
+    business_model_v2,
+    competitors_v2,
+    strategy_v2,
+    financials_v2,
+    sources,
+    founder_v2,
+  ] = await Promise.all([
+    runSection('summary_v2',          callSection<SummaryV2>(sharedContext, 'summary_v2'),                 SECTION_TIMEOUT, { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName }),
+    runSection('industry_history_v2', callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'), SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.industry_history_v2),
+    runSection('tech_evolution_v2',   callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),     SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.tech_evolution_v2),
+    runSection('value_chain_v2',      callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),           SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.value_chain_v2),
+    runSection('business_model_v2',   callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),     SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.business_model_v2),
+    runSection('competitors_v2',      callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),          SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.competitors_v2),
+    runSection('strategy_v2',         callSection<StrategyV2>(sharedContext, 'strategy_v2'),               SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.strategy_v2),
+    runSection('financials_v2',       callSection<FinancialsV2>(sharedContext, 'financials_v2'),            SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.financials_v2),
+    runSection('sources',             callSection<AnalysisSources>(sharedContext, 'sources'),               SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.sources),
+    runSection('founder_v2',          callFounderSection(companyName),                                      FOUNDER_TIMEOUT, DEFAULT_ANALYSIS_DATA.founder_v2),
   ]);
   console.log(`[claude] parallel sections done ${Date.now() - t1}ms`);
 
-  function settled<T>(r: PromiseSettledResult<T | null>, fallback: T): T {
-    return r.status === 'fulfilled' && r.value !== null ? r.value : fallback;
-  }
-
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = results;
   return {
-    summary_v2:          settled(r0, { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName }),
-    industry_history_v2: settled(r1, DEFAULT_ANALYSIS_DATA.industry_history_v2),
-    tech_evolution_v2:   settled(r2, DEFAULT_ANALYSIS_DATA.tech_evolution_v2),
-    value_chain_v2:      settled(r3, DEFAULT_ANALYSIS_DATA.value_chain_v2),
-    business_model_v2:   settled(r4, DEFAULT_ANALYSIS_DATA.business_model_v2),
-    competitors_v2:      settled(r5, DEFAULT_ANALYSIS_DATA.competitors_v2),
-    strategy_v2:         settled(r6, DEFAULT_ANALYSIS_DATA.strategy_v2),
-    financials_v2:       settled(r7, DEFAULT_ANALYSIS_DATA.financials_v2),
-    sources:             settled(r8, DEFAULT_ANALYSIS_DATA.sources),
-    founder_v2:          settled(r9, DEFAULT_ANALYSIS_DATA.founder_v2),
+    summary_v2,
+    industry_history_v2,
+    tech_evolution_v2,
+    value_chain_v2,
+    business_model_v2,
+    competitors_v2,
+    strategy_v2,
+    financials_v2,
+    sources,
+    founder_v2,
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Share2, Link, X } from 'lucide-react';
+import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import AnalysisLoader from './AnalysisLoader';
 import { useAnalysis } from '@/app/context/AnalysisContext';
@@ -22,6 +22,29 @@ function normalizeResponse(data: AnalyzeResponse): AnalysisDetail {
   };
 }
 
+function emptyBase(name: string): AnalysisDetail {
+  return {
+    id: '',
+    companyName: name,
+    summary: '',
+    industry_history: '',
+    tech_evolution: '',
+    value_chain_overview: '',
+    business_model: '',
+    financials: '',
+    metrics: [],
+    strengths: [],
+    risks: [],
+    moat_analysis: null,
+    risk_analysis: null,
+    competitors: null,
+    strategy: null,
+    sources: {},
+    valuechainPlayers: [],
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export default function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,6 +53,9 @@ export default function HomeContent() {
 
   const [companyName, setCompanyName] = useState('');
   const [result, setResult] = useState<AnalysisDetail | null>(null);
+  const [displayData, setDisplayData] = useState<AnalysisDetail | null>(null);
+  const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [isCached, setIsCached] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchingId, setFetchingId] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +66,7 @@ export default function HomeContent() {
   const [toast, setToast] = useState('');
 
   const loadedIdRef = useRef<string | null>(null);
+  const streamingRef = useRef<AnalysisDetail | null>(null);
 
   useEffect(() => {
     if (result) {
@@ -108,34 +135,103 @@ export default function HomeContent() {
       .finally(() => setFetchingId(false));
   }, [urlId, setAnalysisData]);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!companyName.trim() || loading) return;
-
+  async function startAnalysis(name: string, forceRefresh: boolean) {
     setLoading(true);
     setError(null);
     setResult(null);
+    setDisplayData(null);
+    setProgress(null);
+    setIsCached(false);
+    streamingRef.current = null;
 
     try {
-      const res = await fetch(`${API_URL}/api/analyze`, {
+      const res = await fetch(`${API_URL}/api/analyze/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName: companyName.trim() }),
+        body: JSON.stringify({ companyName: name, forceRefresh }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || '분석 중 오류가 발생했습니다.'); return; }
 
-      const normalized = normalizeResponse(data as AnalyzeResponse);
-      loadedIdRef.current = normalized.id;
-      setResult(normalized);
-      setAnalysisData(normalized);
-      router.replace(`/?id=${normalized.id}`);
+      if (!res.ok || !res.body) {
+        const errData = await res.json().catch(() => ({}));
+        setError((errData as { error?: string }).error || '분석 중 오류가 발생했습니다.');
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+
+        for (const part of parts) {
+          const lines = part.split('\n');
+          let eventType = 'message';
+          let dataStr = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+            if (line.startsWith('data: '))  dataStr  = line.slice(6);
+          }
+          if (!dataStr) continue;
+
+          try {
+            const payload = JSON.parse(dataStr);
+
+            if (eventType === 'section') {
+              const sectionKey = String(payload.section);
+              const sectionVal = payload.data as AnalysisDetail[keyof AnalysisDetail];
+              if (!streamingRef.current && sectionKey === 'summary_v2') {
+                streamingRef.current = Object.assign(emptyBase(name), { [sectionKey]: sectionVal });
+                setDisplayData({ ...streamingRef.current });
+              } else if (streamingRef.current) {
+                const next = Object.assign({ ...streamingRef.current }, { [sectionKey]: sectionVal }) as AnalysisDetail;
+                streamingRef.current = next;
+                setDisplayData(next);
+              }
+              setProgress({ completed: payload.completed, total: payload.total });
+
+            } else if (eventType === 'done') {
+              const normalized = normalizeResponse(payload as AnalyzeResponse);
+              setIsCached(payload.cached === true);
+              loadedIdRef.current = normalized.id;
+              setResult(normalized);
+              setAnalysisData(normalized);
+              if (normalized.id) router.replace(`/?id=${normalized.id}`);
+
+            } else if (eventType === 'error') {
+              setError(payload.message || '분석 중 오류가 발생했습니다.');
+            }
+          } catch {
+            // malformed SSE line, skip
+          }
+        }
+      }
     } catch {
       setError('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!companyName.trim() || loading) return;
+    await startAnalysis(companyName.trim(), false);
+  }
+
+  async function handleForceRefresh() {
+    if (!companyName.trim() || loading) return;
+    await startAnalysis(companyName.trim(), true);
+  }
+
+  const showCard = result ?? (loading ? displayData : null);
 
   return (
     <div className="px-4 py-8">
@@ -166,8 +262,25 @@ export default function HomeContent() {
         </div>
       </form>
 
-      {/* Loading states */}
-      {loading && <AnalysisLoader companyName={companyName.trim()} />}
+      {/* Progress bar */}
+      {loading && progress && (
+        <div className="max-w-2xl mx-auto mb-6">
+          <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+            <span>분석 중</span>
+            <span>{progress.completed} / {progress.total}</span>
+          </div>
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.round((progress.completed / progress.total) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Loading skeleton — only before first section arrives */}
+      {loading && !displayData && <AnalysisLoader companyName={companyName.trim()} />}
+
       {fetchingId && !loading && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-10 text-center text-gray-400 text-sm">
           불러오는 중...
@@ -181,43 +294,62 @@ export default function HomeContent() {
         </div>
       )}
 
-      {/* Result */}
-      {result && !loading && !fetchingId && (
+      {/* Result (final or streaming partial) */}
+      {showCard && !fetchingId && (
         <div>
-          {/* Share bar */}
-          <div className="flex items-center justify-end gap-2 mb-3">
-            {isShared ? (
-              <>
-                <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-                  공유 중
-                </span>
-                <button
-                  onClick={handleCopyLink}
-                  className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <Link size={12} />
-                  링크 복사
-                </button>
-                <button
-                  onClick={handleRevoke}
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <X size={12} />
-                  공유 해제
-                </button>
-              </>
-            ) : (
+          {/* Cache banner */}
+          {result && isCached && (
+            <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 mb-3">
+              <span className="text-xs text-amber-700">
+                이전 분석 결과입니다 ({new Date(result.createdAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })})
+              </span>
               <button
-                onClick={handleShare}
-                disabled={sharing}
-                className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                onClick={handleForceRefresh}
+                disabled={loading}
+                className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 font-medium disabled:opacity-50"
               >
-                <Share2 size={12} />
-                {sharing ? '생성 중...' : '공유'}
+                <RefreshCw size={12} />
+                새로 분석하기
               </button>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Share bar — only when analysis is saved (has real ID) */}
+          {result && (
+            <div className="flex items-center justify-end gap-2 mb-3">
+              {isShared ? (
+                <>
+                  <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                    공유 중
+                  </span>
+                  <button
+                    onClick={handleCopyLink}
+                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <Link size={12} />
+                    링크 복사
+                  </button>
+                  <button
+                    onClick={handleRevoke}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <X size={12} />
+                    공유 해제
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleShare}
+                  disabled={sharing}
+                  className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                >
+                  <Share2 size={12} />
+                  {sharing ? '생성 중...' : '공유'}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Toast */}
           {toast && (
@@ -226,7 +358,7 @@ export default function HomeContent() {
             </div>
           )}
 
-          <AnalysisCard data={result} />
+          <AnalysisCard data={showCard} />
         </div>
       )}
     </div>
