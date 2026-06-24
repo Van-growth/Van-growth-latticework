@@ -107,28 +107,32 @@ async function getLatestXbrlValue(
   cik: string,
   concepts: string[],
 ): Promise<{ value: string; year: string } | null> {
-  for (const concept of concepts) {
-    const res = await fetchJson<{ units?: { USD?: XbrlUnit[] } }>(
-      `https://data.sec.gov/api/xbrl/companyconcept/CIK${cik}/us-gaap/${concept}.json`,
-      12_000,
-    );
-    const units = res?.units?.USD;
-    if (!units) continue;
+  const candidates: Array<{ val: number; end: string }> = [];
 
-    const annual = units
-      .filter((u) => ['10-K', '20-F'].includes(u.form) && u.val > 0)
-      .sort((a, b) => b.end.localeCompare(a.end));
+  await Promise.allSettled(
+    concepts.map(async (concept) => {
+      const res = await fetchJson<{ units?: { USD?: XbrlUnit[] } }>(
+        `https://data.sec.gov/api/xbrl/companyconcept/CIK${cik}/us-gaap/${concept}.json`,
+        12_000,
+      );
+      const units = res?.units?.USD;
+      if (!units) return;
+      const annual = units
+        .filter((u) => ['10-K', '20-F'].includes(u.form) && u.val > 0)
+        .sort((a, b) => b.end.localeCompare(a.end));
+      if (annual[0]) candidates.push(annual[0]);
+    }),
+  );
 
-    if (annual.length) {
-      const v = annual[0];
-      const b = v.val / 1_000_000_000;
-      return {
-        value: b >= 1 ? `${b.toFixed(1)}B USD` : `${(v.val / 1_000_000).toFixed(0)}M USD`,
-        year:  v.end.slice(0, 4),
-      };
-    }
-  }
-  return null;
+  if (!candidates.length) return null;
+  // 가장 최신 연도의 값 선택
+  candidates.sort((a, b) => b.end.localeCompare(a.end));
+  const v = candidates[0];
+  const b = v.val / 1_000_000_000;
+  return {
+    value: b >= 1 ? `${b.toFixed(1)}B USD` : `${(v.val / 1_000_000).toFixed(0)}M USD`,
+    year:  v.end.slice(0, 4),
+  };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -31,40 +31,68 @@ if (!DART_API_KEY)           { console.error('❌  DART_API_KEY 없음'); proces
 if (!SUPABASE_URL)           { console.error('❌  SUPABASE_URL 없음'); process.exit(1); }
 if (!SUPABASE_ANON_KEY)      { console.error('❌  SUPABASE_ANON_KEY 없음'); process.exit(1); }
 
-// ── 최소 ZIP extractor (외부 의존성 없음) ──────────────────────────────────────
+// ── 최소 ZIP extractor (센트럴 디렉토리 기반) ─────────────────────────────────
 function extractFromZip(buf) {
-  const sig = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
-  let pos = 0;
-  while (pos < buf.length - 30) {
-    const idx = buf.indexOf(sig, pos);
-    if (idx === -1) break;
-
-    const compression    = buf.readUInt16LE(idx + 8);
-    const compressedSize = buf.readUInt32LE(idx + 18);
-    const fnLen          = buf.readUInt16LE(idx + 26);
-    const exLen          = buf.readUInt16LE(idx + 28);
-    const dataOffset     = idx + 30 + fnLen + exLen;
-    const compressed     = buf.subarray(dataOffset, dataOffset + compressedSize);
-
-    if (compression === 0) return compressed;       // stored
-    if (compression === 8) return inflateRawSync(compressed); // deflate
-    pos = dataOffset + compressedSize;
+  // 1. End of Central Directory Record 찾기 (끝에서 역방향 검색)
+  const EOCD_SIG = 0x06054b50;
+  let eocdPos = -1;
+  for (let i = buf.length - 22; i >= 0; i--) {
+    if (buf.readUInt32LE(i) === EOCD_SIG) { eocdPos = i; break; }
   }
-  throw new Error('ZIP 내 파일을 추출할 수 없음');
+  if (eocdPos === -1) throw new Error('EOCD not found in ZIP');
+
+  const cdOffset  = buf.readUInt32LE(eocdPos + 16);
+  const cdEntries = buf.readUInt16LE(eocdPos + 10);
+
+  // 2. 첫 번째 파일 엔트리를 Central Directory에서 읽기
+  const CD_SIG = 0x02014b50;
+  let cdPos = cdOffset;
+  for (let i = 0; i < cdEntries; i++) {
+    if (buf.readUInt32LE(cdPos) !== CD_SIG) throw new Error('Invalid CD entry');
+    const compression      = buf.readUInt16LE(cdPos + 10);
+    const compressedSize   = buf.readUInt32LE(cdPos + 20);
+    const fnLen            = buf.readUInt16LE(cdPos + 28);
+    const exLen            = buf.readUInt16LE(cdPos + 30);
+    const cmLen            = buf.readUInt16LE(cdPos + 32);
+    const localOffset      = buf.readUInt32LE(cdPos + 42);
+
+    // 로컬 파일 헤더에서 실제 데이터 오프셋 계산
+    const lhFnLen    = buf.readUInt16LE(localOffset + 26);
+    const lhExLen    = buf.readUInt16LE(localOffset + 28);
+    const dataOffset = localOffset + 30 + lhFnLen + lhExLen;
+
+    const compressed = buf.subarray(dataOffset, dataOffset + compressedSize);
+    if (compression === 0) return compressed;
+    if (compression === 8) return inflateRawSync(compressed);
+    throw new Error(`압축 방식 미지원: ${compression}`);
+  }
+  throw new Error('ZIP에서 파일을 찾을 수 없음');
 }
 
 // ── XML 파서 (DART CORPCODE.xml 전용) ─────────────────────────────────────────
+function extractTag(block, tag) {
+  const m = block.match(new RegExp(`<${tag}>([^<]*)<\/${tag}>`));
+  return m ? m[1].trim() : '';
+}
+
 function parseCorpXml(xml) {
   const corps = [];
-  const re = /<list>\s*<corp_code>([^<]*)<\/corp_code>\s*<corp_name>([^<]*)<\/corp_name>\s*<stock_code>([^<]*)<\/stock_code>\s*<modify_date>([^<]*)<\/modify_date>\s*<\/list>/gs;
+  const re = /<list>([\s\S]*?)<\/list>/g;
   let m;
   while ((m = re.exec(xml)) !== null) {
-    corps.push({
-      corp_code:   m[1].trim(),
-      corp_name:   m[2].trim(),
-      stock_code:  m[3].trim() || null,
-      modify_date: m[4].trim() || null,
-    });
+    const block      = m[1];
+    const corp_code  = extractTag(block, 'corp_code');
+    const corp_name  = extractTag(block, 'corp_name');
+    const stock_code = extractTag(block, 'stock_code');
+    const modify_date = extractTag(block, 'modify_date');
+    if (corp_code && corp_name) {
+      corps.push({
+        corp_code,
+        corp_name,
+        stock_code: stock_code || null,
+        modify_date: modify_date || null,
+      });
+    }
   }
   return corps;
 }

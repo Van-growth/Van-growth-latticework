@@ -60,11 +60,13 @@ async function main() {
   const entries = Object.values(raw);
   console.log(`   ${entries.length.toLocaleString()}개 기업 수신`);
 
-  const rows = entries.map(e => ({
-    cik:    String(e.cik_str).padStart(10, '0'),
-    name:   e.title,
-    ticker: e.ticker || null,
-  }));
+  // CIK 중복 제거 (같은 CIK가 여러 ticker로 등록될 수 있음)
+  const seen = new Map();
+  for (const e of entries) {
+    const cik = String(e.cik_str).padStart(10, '0');
+    if (!seen.has(cik)) seen.set(cik, { cik, name: e.title, ticker: e.ticker || null });
+  }
+  const rows = Array.from(seen.values());
 
   const BATCH_SIZE = 1000;
   let saved = 0;
