@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
+import { fetchFinancialContext } from './financialContext';
 
 dotenv.config();
 
@@ -620,6 +621,48 @@ career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventu
     console.error(`[claude] founder_v2 FAIL ${Date.now() - t0}ms`, err);
     return null;
   }
+}
+
+// ── Financial refresh (own web-search pass) ───────────────────────────────────
+
+async function gatherFinancialResearch(companyName: string): Promise<string> {
+  const systemPrompt = `당신은 기업 재무 분석 전문가입니다. 아래 기업의 최신 재무 데이터만 수집하세요.
+
+[소스 신뢰도]
+1순위 — 공식 공시: SEC 10-K/10-Q, DART, 기업 IR
+2순위 — Bloomberg, Reuters, Yahoo Finance, Macrotrends
+3순위 이하 수치는 반드시 "(추정)" 레이블 필수.
+
+[검색 순서]
+1. web_search: "${companyName} annual report revenue operating income net income 2023 2024 2025"
+2. web_search: "${companyName} SEC 10-K OR DART 재무제표 2024 2025"
+3. 결과 중 SEC EDGAR / DART / IR URL → fetch_url로 전체 읽기
+
+수치에 출처 병기. 찾을 수 없는 항목은 "확인 필요".`;
+
+  return runWithWebSearch(
+    systemPrompt,
+    `기업명: ${companyName}\n\n최신 재무 데이터를 수집해주세요.`,
+    'claude-sonnet-4-6',
+    6,
+    4000,
+  );
+}
+
+export async function refreshFinancials(companyName: string): Promise<FinancialsV2> {
+  const [{ contextText }, researchText] = await Promise.all([
+    fetchFinancialContext(companyName),
+    gatherFinancialResearch(companyName),
+  ]);
+
+  const context = [
+    `기업명: ${companyName}`,
+    contextText ? `\n[공시 데이터 — 재무수치 우선 반영]\n${contextText}` : null,
+    `\n[웹 리서치]\n${researchText}`,
+  ].filter(Boolean).join('\n');
+
+  const result = await callSection<FinancialsV2>(context, 'financials_v2');
+  return result ?? DEFAULT_ANALYSIS_DATA.financials_v2;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

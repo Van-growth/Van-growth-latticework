@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomBytes } from 'crypto';
 import { supabase } from '../lib/supabase';
+import { refreshFinancials } from '../lib/claude';
 
 const router = Router();
 
@@ -133,6 +134,42 @@ router.delete('/:id/share', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[DELETE /api/analyses/:id/share]', err);
     res.status(500).json({ error: '공유 해제에 실패했습니다.' });
+  }
+});
+
+// POST /api/analyses/:id/refresh-financials
+router.post('/:id/refresh-financials', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const { data: analysis, error } = await supabase
+      .from('analyses')
+      .select('companies(name)')
+      .eq('id', id)
+      .single();
+
+    if (error || !analysis) {
+      res.status(404).json({ error: '분석을 찾을 수 없습니다.' });
+      return;
+    }
+
+    const companyName = (analysis.companies as unknown as CompanyRef)?.name;
+    if (!companyName) {
+      res.status(400).json({ error: '기업명을 찾을 수 없습니다.' });
+      return;
+    }
+
+    const financials_v2 = await refreshFinancials(companyName);
+
+    await supabase
+      .from('analyses')
+      .update({ financials_v2 })
+      .eq('id', id);
+
+    res.json({ financials_v2 });
+  } catch (err) {
+    console.error('[POST /api/analyses/:id/refresh-financials]', err);
+    res.status(500).json({ error: '재무 데이터 새로고침에 실패했습니다.' });
   }
 });
 

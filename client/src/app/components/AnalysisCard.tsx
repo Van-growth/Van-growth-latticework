@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
-  BookOpen, ExternalLink, Building2, Clock, Briefcase, User,
+  BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
 } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
@@ -275,6 +275,10 @@ const BAR_COLORS = ['bg-blue-400', 'bg-indigo-400', 'bg-purple-400', 'bg-violet-
 
 function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefined }) {
   const vcPos = VC_POSITION_CFG[s.value_chain_position] ?? VC_POSITION_CFG.midstream;
+  // When a ticker is available, TradingView replaces the 시가총액 MetricCard
+  const filteredMetrics = s.ticker
+    ? s.key_metrics.filter(m => !m.label.includes('시가총액'))
+    : s.key_metrics;
   return (
     <div className="space-y-4">
       {/* One-line headline */}
@@ -285,10 +289,13 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
         </span>
       </div>
 
-      {/* Key metrics */}
-      {s.key_metrics.length > 0 && (
+      {/* TradingView realtime chart — replaces 시가총액 MetricCard */}
+      {s.ticker && <TradingViewWidget symbol={s.ticker} />}
+
+      {/* Key metrics (without 시가총액 when ticker available) */}
+      {filteredMetrics.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {s.key_metrics.map((m, i) => (
+          {filteredMetrics.map((m, i) => (
             <MetricCard key={i} value={m.value} label={m.label} trend={m.trend} />
           ))}
         </div>
@@ -557,10 +564,9 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 기술변화 ──────────────────────────────────────────────────────────
 
-function TechEvolutionV2Tab({ t, sources, ticker }: { t: TechEvolutionV2; sources: Source[] | undefined; ticker: string | null }) {
+function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
   return (
     <div className="space-y-4">
-      <TradingViewWidget symbol={ticker} />
       <div className="space-y-3">
         {t.stages.map((s, i) => {
           const hype = HYPE_LEVEL_CFG[s.hype_level] ?? HYPE_LEVEL_CFG.mainstream;
@@ -1421,7 +1427,13 @@ const IS_COLS_V2: Array<keyof Omit<FinancialsV2Row, 'item' | 'yoy'>> =
 
 const IS_BOLD_ITEMS = ['매출', '영업이익', '순이익'];
 
-function FinancialsV2Tab({ f, sources }: { f: FinancialsV2; sources: Source[] | undefined }) {
+function FinancialsV2Tab({ f, sources, ticker, onRefresh, isRefreshing }: {
+  f: FinancialsV2;
+  sources: Source[] | undefined;
+  ticker: string | null;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}) {
   const yoyCls = (v?: string) => {
     if (!v || v === '—') return 'text-gray-400';
     return v.startsWith('▲') ? 'text-green-600 font-medium' : v.startsWith('▼') ? 'text-red-500 font-medium' : 'text-gray-500';
@@ -1445,6 +1457,21 @@ function FinancialsV2Tab({ f, sources }: { f: FinancialsV2; sources: Source[] | 
 
   return (
     <div className="space-y-4">
+      {/* Stock chart */}
+      <TradingViewWidget symbol={ticker} />
+
+      {/* Refresh button */}
+      <div className="flex justify-end">
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+          {isRefreshing ? '새로고침 중...' : '데이터 새로고침'}
+        </button>
+      </div>
+
       {/* Narrative */}
       {f.narrative && (
         <SectionCard title="재무 서사" dotColor="bg-emerald-400">
@@ -1892,6 +1919,26 @@ type TabKey = (typeof TABS)[number]['key'];
 
 function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
   const [tab, setTab] = useState<TabKey>('summary');
+  const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
+  const [refreshingFinancials, setRefreshingFinancials] = useState(false);
+
+  const handleRefreshFinancials = useCallback(async () => {
+    setRefreshingFinancials(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+      const res = await fetch(`${apiUrl}/api/analyses/${data.id}/refresh-financials`, { method: 'POST' });
+      if (res.ok) {
+        const { financials_v2 } = await res.json();
+        setFinancialsV2Local(financials_v2);
+      }
+    } catch {
+      // silently ignore network errors
+    } finally {
+      setRefreshingFinancials(false);
+    }
+  }, [data.id]);
+
+  const ticker = data.summary_v2?.ticker ?? null;
 
   const tabContent = useMemo(() => {
     switch (tab) {
@@ -1901,11 +1948,11 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
           : <SummaryTab data={data} />;
       case 'industry_history':
         return data.industry_history_v2
-          ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.sources?.industry_history} ticker={data.summary_v2?.ticker ?? null} />
+          ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.sources?.industry_history} ticker={ticker} />
           : <IndustryHistoryTab data={data} />;
       case 'tech_evolution':
         return data.tech_evolution_v2
-          ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.sources?.tech_evolution} ticker={data.summary_v2?.ticker ?? null} />
+          ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.sources?.tech_evolution} />
           : <TechEvolutionTab data={data} />;
       case 'value_chain':
         return data.value_chain_v2
@@ -1924,15 +1971,22 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
           ? <StrategyV2Tab s={data.strategy_v2} sources={data.sources?.strategy} />
           : <StrategyTab data={data} />;
       case 'financials':
-        return data.financials_v2
-          ? <FinancialsV2Tab f={data.financials_v2} sources={data.sources?.financials} />
+        return financialsV2Local
+          ? <FinancialsV2Tab
+              f={financialsV2Local}
+              sources={data.sources?.financials}
+              ticker={ticker}
+              onRefresh={handleRefreshFinancials}
+              isRefreshing={refreshingFinancials}
+            />
           : <FinancialsTab data={data} />;
       case 'founder':
         return data.founder_v2
           ? <FounderV2Tab f={data.founder_v2} />
           : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>;
     }
-  }, [tab, data]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, data, financialsV2Local, refreshingFinancials, ticker, handleRefreshFinancials]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
