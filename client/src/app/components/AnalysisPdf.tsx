@@ -21,6 +21,8 @@ import type {
   FinancialsV2,
   FinancialsV2Row,
   FinancialsV2BSRow,
+  Source,
+  AnalysisSources,
 } from '@/types';
 
 // Absolute URL required: react-pdf fetches fonts via URL at render time,
@@ -325,6 +327,62 @@ const s = StyleSheet.create({
     height:          1,
     backgroundColor: C.border,
     marginVertical:  6,
+  },
+
+  // ── Sources page ──
+  srcGroupLabel: {
+    fontSize:     8,
+    fontWeight:   700,
+    color:        C.mid,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    marginTop:    10,
+    paddingBottom: 3,
+    borderBottom: `1 solid ${C.border}`,
+  },
+  srcRow: {
+    flexDirection: 'row',
+    alignItems:    'flex-start',
+    marginBottom:  4,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+    borderRadius:  3,
+    backgroundColor: C.bg,
+  },
+  srcBadge: {
+    fontSize:   6,
+    fontWeight: 700,
+    paddingHorizontal: 4,
+    paddingVertical:   2,
+    borderRadius: 3,
+    marginRight:  5,
+    marginTop:    1,
+    flexShrink:   0,
+  },
+  srcBadgeL1: { backgroundColor: '#F0FDF4', color: '#16A34A' },
+  srcBadgeL2: { backgroundColor: '#FFFBEB', color: '#D97706' },
+  srcBadgeL3: { backgroundColor: '#F1F5F9', color: '#64748B' },
+  srcOrg: {
+    fontSize:   7.5,
+    fontWeight: 700,
+    color:      C.dark,
+    marginRight: 3,
+  },
+  srcDate: {
+    fontSize: 7,
+    color:    C.light,
+    marginRight: 3,
+  },
+  srcContent: {
+    fontSize:  7,
+    color:     C.mid,
+    lineHeight: 1.4,
+    flex:       1,
+  },
+  srcUrl: {
+    fontSize: 6.5,
+    color:    C.blue,
+    marginTop: 1,
   },
 
   // ── Footer ──
@@ -1026,6 +1084,66 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
   );
 }
 
+// ── Sources Page ─────────────────────────────────────────────────────────────
+
+const SRC_TAB_LABELS: Record<string, string> = {
+  summary:          '요약',
+  industry_history: '산업 역사',
+  tech_evolution:   '기술 변화',
+  value_chain:      '밸류체인',
+  business_model:   '비즈니스 모델',
+  competitors:      '경쟁사',
+  strategy:         '전략',
+  financials:       '재무',
+};
+
+function SourceRow({ src, idx }: { src: Source; idx: number }) {
+  const badgeCls =
+    src.level === 'L1' ? s.srcBadgeL1
+    : src.level === 'L2' ? s.srcBadgeL2
+    : s.srcBadgeL3;
+  const label =
+    src.level === 'L1' ? 'L1 공식'
+    : src.level === 'L2' ? 'L2 기관'
+    : 'L3 추정';
+  return (
+    <View style={s.srcRow}>
+      <Text style={[s.srcBadge, badgeCls]}>{label}</Text>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          <Text style={s.srcOrg}>[{src.index ?? idx + 1}] {src.organization}</Text>
+          {src.date ? <Text style={s.srcDate}>{src.date}</Text> : null}
+          <Text style={s.srcContent}> — {src.content}</Text>
+        </View>
+        {src.url ? <Text style={s.srcUrl}>{src.url}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+function SourcesPage({ sources, company }: { sources: AnalysisSources; company: string }) {
+  const entries = Object.entries(sources) as [keyof AnalysisSources, Source[]][];
+  const filled = entries.filter(([, srcs]) => srcs && srcs.length > 0);
+  if (filled.length === 0) return null;
+
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.section}>
+        <SectionHeader num={9} title="출처 목록" />
+        {filled.map(([key, srcs]) => (
+          <View key={key}>
+            <Text style={s.srcGroupLabel}>{SRC_TAB_LABELS[key] ?? key}</Text>
+            {srcs.map((src, i) => (
+              <SourceRow key={i} src={src} idx={i} />
+            ))}
+          </View>
+        ))}
+      </View>
+      <PageFooter company={company} />
+    </Page>
+  );
+}
+
 // ── Footer ───────────────────────────────────────────────────────────────────
 
 function PageFooter({ company }: { company: string }) {
@@ -1073,6 +1191,11 @@ export default function AnalysisPdf({ data }: { data: AnalysisDetail }) {
 
         <PageFooter company={data.companyName} />
       </Page>
+
+      {/* Sources */}
+      {data.sources && (
+        <SourcesPage sources={data.sources} company={data.companyName} />
+      )}
     </Document>
   );
 }

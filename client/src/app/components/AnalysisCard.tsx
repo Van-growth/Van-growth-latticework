@@ -143,9 +143,9 @@ function CfMetricCard({ label, value, dotColor }: { label: string; value: string
 }
 
 const LEVEL_BADGE: Record<string, { label: string; cls: string }> = {
-  L1: { label: 'L1 공식', cls: 'bg-blue-50 text-blue-700 border border-blue-100' },
-  L2: { label: 'L2 기관', cls: 'bg-gray-100 text-gray-600 border border-gray-200' },
-  L3: { label: 'L3 추정', cls: 'bg-amber-50 text-amber-700 border border-amber-100' },
+  L1: { label: 'L1 공식', cls: 'bg-green-50 text-green-700 border border-green-200' },
+  L2: { label: 'L2 기관', cls: 'bg-amber-50 text-amber-600 border border-amber-200' },
+  L3: { label: 'L3 추정', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
 };
 
 function SourcesList({ sources }: { sources: Source[] | undefined }) {
