@@ -4,7 +4,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
-  BookOpen, ExternalLink, Building2, Clock, Briefcase,
+  BookOpen, ExternalLink, Building2, Clock, Briefcase, User,
 } from 'lucide-react';
 import TradingViewWidget from './TradingViewWidget';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
@@ -28,6 +28,7 @@ import {
   StrategyV2,
   FinancialsV2,
   FinancialsV2Row,
+  FounderV2,
 } from '@/types';
 
 // ── Primitives ────────────────────────────────────────────────────────────────
@@ -1705,6 +1706,174 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
   );
 }
 
+// ── V2 Tab: 창업자 ────────────────────────────────────────────────────────────
+
+const RESULT_CFG: Record<string, { label: string; cls: string }> = {
+  exit:      { label: 'Exit',    cls: 'bg-green-50 text-green-700' },
+  closed:    { label: '폐업',    cls: 'bg-red-50 text-red-600' },
+  operating: { label: '운영 중', cls: 'bg-blue-50 text-blue-700' },
+};
+
+const EXIT_TYPE_CFG: Record<string, { label: string; cls: string }> = {
+  'M&A': { label: 'M&A',  cls: 'bg-purple-50 text-purple-700' },
+  'IPO': { label: 'IPO',  cls: 'bg-emerald-50 text-emerald-700' },
+};
+
+function FounderV2Tab({ f }: { f: FounderV2 }) {
+  const isSerial = f.founding_history.type === 'serial';
+  return (
+    <div className="space-y-4">
+      {/* One-liner */}
+      {f.one_liner && f.one_liner !== '-' && (
+        <div className="bg-gray-900 rounded-xl px-5 py-4">
+          <p className="text-white font-semibold text-sm leading-snug">{f.one_liner}</p>
+        </div>
+      )}
+
+      {/* Founder profiles */}
+      {f.founders.length > 0 && (
+        <SectionCard title="기본 정보" dotColor="bg-blue-400">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {f.founders.map((fd, i) => (
+              <div key={i} className="bg-gray-50 rounded-lg p-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900">{fd.name}</span>
+                  {fd.title && fd.title !== '-' && (
+                    <span className="text-[11px] bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-medium">{fd.title}</span>
+                  )}
+                </div>
+                {fd.education && fd.education !== '-' && (
+                  <div className="flex gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 shrink-0 w-10">학교</span>
+                    <span>{fd.education}</span>
+                  </div>
+                )}
+                {fd.major && fd.major !== '-' && (
+                  <div className="flex gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 shrink-0 w-10">전공</span>
+                    <span>{fd.major}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Career trajectory */}
+      {f.career_trajectory.length > 0 && (
+        <SectionCard title="커리어 궤적" dotColor="bg-indigo-400">
+          <div>
+            {f.career_trajectory.map((item, i) => {
+              const isLast = i === f.career_trajectory.length - 1;
+              return (
+                <div key={i} className="flex gap-4">
+                  <div className="flex flex-col items-center w-10 shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-indigo-50 border-2 border-indigo-300 flex items-center justify-center shrink-0">
+                      <span className="text-[9px] font-semibold text-indigo-800 text-center leading-none px-0.5">{item.period.slice(0, 6)}</span>
+                    </div>
+                    {!isLast && <div className="w-0.5 bg-gray-100 flex-1 my-1 min-h-[2rem]" />}
+                  </div>
+                  <div className="pb-4 flex-1 min-w-0 pt-1">
+                    <div className="text-sm font-semibold text-gray-800">{item.company}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{item.role}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Founding history */}
+      <SectionCard title="창업 이력" dotColor="bg-violet-400">
+        <div className="flex items-center gap-2 mb-3">
+          <span className={`text-sm font-semibold px-3 py-1 rounded-full ${isSerial ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>
+            {isSerial ? 'Serial Founder' : '1st Time Founder'}
+          </span>
+        </div>
+        {f.founding_history.previous_ventures.length > 0 ? (
+          <div className="space-y-2">
+            {f.founding_history.previous_ventures.map((v, i) => {
+              const res = RESULT_CFG[v.result] ?? RESULT_CFG.operating;
+              const exitType = v.exit_type ? EXIT_TYPE_CFG[v.exit_type] : null;
+              return (
+                <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="text-xs font-medium text-gray-800 flex-1">{v.name}</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${res.cls}`}>{res.label}</span>
+                  {exitType && (
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${exitType.cls}`}>{exitType.label}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">이전 창업 이력 없음</p>
+        )}
+      </SectionCard>
+
+      {/* Reputation */}
+      {(f.reputation.sns_style !== '-' || f.reputation.media_exposure !== '-' || f.reputation.blind_glassdoor !== '-') && (
+        <SectionCard title="평판 & 퍼블릭 시그널" dotColor="bg-amber-400">
+          <div className="space-y-2">
+            {f.reputation.sns_style !== '-' && (
+              <div className="flex gap-3 items-start py-2 border-b border-gray-50">
+                <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">SNS 스타일</span>
+                <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.sns_style}</p>
+              </div>
+            )}
+            {f.reputation.media_exposure !== '-' && (
+              <div className="flex gap-3 items-start py-2 border-b border-gray-50">
+                <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">미디어 노출</span>
+                <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.media_exposure}</p>
+              </div>
+            )}
+            {f.reputation.blind_glassdoor !== '-' && (
+              <div className="flex gap-3 items-start py-2">
+                <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">Blind / GD</span>
+                <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.blind_glassdoor}</p>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Network */}
+      {(f.network.investors.length > 0 || f.network.advisors_board.length > 0 || f.network.cofounders.length > 0) && (
+        <SectionCard title="네트워크" dotColor="bg-emerald-400">
+          <div className="space-y-3">
+            {f.network.cofounders.length > 0 && (
+              <div>
+                <div className="text-[11px] text-gray-400 mb-1.5">공동창업팀</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {f.network.cofounders.map((c, i) => <Tag key={i} label={c} color="emerald" />)}
+                </div>
+              </div>
+            )}
+            {f.network.investors.length > 0 && (
+              <div>
+                <div className="text-[11px] text-gray-400 mb-1.5">투자자</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {f.network.investors.map((inv, i) => <Tag key={i} label={inv} color="blue" />)}
+                </div>
+              </div>
+            )}
+            {f.network.advisors_board.length > 0 && (
+              <div>
+                <div className="text-[11px] text-gray-400 mb-1.5">어드바이저 / 보드</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {f.network.advisors_board.map((a, i) => <Tag key={i} label={a} color="gray" />)}
+                </div>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1716,6 +1885,7 @@ const TABS = [
   { key: 'competitors',      label: '경쟁사',       icon: Users },
   { key: 'strategy',         label: '전략',         icon: Target },
   { key: 'financials',       label: '재무',         icon: BarChart2 },
+  { key: 'founder',          label: '창업자',       icon: User },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -1757,6 +1927,10 @@ export default function AnalysisCard({ data }: { data: AnalysisDetail }) {
         return data.financials_v2
           ? <FinancialsV2Tab f={data.financials_v2} sources={data.sources?.financials} />
           : <FinancialsTab data={data} />;
+      case 'founder':
+        return data.founder_v2
+          ? <FounderV2Tab f={data.founder_v2} />
+          : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>;
     }
   };
 

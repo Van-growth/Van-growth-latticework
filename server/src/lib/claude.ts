@@ -221,6 +221,39 @@ export interface FinancialsV2 {
   };
 }
 
+export interface FounderV2 {
+  founders: {
+    name: string;
+    title: string;
+    education: string;
+    major: string;
+  }[];
+  career_trajectory: {
+    period: string;
+    company: string;
+    role: string;
+  }[];
+  founding_history: {
+    type: '1st_time' | 'serial';
+    previous_ventures: {
+      name: string;
+      result: 'exit' | 'closed' | 'operating';
+      exit_type?: 'M&A' | 'IPO' | null;
+    }[];
+  };
+  reputation: {
+    sns_style: string;
+    media_exposure: string;
+    blind_glassdoor: string;
+  };
+  network: {
+    investors: string[];
+    advisors_board: string[];
+    cofounders: string[];
+  };
+  one_liner: string;
+}
+
 export interface AnalysisData {
   summary_v2: SummaryV2;
   industry_history_v2: IndustryHistoryV2;
@@ -230,6 +263,7 @@ export interface AnalysisData {
   competitors_v2: CompetitorsV2;
   strategy_v2: StrategyV2;
   financials_v2: FinancialsV2;
+  founder_v2: FounderV2;
   sources: AnalysisSources;
 }
 
@@ -266,6 +300,14 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     munger_buffett_metrics: { roe: '', roic: '', owner_earnings: '', debt_to_equity: '', interest_coverage: '', reinvestment_rate: '' },
     key_risks: [],
     outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
+  },
+  founder_v2: {
+    founders: [],
+    career_trajectory: [],
+    founding_history: { type: '1st_time', previous_ventures: [] },
+    reputation: { sns_style: '-', media_exposure: '-', blind_glassdoor: '-' },
+    network: { investors: [], advisors_board: [], cofounders: [] },
+    one_liner: '-',
   },
   sources: {},
 };
@@ -551,6 +593,35 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
   }
 }
 
+// ── Founder section (own web-search pass) ─────────────────────────────────────
+
+async function callFounderSection(companyName: string): Promise<FounderV2 | null> {
+  const t0 = Date.now();
+  try {
+    const systemPrompt = `당신은 기업 창업자 분석 전문가입니다. 웹 검색으로 창업자/CEO 정보를 수집한 뒤 지정된 JSON 스키마로만 반환합니다.
+규칙: 마크다운·코드블록·추가 설명 없이 순수 JSON만 출력. 모든 텍스트는 한국어 (인명·기업명은 원어 유지).
+정보가 없는 항목은 반드시 "-" 표시. 비상장사일 경우 재무보다 이 섹션 분량을 더 깊게 조사.`;
+
+    const schema = `아래 스키마의 JSON 객체만 출력:
+{"founders":[{"name":"이름","title":"직책","education":"출신학교 또는 '-'","major":"전공 또는 '-'"}],"career_trajectory":[{"period":"기간(예: 2018–현재)","company":"기업명","role":"직책/역할"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"기업명","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"SNS 스타일 1줄 또는 '-'","media_exposure":"주요 미디어 노출 1줄 또는 '-'","blind_glassdoor":"Blind/Glassdoor 평판 요약 1줄 또는 '-'"},"network":{"investors":["투자자 이름/기관 최대 5개"],"advisors_board":["어드바이저/보드 최대 5개"],"cofounders":["공동창업자 이름 최대 5개"]},"one_liner":"N회차 창업자, [강점] / [리스크] 형식의 1문장 요약"}
+career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventures가 없으면 빈 배열 [].`;
+
+    const raw = await runWithWebSearch(
+      systemPrompt,
+      `기업명: ${companyName}\n\n아래 순서로 웹 검색하여 창업자/CEO 정보를 수집하세요:\n1. "${companyName} 창업자 CEO 이름 학력 경력" (또는 영문: "${companyName} founder CEO background education")\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} 투자자 investor board advisor"\n4. "${companyName} CEO SNS LinkedIn media interview"\n5. Blind 또는 Glassdoor에서 "${companyName}" 직원 평가 검색\n\n수집 후 아래 스키마로 반환:\n${schema}`,
+      'claude-sonnet-4-6',
+      8,
+      6000,
+    );
+    const result = extractJson<FounderV2>(raw, 'founder_v2');
+    console.log(`[claude] founder_v2 OK  ${Date.now() - t0}ms`);
+    return result;
+  } catch (err) {
+    console.error(`[claude] founder_v2 FAIL ${Date.now() - t0}ms`, err);
+    return null;
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function analyzeCompany(
@@ -568,8 +639,9 @@ export async function analyzeCompany(
     `\n[웹 리서치]\n${researchText}`,
   ].filter(Boolean).join('\n');
 
-  // Step 2: 9 sections in parallel — allSettled so one hang/fail doesn't block others
+  // Step 2: 10 sections in parallel — allSettled so one hang/fail doesn't block others
   const SECTION_TIMEOUT = 30_000;
+  const FOUNDER_TIMEOUT = 60_000;
   const t1 = Date.now();
   const results = await Promise.allSettled([
     withTimeout(callSection<SummaryV2>(sharedContext, 'summary_v2'),                 SECTION_TIMEOUT, 'summary_v2'),
@@ -581,6 +653,7 @@ export async function analyzeCompany(
     withTimeout(callSection<StrategyV2>(sharedContext, 'strategy_v2'),               SECTION_TIMEOUT, 'strategy_v2'),
     withTimeout(callSection<FinancialsV2>(sharedContext, 'financials_v2'),            SECTION_TIMEOUT, 'financials_v2'),
     withTimeout(callSection<AnalysisSources>(sharedContext, 'sources'),               SECTION_TIMEOUT, 'sources'),
+    withTimeout(callFounderSection(companyName),                                      FOUNDER_TIMEOUT, 'founder_v2'),
   ]);
   console.log(`[claude] parallel sections done ${Date.now() - t1}ms`);
 
@@ -588,7 +661,7 @@ export async function analyzeCompany(
     return r.status === 'fulfilled' && r.value !== null ? r.value : fallback;
   }
 
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8] = results;
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = results;
   return {
     summary_v2:          settled(r0, { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName }),
     industry_history_v2: settled(r1, DEFAULT_ANALYSIS_DATA.industry_history_v2),
@@ -599,6 +672,7 @@ export async function analyzeCompany(
     strategy_v2:         settled(r6, DEFAULT_ANALYSIS_DATA.strategy_v2),
     financials_v2:       settled(r7, DEFAULT_ANALYSIS_DATA.financials_v2),
     sources:             settled(r8, DEFAULT_ANALYSIS_DATA.sources),
+    founder_v2:          settled(r9, DEFAULT_ANALYSIS_DATA.founder_v2),
   };
 }
 

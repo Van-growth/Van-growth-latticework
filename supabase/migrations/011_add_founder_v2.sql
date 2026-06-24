@@ -1,0 +1,2 @@
+ALTER TABLE analyses
+  ADD COLUMN IF NOT EXISTS founder_v2 JSONB;

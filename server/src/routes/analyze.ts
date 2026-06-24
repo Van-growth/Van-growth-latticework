@@ -62,6 +62,7 @@ router.post('/', async (req: Request, res: Response) => {
         competitors_v2:      analysis.competitors_v2,
         strategy_v2:         analysis.strategy_v2,
         financials_v2:       analysis.financials_v2,
+        founder_v2:          analysis.founder_v2,
       })
       .select('id, created_at')
       .single();
@@ -118,6 +119,7 @@ router.post('/', async (req: Request, res: Response) => {
       competitors_v2:      analysis.competitors_v2,
       strategy_v2:         analysis.strategy_v2,
       financials_v2:       analysis.financials_v2,
+      founder_v2:          analysis.founder_v2,
       dataSource,
     });
   } catch (err) {

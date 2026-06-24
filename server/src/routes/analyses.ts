@@ -89,6 +89,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       competitors_v2:      row.competitors_v2      ?? null,
       strategy_v2:         row.strategy_v2         ?? null,
       financials_v2:       row.financials_v2        ?? null,
+      founder_v2:          row.founder_v2           ?? null,
     });
   } catch (err) {
     console.error('[GET /api/analyses/:id]', err);

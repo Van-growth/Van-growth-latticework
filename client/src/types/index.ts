@@ -340,6 +340,41 @@ export interface FinancialsV2 {
   };
 }
 
+// ── Founder V2 ────────────────────────────────────────────────────────────────
+
+export interface FounderV2 {
+  founders: {
+    name: string;
+    title: string;
+    education: string;
+    major: string;
+  }[];
+  career_trajectory: {
+    period: string;
+    company: string;
+    role: string;
+  }[];
+  founding_history: {
+    type: '1st_time' | 'serial';
+    previous_ventures: {
+      name: string;
+      result: 'exit' | 'closed' | 'operating';
+      exit_type?: 'M&A' | 'IPO' | null;
+    }[];
+  };
+  reputation: {
+    sns_style: string;
+    media_exposure: string;
+    blind_glassdoor: string;
+  };
+  network: {
+    investors: string[];
+    advisors_board: string[];
+    cofounders: string[];
+  };
+  one_liner: string;
+}
+
 // ── Common ────────────────────────────────────────────────────────────────────
 
 export interface AnalysisSummary {
@@ -378,6 +413,7 @@ export interface AnalysisDetail {
   competitors_v2?: CompetitorsV2;
   strategy_v2?: StrategyV2;
   financials_v2?: FinancialsV2;
+  founder_v2?: FounderV2;
   // Meta
   sources: AnalysisSources;
   dataSource?: DataSource;
