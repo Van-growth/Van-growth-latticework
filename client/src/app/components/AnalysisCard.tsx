@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, memo, useCallback } from 'react';
+import { useState, memo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
@@ -158,14 +158,15 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
       </div>
       <div className="flex flex-col gap-1.5">
         {sources.map((s, i) => {
+          const idx = s.index ?? i + 1;
           const badge = LEVEL_BADGE[s.level] ?? LEVEL_BADGE.L2;
-          const inner = (
+          return (
             <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
-              <span className="shrink-0 text-[10px] text-gray-400 w-4 text-right mt-0.5">[{s.index ?? i + 1}]</span>
+              <span className="shrink-0 font-bold text-gray-700 w-6 text-right mt-0.5">[{idx}]</span>
               <span className={`shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none mt-0.5 ${badge.cls}`}>
                 {badge.label}
               </span>
-              <span className="leading-snug">
+              <span className="leading-snug flex-1">
                 <span className="font-medium text-gray-700">{s.organization}</span>
                 {s.date && <span className="text-gray-400 ml-1">{s.date}</span>}
                 {' — '}
@@ -180,7 +181,6 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
               )}
             </div>
           );
-          return inner;
         })}
       </div>
     </div>
@@ -201,6 +201,38 @@ function DataSourceBadge({ source }: { source: DataSource }) {
     <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${cfg.cls}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
+    </span>
+  );
+}
+
+// ── One-liner block ───────────────────────────────────────────────────────────
+
+function OneLinerBlock({ text }: { text?: string | null }) {
+  if (!text || text === '-') return null;
+  return (
+    <div className="bg-gray-900 rounded-xl px-5 py-4">
+      <p className="text-white font-semibold text-sm leading-snug">{text}</p>
+    </div>
+  );
+}
+
+// ── Cited text (renders [n] markers as superscript badges) ────────────────────
+
+function CitedText({ text, className = '' }: { text: string | null | undefined; className?: string }) {
+  if (!text) return null;
+  const parts = text.split(/(\[\d+\])/g);
+  if (parts.length === 1) return <span className={className}>{text}</span>;
+  return (
+    <span className={className}>
+      {parts.map((part, i) => {
+        const m = part.match(/^\[(\d+)\]$/);
+        if (m) return (
+          <sup key={i} className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-bold ml-0.5 align-top mt-0.5">
+            {m[1]}
+          </sup>
+        );
+        return <span key={i}>{part}</span>;
+      })}
     </span>
   );
 }
@@ -432,6 +464,7 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
 function IndustryHistoryV2Tab({ h, sources, ticker }: { h: IndustryHistoryV2; sources: Source[] | undefined; ticker: string | null }) {
   return (
     <div className="space-y-4">
+      <OneLinerBlock text={h.one_liner} />
       <TradingViewWidget symbol={ticker} />
       <div>
         {h.timeline.map((item, i) => {
@@ -567,6 +600,7 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
 function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
   return (
     <div className="space-y-4">
+      <OneLinerBlock text={t.one_liner} />
       <div className="space-y-3">
         {t.stages.map((s, i) => {
           const hype = HYPE_LEVEL_CFG[s.hype_level] ?? HYPE_LEVEL_CFG.mainstream;
@@ -669,6 +703,7 @@ function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
 function ValueChainV2Tab({ vc, sources }: { vc: ValueChainV2; sources: Source[] | undefined }) {
   return (
     <div className="space-y-4">
+      <OneLinerBlock text={vc.one_liner} />
       {/* Horizontal flow */}
       <SectionCard title="밸류체인 레이어" dotColor="bg-indigo-400">
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
@@ -837,6 +872,7 @@ function BusinessModelV2Tab({ bm, sources }: { bm: BusinessModelV2; sources: Sou
 
   return (
     <div className="space-y-4">
+      <OneLinerBlock text={bm.one_liner} />
       {/* Revenue streams */}
       {bm.revenue_streams.length > 0 && (
         <SectionCard title="Revenue Streams" dotColor="bg-green-400">
@@ -1075,6 +1111,7 @@ function CompetitorsV2Tab({ c, sources }: { c: CompetitorsV2; sources: Source[] 
   const pos = COMPETITIVE_POSITION_CFG[c.competitive_position] ?? COMPETITIVE_POSITION_CFG.niche;
   return (
     <div className="space-y-4">
+      <OneLinerBlock text={c.one_liner} />
       {/* Position badge */}
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-gray-400">경쟁 포지션</span>
@@ -1262,6 +1299,7 @@ function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | unde
 
   return (
     <div className="space-y-1">
+      <OneLinerBlock text={s.one_liner} />
       {sections.map((sec, si) => (
         <div key={sec.label}>
           <div className="bg-white border border-gray-100 rounded-xl p-4">
@@ -1457,6 +1495,7 @@ function FinancialsV2Tab({ f, sources, ticker, onRefresh, isRefreshing }: {
 
   return (
     <div className="space-y-4">
+      <OneLinerBlock text={f.one_liner} />
       {/* Stock chart */}
       <TradingViewWidget symbol={ticker} />
 
@@ -1477,7 +1516,9 @@ function FinancialsV2Tab({ f, sources, ticker, onRefresh, isRefreshing }: {
         <SectionCard title="재무 서사" dotColor="bg-emerald-400">
           <div className="space-y-1.5">
             {splitLines(f.narrative).map((l, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+              <p key={i} className="text-sm text-gray-700 leading-relaxed">
+                <CitedText text={l} />
+              </p>
             ))}
           </div>
         </SectionCard>
@@ -1940,53 +1981,6 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
 
   const ticker = data.summary_v2?.ticker ?? null;
 
-  const tabContent = useMemo(() => {
-    switch (tab) {
-      case 'summary':
-        return data.summary_v2
-          ? <SummaryV2Tab s={data.summary_v2} sources={data.sources?.summary} />
-          : <SummaryTab data={data} />;
-      case 'industry_history':
-        return data.industry_history_v2
-          ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.sources?.industry_history} ticker={ticker} />
-          : <IndustryHistoryTab data={data} />;
-      case 'tech_evolution':
-        return data.tech_evolution_v2
-          ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.sources?.tech_evolution} />
-          : <TechEvolutionTab data={data} />;
-      case 'value_chain':
-        return data.value_chain_v2
-          ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.sources?.value_chain} />
-          : <ValueChainTab data={data} />;
-      case 'business_model':
-        return data.business_model_v2
-          ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.sources?.business_model} />
-          : <BusinessModelTab data={data} />;
-      case 'competitors':
-        return data.competitors_v2
-          ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.sources?.competitors} />
-          : <CompetitorsTab data={data} />;
-      case 'strategy':
-        return data.strategy_v2
-          ? <StrategyV2Tab s={data.strategy_v2} sources={data.sources?.strategy} />
-          : <StrategyTab data={data} />;
-      case 'financials':
-        return financialsV2Local
-          ? <FinancialsV2Tab
-              f={financialsV2Local}
-              sources={data.sources?.financials}
-              ticker={ticker}
-              onRefresh={handleRefreshFinancials}
-              isRefreshing={refreshingFinancials}
-            />
-          : <FinancialsTab data={data} />;
-      case 'founder':
-        return data.founder_v2
-          ? <FounderV2Tab f={data.founder_v2} />
-          : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, data, financialsV2Local, refreshingFinancials, ticker, handleRefreshFinancials]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2033,7 +2027,57 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
 
       {/* Tab content — only active tab is mounted */}
       <div className="p-5 bg-gray-50 min-h-[300px]">
-        {tabContent}
+        {tab === 'summary' && (
+          data.summary_v2
+            ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} />
+            : <SummaryTab data={data} />
+        )}
+        {tab === 'industry_history' && (
+          data.industry_history_v2
+            ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} ticker={ticker} />
+            : <IndustryHistoryTab data={data} />
+        )}
+        {tab === 'tech_evolution' && (
+          data.tech_evolution_v2
+            ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
+            : <TechEvolutionTab data={data} />
+        )}
+        {tab === 'value_chain' && (
+          data.value_chain_v2
+            ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
+            : <ValueChainTab data={data} />
+        )}
+        {tab === 'business_model' && (
+          data.business_model_v2
+            ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
+            : <BusinessModelTab data={data} />
+        )}
+        {tab === 'competitors' && (
+          data.competitors_v2
+            ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} />
+            : <CompetitorsTab data={data} />
+        )}
+        {tab === 'strategy' && (
+          data.strategy_v2
+            ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
+            : <StrategyTab data={data} />
+        )}
+        {tab === 'financials' && (
+          financialsV2Local
+            ? <FinancialsV2Tab
+                f={financialsV2Local}
+                sources={financialsV2Local.sources ?? data.sources?.financials}
+                ticker={ticker}
+                onRefresh={handleRefreshFinancials}
+                isRefreshing={refreshingFinancials}
+              />
+            : <FinancialsTab data={data} />
+        )}
+        {tab === 'founder' && (
+          data.founder_v2
+            ? <FounderV2Tab f={data.founder_v2} />
+            : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>
+        )}
       </div>
     </div>
   );

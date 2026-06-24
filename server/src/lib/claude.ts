@@ -37,6 +37,14 @@ export interface AnalysisSources {
   financials?: Source[];
 }
 
+export interface SectionSource {
+  index: number;
+  level: SourceLevel;
+  organization: string;
+  content: string;
+  url?: string;
+}
+
 export interface SummaryV2 {
   company: string;
   ticker: string | null;
@@ -65,6 +73,8 @@ export interface IndustryHistoryV2 {
   }[];
   why_durable: string;
   chasm_points: string[];
+  one_liner: string;
+  sources: SectionSource[];
 }
 
 export interface TechEvolutionV2 {
@@ -80,6 +90,8 @@ export interface TechEvolutionV2 {
   }[];
   current_stage: string;
   next_inflection: string;
+  one_liner: string;
+  sources: SectionSource[];
 }
 
 export interface ValueChainLayerLeader {
@@ -102,6 +114,8 @@ export interface ValueChainV2 {
   layers: ValueChainLayer[];
   value_flow: string;
   subject_position: string;
+  one_liner: string;
+  sources: SectionSource[];
 }
 
 export interface RevenueStream {
@@ -137,6 +151,8 @@ export interface BusinessModelV2 {
     nrr: number;
   };
   moat: MoatV2[];
+  one_liner: string;
+  sources: SectionSource[];
 }
 
 export interface DirectCompetitorV2 {
@@ -153,6 +169,8 @@ export interface CompetitorsV2 {
   indirect: { name: string; threat: string }[];
   substitutes: { name: string; threat: string }[];
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
+  one_liner: string;
+  sources: SectionSource[];
 }
 
 export interface StrategyV2 {
@@ -176,6 +194,8 @@ export interface StrategyV2 {
   };
   strategy_coherence: string;
   ten_year_durability: string;
+  one_liner: string;
+  sources: SectionSource[];
 }
 
 export interface FinancialsV2Row {
@@ -220,6 +240,8 @@ export interface FinancialsV2 {
     midLongTerm: string;
     keyRisks: string[];
   };
+  one_liner: string;
+  sources: SectionSource[];
 }
 
 export interface FounderV2 {
@@ -278,21 +300,22 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     products: [], key_metrics: [], top_customers: [], key_markets: [],
     one_line: '', bull_case: '', bear_case: '', oneLiner: '',
   },
-  industry_history_v2: { industry_name: '', timeline: [], why_durable: '', chasm_points: [] },
-  tech_evolution_v2: { tech_name: '', stages: [], current_stage: '', next_inflection: '' },
-  value_chain_v2: { industry: '', layers: [], value_flow: '', subject_position: '' },
+  industry_history_v2: { industry_name: '', timeline: [], why_durable: '', chasm_points: [], one_liner: '', sources: [] },
+  tech_evolution_v2: { tech_name: '', stages: [], current_stage: '', next_inflection: '', one_liner: '', sources: [] },
+  value_chain_v2: { industry: '', layers: [], value_flow: '', subject_position: '', one_liner: '', sources: [] },
   business_model_v2: {
     revenue_streams: [], segments: [],
     growth_motion: 'hybrid', growth_motion_detail: '',
     unit_economics: { gross_margin: 0, operating_margin: 0, net_margin: 0, fcf_margin: 0, nrr: 0 },
     moat: [],
+    one_liner: '', sources: [],
   },
-  competitors_v2: { direct: [], indirect: [], substitutes: [], competitive_position: 'niche' },
+  competitors_v2: { direct: [], indirect: [], substitutes: [], competitive_position: 'niche', one_liner: '', sources: [] },
   strategy_v2: {
     corporate: { direction: '', portfolio: '', ma_partnerships: [], geographic: '' },
     business: { direction: '', competitive_advantage: '', go_to_market: '', product_roadmap: [] },
     financial: { direction: '', capital_allocation: '', investment_priority: '', return_target: '' },
-    strategy_coherence: '', ten_year_durability: '',
+    strategy_coherence: '', ten_year_durability: '', one_liner: '', sources: [],
   },
   financials_v2: {
     narrative: '',
@@ -301,6 +324,7 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     munger_buffett_metrics: { roe: '', roic: '', owner_earnings: '', debt_to_equity: '', interest_coverage: '', reinvestment_rate: '' },
     key_risks: [],
     outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
+    one_liner: '', sources: [],
   },
   founder_v2: {
     founders: [],
@@ -474,30 +498,31 @@ ticker 필드는 반드시 TradingView 형식으로 반환: 미국 NASDAQ 상장
 oneLiner 규칙: 숫자 나열 금지. "왜 이 숫자가 의미있는가"를 서사로 설명. 예시 스타일: "매출은 늘었는데 이익은 줄었다 — 글로벌 인프라에 돈을 쏟아붓는 투자 시즌".`,
 
   industry_history_v2: `아래 스키마의 JSON 객체만 출력:
-{"industry_name":"산업명","timeline":[{"period":"시기","title":"시대제목 15자이내","technology":"핵심기술 1줄","market_need":"시장수요 1줄","key_players":["기업명(국가)"],"significance":"중요성 1줄"}],"why_durable":"지속가능이유 2줄이내","chasm_points":["캐즘시점과이유 1줄 최대3개"]}
-timeline은 연대순 4~6개.`,
+{"industry_name":"산업명","timeline":[{"period":"시기","title":"시대제목 15자이내","technology":"핵심기술 1줄","market_need":"시장수요 1줄","key_players":["기업명(국가)"],"significance":"중요성 1줄"}],"why_durable":"지속가능이유 2줄이내","chasm_points":["캐즘시점과이유 1줄 최대3개"],"one_liner":"이 산업의 핵심 특성 투자자 관점 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+timeline은 연대순 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.`,
 
   tech_evolution_v2: `아래 스키마의 JSON 객체만 출력:
-{"tech_name":"핵심기술명","stages":[{"stage":1,"period":"시기","title":"단계제목 15자이내","description":"설명 2줄이내","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["핵심요인 최대3개"],"key_players":["기업명 최대4개"]}],"current_stage":"현재단계 1줄","next_inflection":"다음변곡점 1줄"}
-stages는 4~6개.`,
+{"tech_name":"핵심기술명","stages":[{"stage":1,"period":"시기","title":"단계제목 15자이내","description":"설명 2줄이내","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["핵심요인 최대3개"],"key_players":["기업명 최대4개"]}],"current_stage":"현재단계 1줄","next_inflection":"다음변곡점 1줄","one_liner":"이 기술의 현재 위치 핵심 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+stages는 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.`,
 
   value_chain_v2: `아래 스키마의 JSON 객체만 출력:
-{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내"}
+{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내","one_liner":"분석기업 밸류체인 포지션 핵심 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true 설정.`,
 
   business_model_v2: `아래 스키마의 JSON 객체만 출력:
-{"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}]}`,
+{"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}],"one_liner":"비즈니스모델 핵심 경쟁우위 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}`,
 
   competitors_v2: `아래 스키마의 JSON 객체만 출력:
-{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율","strengths":["강점 1줄 최대3개"],"weaknesses":["약점 1줄 최대2개"],"vs_subject":"차별점 1줄"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower"}
+{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율","strengths":["강점 1줄 최대3개"],"weaknesses":["약점 1줄 최대2개"],"vs_subject":"차별점 1줄"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower","one_liner":"경쟁구도 핵심 포지션 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 direct는 글로벌 직접 경쟁사 3~5개 필수.`,
 
   strategy_v2: `아래 스키마의 JSON 객체만 출력:
-{"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내"}`,
+{"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내","one_liner":"전략 핵심 방향성 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}`,
 
   financials_v2: `아래 스키마의 JSON 객체만 출력:
-{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요'","fy2022":"공시값 or '확인 필요'","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"공시값% or '수치% (추정)' or '확인 필요'","roic":"공시값% or '수치% (추정)' or '확인 필요'","owner_earnings":"공시값 or '확인 필요'","debt_to_equity":"공시값 or '확인 필요'","interest_coverage":"공시값 or '확인 필요'","reinvestment_rate":"공시값% or '수치% (추정)' or '확인 필요'"},"key_risks":["리스크 1줄 최대5개"],"outlook":{"shortTerm":"단기 전망 (3~6개월) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","midLongTerm":"중장기 전망 (1~3년) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","keyRisks":["핵심 리스크 1줄 최대3개"]}}
+{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요'","fy2022":"공시값 or '확인 필요'","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요'","fy2024":"공시값 or '확인 필요'","fy2025":"공시값 or '수치 (추정)' or '확인 필요'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"공시값% or '수치% (추정)' or '확인 필요'","roic":"공시값% or '수치% (추정)' or '확인 필요'","owner_earnings":"공시값 or '확인 필요'","debt_to_equity":"공시값 or '확인 필요'","interest_coverage":"공시값 or '확인 필요'","reinvestment_rate":"공시값% or '수치% (추정)' or '확인 필요'"},"key_risks":["리스크 1줄 최대5개"],"outlook":{"shortTerm":"단기 전망 (3~6개월) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","midLongTerm":"중장기 전망 (1~3년) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","keyRisks":["핵심 리스크 1줄 최대3개"]},"one_liner":"재무 현황 핵심 투자 포인트 1문장 20자이내","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 income_statement·balance_sheet 빈칸 절대 금지 — 공시 수치 없으면 반드시 '확인 필요'. 추정값은 반드시 '숫자 (추정)' 형식.
+narrative 및 주요 수치에 [n] 형식으로 출처 번호 포함.
 outlook 규칙: 재무 데이터 기반으로 작성. 근거 없는 낙관 금지. shortTerm·midLongTerm 앞에 반드시 ○/△/▼ 심볼 명시.`,
 
   sources: `아래 스키마의 JSON 객체만 출력. 리서치에서 실제로 참조한 출처를 탭별로 정리:

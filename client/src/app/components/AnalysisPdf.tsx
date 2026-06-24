@@ -433,6 +433,37 @@ function Divider() {
   return <View style={s.divider} />;
 }
 
+function OneLinerBoxPdf({ text }: { text?: string | null }) {
+  if (!text || text === '-') return null;
+  return (
+    <View style={{ backgroundColor: C.dark, borderRadius: 4, padding: 10, marginBottom: 10 }}>
+      <Text style={{ color: C.white, fontSize: 9, fontWeight: 700, lineHeight: 1.4 }}>{text}</Text>
+    </View>
+  );
+}
+
+function SectionSources({ sources }: { sources?: Source[] | null }) {
+  if (!sources?.length) return null;
+  return (
+    <View style={{ marginTop: 8, paddingTop: 6, borderTop: `1 solid ${C.border}` }}>
+      <Text style={{ fontSize: 7, fontWeight: 700, color: C.mid, marginBottom: 4, letterSpacing: 0.5 }}>출처</Text>
+      {sources.map((src, i) => {
+        const idx = src.index ?? i + 1;
+        const badgeCls = src.level === 'L1' ? s.srcBadgeL1 : src.level === 'L2' ? s.srcBadgeL2 : s.srcBadgeL3;
+        const label = src.level === 'L1' ? 'L1' : src.level === 'L2' ? 'L2' : 'L3';
+        return (
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 2 }}>
+            <Text style={[s.srcBadge, badgeCls]}>{label}</Text>
+            <Text style={{ fontSize: 7, color: C.mid, flex: 1, lineHeight: 1.3 }}>
+              [{idx}] {src.organization}{src.date ? ` ${src.date}` : ''} — {src.content}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ── Cover Page ────────────────────────────────────────────────────────────────
 
 function CoverPage({ data }: { data: AnalysisDetail }) {
@@ -576,6 +607,7 @@ function IndustryHistorySection({ v }: { v: IndustryHistoryV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={2} title={`산업 역사 — ${v.industry_name}`} />
+      <OneLinerBoxPdf text={v.one_liner} />
 
       {v.why_durable && (
         <>
@@ -607,6 +639,7 @@ function IndustryHistorySection({ v }: { v: IndustryHistoryV2 }) {
           )}
         </View>
       ))}
+      <SectionSources sources={v.sources} />
     </View>
   );
 }
@@ -625,6 +658,7 @@ function TechEvolutionSection({ v }: { v: TechEvolutionV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={3} title={`기술 진화 — ${v.tech_name}`} />
+      <OneLinerBoxPdf text={v.one_liner} />
       <FieldRow label="현재 단계" value={v.current_stage} />
       <FieldRow label="다음 변곡점" value={v.next_inflection} />
 
@@ -650,6 +684,7 @@ function TechEvolutionSection({ v }: { v: TechEvolutionV2 }) {
           )}
         </View>
       ))}
+      <SectionSources sources={v.sources} />
     </View>
   );
 }
@@ -662,6 +697,7 @@ function ValueChainSection({ v }: { v: ValueChainV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={4} title={`밸류체인 — ${v.industry}`} />
+      <OneLinerBoxPdf text={v.one_liner} />
       <FieldRow label="가치 흐름" value={v.value_flow} />
       <FieldRow label="분석 기업 위치" value={v.subject_position} />
 
@@ -699,6 +735,7 @@ function ValueChainSection({ v }: { v: ValueChainV2 }) {
           )}
         </View>
       ))}
+      <SectionSources sources={v.sources} />
     </View>
   );
 }
@@ -709,6 +746,7 @@ function BusinessModelSection({ v }: { v: BusinessModelV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={5} title="비즈니스 모델" />
+      <OneLinerBoxPdf text={v.one_liner} />
 
       <FieldRow label="성장 모션" value={v.growth_motion} />
       {v.growth_motion_detail && <Text style={[s.para, { marginTop: 2 }]}>{v.growth_motion_detail}</Text>}
@@ -769,6 +807,7 @@ function BusinessModelSection({ v }: { v: BusinessModelV2 }) {
           ))}
         </>
       )}
+      <SectionSources sources={v.sources} />
     </View>
   );
 }
@@ -779,6 +818,7 @@ function CompetitorsSection({ v }: { v: CompetitorsV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={6} title="경쟁사 분석" />
+      <OneLinerBoxPdf text={v.one_liner} />
       <FieldRow label="경쟁 포지션" value={v.competitive_position} />
 
       {/* Direct competitors */}
@@ -846,6 +886,7 @@ function CompetitorsSection({ v }: { v: CompetitorsV2 }) {
           </View>
         )}
       </View>
+      <SectionSources sources={v.sources} />
     </View>
   );
 }
@@ -856,6 +897,7 @@ function StrategySection({ v }: { v: StrategyV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={7} title="전략 분석" />
+      <OneLinerBoxPdf text={v.one_liner} />
 
       <View style={s.grid2}>
         {/* Corporate */}
@@ -924,6 +966,7 @@ function StrategySection({ v }: { v: StrategyV2 }) {
           <Text style={s.para}>{v.ten_year_durability}</Text>
         </>
       )}
+      <SectionSources sources={v.sources} />
     </View>
   );
 }
@@ -990,6 +1033,7 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={8} title="재무 분석" />
+      <OneLinerBoxPdf text={v.one_liner} />
 
       {v.narrative && <Text style={[s.para, { marginBottom: 8 }]}>{v.narrative}</Text>}
 
@@ -1080,6 +1124,7 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
           )}
         </>
       )}
+      <SectionSources sources={v.sources} />
     </View>
   );
 }

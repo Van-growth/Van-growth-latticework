@@ -169,6 +169,7 @@ export interface SummaryV2 {
   bull_case: string;
   bear_case: string;
   oneLiner: string;
+  sources?: Source[];
 }
 
 export interface IndustryHistoryV2 {
@@ -183,6 +184,8 @@ export interface IndustryHistoryV2 {
   }[];
   why_durable: string;
   chasm_points: string[];
+  one_liner?: string;
+  sources?: Source[];
 }
 
 export interface TechEvolutionV2 {
@@ -198,6 +201,8 @@ export interface TechEvolutionV2 {
   }[];
   current_stage: string;
   next_inflection: string;
+  one_liner?: string;
+  sources?: Source[];
 }
 
 export interface ValueChainLayerLeader {
@@ -220,6 +225,8 @@ export interface ValueChainV2 {
   layers: ValueChainLayer[];
   value_flow: string;
   subject_position: string;
+  one_liner?: string;
+  sources?: Source[];
 }
 
 export interface RevenueStream {
@@ -255,6 +262,8 @@ export interface BusinessModelV2 {
     nrr: number;
   };
   moat: MoatV2[];
+  one_liner?: string;
+  sources?: Source[];
 }
 
 export interface DirectCompetitorV2 {
@@ -271,6 +280,8 @@ export interface CompetitorsV2 {
   indirect: { name: string; threat: string }[];
   substitutes: { name: string; threat: string }[];
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
+  one_liner?: string;
+  sources?: Source[];
 }
 
 export interface StrategyV2 {
@@ -294,6 +305,8 @@ export interface StrategyV2 {
   };
   strategy_coherence: string;
   ten_year_durability: string;
+  one_liner?: string;
+  sources?: Source[];
 }
 
 export interface FinancialsV2Row {
@@ -338,6 +351,8 @@ export interface FinancialsV2 {
     midLongTerm: string;
     keyRisks: string[];
   };
+  one_liner?: string;
+  sources?: Source[];
 }
 
 // ── Founder V2 ────────────────────────────────────────────────────────────────
@@ -373,6 +388,7 @@ export interface FounderV2 {
     cofounders: string[];
   };
   one_liner: string;
+  sources?: Source[];
 }
 
 // ── Common ────────────────────────────────────────────────────────────────────
