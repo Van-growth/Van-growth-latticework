@@ -207,15 +207,31 @@ router.post('/stream', async (req: Request, res: Response) => {
       .single();
     if (companyErr) throw companyErr;
 
-    // 2. Check financials_v2_cache (3-month validity)
+    // 2. Check financials_v2_cache (3-month validity, company_name exact match)
     const finCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
     const { data: finCache } = await supabase
       .from('financials_v2_cache')
-      .select('financials_v2')
-      .eq('company_name', name)
+      .select('financials_v2, company_name')
+      .eq('company_name', name)           // 정확히 일치하는 company_name만
       .gte('updated_at', finCutoff)
       .maybeSingle();
-    const cachedFinancials: FinancialsV2 | undefined = finCache?.financials_v2 ?? undefined;
+
+    let cachedFinancials: FinancialsV2 | undefined = finCache?.financials_v2 ?? undefined;
+
+    // 캐시 데이터 회사명 일치 검증 — 서사에 회사명 키워드가 없으면 오염된 캐시로 판단하고 무시
+    if (cachedFinancials && finCache?.company_name === name) {
+      const narrative = (cachedFinancials.narrative ?? '').toLowerCase();
+      const nameTokens = name.toLowerCase().split(/[\s,.\-]+/).filter(t => t.length >= 3);
+      const hasMatch = nameTokens.some(token => narrative.includes(token));
+      if (!hasMatch) {
+        console.warn(`[financials_cache] company name mismatch in narrative — discarding cache for "${name}"`);
+        cachedFinancials = undefined;
+        // 오염된 캐시 즉시 삭제
+        await supabase.from('financials_v2_cache').delete().eq('company_name', name);
+      } else {
+        console.log(`[financials_cache] HIT "${name}"`);
+      }
+    }
 
     // 3. Check analysis cache (24h) — full or partial
     if (!forceRefresh) {
