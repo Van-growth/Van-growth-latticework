@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, memo, useCallback, useMemo, useTransition } from 'react';
+import { useState, useEffect, useRef, memo, useCallback, useMemo, useTransition } from 'react';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import dynamic from 'next/dynamic';
 import {
@@ -2371,6 +2371,41 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
   const { completedBatches } = useAnalysis();
   // batchDone: true when not streaming OR when that batch has completed
   const batchDone = (n: number) => completedBatches.size === 0 || completedBatches.has(n);
+
+  // Task 1: 분석 시작 시 요약 탭 자동 이동
+  useEffect(() => {
+    if (completedBatches.size === 1 && completedBatches.has(-1)) {
+      startTransition(() => setTab('summary'));
+    }
+  }, [completedBatches]);
+
+  // Task 2: 탭 완료 시 체크 표시 (1.5s 후 사라짐)
+  const [recentlyCompleted, setRecentlyCompleted] = useState<Set<TabKey>>(new Set());
+  const prevBatchesRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    const prev = prevBatchesRef.current;
+    const isStreaming = completedBatches.has(-1);
+    if (!isStreaming) { prevBatchesRef.current = completedBatches; return; }
+
+    const newlyDone: TabKey[] = [];
+    for (const [key, batchNum] of Object.entries(TAB_BATCH) as [TabKey, number][]) {
+      if (!prev.has(batchNum) && completedBatches.has(batchNum)) {
+        newlyDone.push(key);
+      }
+    }
+    prevBatchesRef.current = completedBatches;
+    if (!newlyDone.length) return;
+
+    setRecentlyCompleted(prev => new Set([...prev, ...newlyDone]));
+    const id = setTimeout(() => {
+      setRecentlyCompleted(prev => {
+        const next = new Set(prev);
+        newlyDone.forEach(k => next.delete(k));
+        return next;
+      });
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [completedBatches]);
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
 
@@ -2419,13 +2454,16 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
         {TABS.map(t => {
           const Icon = t.icon;
           const active = tab === t.key;
+          const isStreaming = completedBatches.has(-1);
+          const isTabLoading = isStreaming && !completedBatches.has(TAB_BATCH[t.key]);
+          const isJustDone = recentlyCompleted.has(t.key);
           return (
             <button
               key={t.key}
               onClick={() => startTransition(() => setTab(t.key))}
               onMouseEnter={() => setHoveredTooltip(t.tooltip)}
               onMouseLeave={() => setHoveredTooltip(null)}
-              className={`shrink-0 flex items-center gap-1.5 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap ${
+              className={`shrink-0 flex items-center gap-1.5 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
                 active
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-50'
@@ -2433,6 +2471,12 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             >
               <Icon size={12} />
               {t.label}
+              {isTabLoading && (
+                <span className="w-2.5 h-2.5 shrink-0 border border-current border-t-transparent rounded-full animate-spin opacity-50" />
+              )}
+              {isJustDone && !isTabLoading && (
+                <span className="text-emerald-500 text-[9px] font-bold leading-none">✓</span>
+              )}
             </button>
           );
         })}
