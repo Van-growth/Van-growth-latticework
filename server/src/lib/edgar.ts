@@ -60,7 +60,10 @@ async function lookupCik(
       .select('cik, name, ticker')
       .ilike('ticker', norm)
       .maybeSingle();
-    if (data) return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    if (data) {
+      console.log(`[edgar] CIK lookup HIT (ticker) "${name}" → ${data.cik} ${data.name}`);
+      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    }
   }
 
   // 2. 마스터 테이블 — exact name
@@ -70,7 +73,10 @@ async function lookupCik(
       .select('cik, name, ticker')
       .ilike('name', name)
       .maybeSingle();
-    if (data) return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    if (data) {
+      console.log(`[edgar] CIK lookup HIT (exact) "${name}" → ${data.cik} ${data.name}`);
+      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    }
   }
 
   // 3. 마스터 테이블 — starts-with
@@ -81,7 +87,10 @@ async function lookupCik(
       .ilike('name', `${name}%`)
       .limit(1)
       .maybeSingle();
-    if (data) return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    if (data) {
+      console.log(`[edgar] CIK lookup HIT (startsWith) "${name}" → ${data.cik} ${data.name}`);
+      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    }
   }
 
   // 4. 마스터 테이블 — contains
@@ -92,19 +101,27 @@ async function lookupCik(
       .ilike('name', `%${name}%`)
       .limit(1)
       .maybeSingle();
-    if (data) return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    if (data) {
+      console.log(`[edgar] CIK lookup HIT (contains) "${name}" → ${data.cik} ${data.name}`);
+      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    }
   }
 
   // 5. EFTS 검색 폴백
+  console.log(`[edgar] CIK not in cik_master, trying EFTS search for "${name}"`);
   const q = encodeURIComponent(`"${name}"`);
   const searchRes = await fetchJson<{ hits: { hits: Array<{ _source: { entity_name?: string; entity_id?: string } }> } }>(
     `https://efts.sec.gov/LATEST/search-index?q=${q}&dateRange=custom&startdt=2015-01-01&forms=10-K,20-F`,
   );
   const hit = searchRes?.hits?.hits?.[0];
-  if (!hit?._source.entity_id) return null;
+  if (!hit?._source.entity_id) {
+    console.log(`[edgar] CIK MISS for "${name}" — EFTS no result`);
+    return null;
+  }
 
   const cik  = hit._source.entity_id.padStart(10, '0');
   const hname = hit._source.entity_name ?? name;
+  console.log(`[edgar] CIK lookup HIT (EFTS) "${name}" → ${cik} ${hname}`);
 
   await supabase.from('cik_master').upsert(
     { cik, name: hname, ticker: null },
@@ -155,16 +172,24 @@ async function getLatestXbrlValue(
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function fetchEdgarData(companyName: string): Promise<EdgarData | null> {
+  console.log(`[edgar] fetchEdgarData start: "${companyName}"`);
   const found = await lookupCik(companyName);
-  if (!found) return null;
+  if (!found) {
+    console.log(`[edgar] fetchEdgarData MISS (no CIK): "${companyName}"`);
+    return null;
+  }
 
   const { cik, name: entityName, ticker } = found;
+  console.log(`[edgar] fetching submissions for CIK ${cik} (${entityName})`);
 
   // 최근 공시
   const subRes = await fetchJson<SubmissionsData>(
     `https://data.sec.gov/submissions/CIK${cik}.json`,
   );
-  if (!subRes) return null;
+  if (!subRes) {
+    console.log(`[edgar] submissions fetch FAILED for CIK ${cik}`);
+    return null;
+  }
 
   const filings: EdgarData['filings'] = [];
   const targets = new Set(['10-K', '10-Q', '8-K', '20-F', '6-K']);
@@ -245,6 +270,8 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
   if (opCF)           financials.operatingCF = opCF.value;
   if (invCF)          financials.investingCF = invCF.value;
   if (finCF)          financials.financingCF = finCF.value;
+
+  console.log(`[edgar] XBRL result for "${companyName}" (CIK ${cik}): rev=${revenue?.value ?? 'null'} opInc=${opIncome?.value ?? 'null'} netInc=${netIncome?.value ?? 'null'} year=${financials.year ?? 'null'}`);
 
   return { cik, companyName: entityName, ticker, filings, financials };
 }

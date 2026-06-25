@@ -160,6 +160,7 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function fetchFinancialContext(companyName: string): Promise<FinancialContext> {
+  console.log(`[financialCtx] start "${companyName}"`);
   const isKorean = isKoreanCompany(companyName);
 
   try {
@@ -193,10 +194,12 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
         const fmpFinal = f ?? (e.ticker
           ? await fetchFmpData(companyName, e.ticker).catch(() => null)
           : null);
+        console.log(`[financialCtx] "${companyName}" → source=edgar (EDGAR+FMP) rev=${e.financials.revenue ?? 'null'}`);
         return { source: 'edgar', contextText: buildEdgarContext(e, fmpFinal) };
       }
       if (f) {
         // EDGAR 없이 FMP만 있는 경우
+        console.log(`[financialCtx] "${companyName}" → source=edgar (FMP only)`);
         return { source: 'edgar', contextText: buildFmpContext(f) };
       }
 
@@ -211,5 +214,6 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
     // unexpected error → graceful fallback
   }
 
+  console.log(`[financialCtx] "${companyName}" → source=web_search (all failed)`);
   return { source: 'web_search', contextText: '' };
 }
