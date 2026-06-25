@@ -693,7 +693,7 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
       {hasMore && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="w-full py-2 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg"
+          className="w-full py-2 text-xs text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg"
         >
           더 보기 ({h.timeline.length - LIMIT}개 더)
         </button>
@@ -2240,9 +2240,9 @@ function ShowMore({ children, label = '더 보기' }: { children: React.ReactNod
       {open && children}
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full py-2.5 text-xs text-gray-500 hover:text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-1.5 mt-1"
+        className="w-full py-2 text-xs text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1.5 mt-1"
       >
-        {open ? `접기 ↑` : `${label} ↓`}
+        {open ? '접기 ↑' : `${label} ↓`}
       </button>
     </>
   );
