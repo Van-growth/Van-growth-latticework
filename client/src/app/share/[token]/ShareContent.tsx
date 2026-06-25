@@ -11,6 +11,12 @@ export default function ShareContent({ token }: { token: string }) {
   const [data, setData] = useState<AnalysisDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [toast, setToast] = useState('');
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2500);
+  }
 
   useEffect(() => {
     fetch(`${API_URL}/api/share/${token}`)
@@ -36,11 +42,25 @@ export default function ShareContent({ token }: { token: string }) {
           <Link href="/" className="font-bold text-gray-900 text-lg hover:text-blue-600 transition-colors">
             ← Latticework
           </Link>
-          {data && (
-            <span className="text-xs text-gray-400">
-              {data.companyName} · {date}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {data && (
+              <span className="hidden sm:inline text-xs text-gray-400">
+                {data.companyName} · {date}
+              </span>
+            )}
+            <button
+              onClick={() => showToast('준비 중입니다')}
+              className="text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              로그인
+            </button>
+            <button
+              onClick={() => showToast('준비 중입니다')}
+              className="text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              회원가입
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -70,6 +90,13 @@ export default function ShareContent({ token }: { token: string }) {
       {!loading && data && (
         <div className="text-xs text-gray-400 text-center border-t border-gray-100 pt-4 mt-8 pb-8">
           Ben의 개인 프로젝트 · 특정 기업 분석 열람 목적으로만 활용 부탁드립니다 · Powered by Latticework
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
+          {toast}
         </div>
       )}
     </div>

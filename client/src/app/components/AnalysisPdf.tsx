@@ -8,6 +8,7 @@ import {
   Text,
   StyleSheet,
   Font,
+  Link,
 } from '@react-pdf/renderer';
 import type {
   AnalysisDetail,
@@ -386,6 +387,29 @@ const s = StyleSheet.create({
     marginTop: 1,
   },
 
+  // ── TOC ──
+  tocItem: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    paddingVertical: 5,
+    borderBottom:    `1 solid ${C.border}`,
+  },
+  tocNum: {
+    fontSize:   8,
+    fontWeight: 700,
+    color:      C.blue,
+    width:      24,
+  },
+  tocTitle: {
+    fontSize: 9,
+    color:    C.dark,
+    flex:     1,
+  },
+  webLink: {
+    fontSize: 8,
+    color:    C.blue,
+  },
+
   // ── Footer ──
   footer: {
     position:   'absolute',
@@ -477,7 +501,7 @@ function SectionSources({ sources }: { sources?: Source[] | null }) {
 
 // ── Cover Page ────────────────────────────────────────────────────────────────
 
-function CoverPage({ data }: { data: AnalysisDetail }) {
+function CoverPage({ data, shareUrl }: { data: AnalysisDetail; shareUrl?: string }) {
   const v2 = data.summary_v2;
   const date = new Date(data.createdAt).toLocaleDateString('ko-KR', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -504,7 +528,51 @@ function CoverPage({ data }: { data: AnalysisDetail }) {
           <Text style={[s.para, { marginTop: 4, fontSize: 9, color: C.mid }]}>{v2.oneLiner}</Text>
         </>
       )}
+      {shareUrl && (
+        <>
+          <Divider />
+          <Link src={shareUrl} style={s.webLink}>웹에서 보기 → {shareUrl}</Link>
+        </>
+      )}
     </View>
+  );
+}
+
+// ── TOC Page ──────────────────────────────────────────────────────────────────
+
+const TOC_SECTIONS = [
+  { num: 1, title: '기업 개요' },
+  { num: 2, title: '산업 역사' },
+  { num: 3, title: '기술 변화' },
+  { num: 4, title: '밸류체인' },
+  { num: 5, title: '비즈니스 모델' },
+  { num: 6, title: '경쟁사 분석' },
+  { num: 7, title: '전략 분석' },
+  { num: 8, title: '재무 분석' },
+  { num: 9, title: '창업자 분석' },
+];
+
+function TOCPage({ company, shareUrl }: { company: string; shareUrl?: string }) {
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.section}>
+        <View style={[s.sectionHeaderWrap, { marginBottom: 12 }]}>
+          <Text style={s.sectionTitle}>목차</Text>
+        </View>
+        {TOC_SECTIONS.map(item => (
+          <View key={item.num} style={s.tocItem}>
+            <Text style={s.tocNum}>{String(item.num).padStart(2, '0')}</Text>
+            <Text style={s.tocTitle}>{item.title}</Text>
+          </View>
+        ))}
+        {shareUrl && (
+          <View style={{ marginTop: 20 }}>
+            <Link src={shareUrl} style={s.webLink}>웹에서 보기 → {shareUrl}</Link>
+          </View>
+        )}
+      </View>
+      <PageFooter company={company} />
+    </Page>
   );
 }
 
@@ -1399,7 +1467,7 @@ function PageFooter({ company }: { company: string }) {
 
 // ── Root Document ─────────────────────────────────────────────────────────────
 
-export default function AnalysisPdf({ data }: { data: AnalysisDetail }) {
+export default function AnalysisPdf({ data, shareUrl }: { data: AnalysisDetail; shareUrl?: string }) {
   const hasV2 = !!(
     data.summary_v2 || data.industry_history_v2 || data.tech_evolution_v2 ||
     data.value_chain_v2 || data.business_model_v2 || data.competitors_v2 ||
@@ -1410,9 +1478,12 @@ export default function AnalysisPdf({ data }: { data: AnalysisDetail }) {
     <Document title={`${data.companyName} 기업 분석 보고서`} author="Latticework">
       {/* Cover */}
       <Page size="A4" style={s.page}>
-        <CoverPage data={data} />
+        <CoverPage data={data} shareUrl={shareUrl} />
         <PageFooter company={data.companyName} />
       </Page>
+
+      {/* TOC */}
+      <TOCPage company={data.companyName} shareUrl={shareUrl} />
 
       {/* Content */}
       <Page size="A4" style={s.page}>

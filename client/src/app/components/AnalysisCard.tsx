@@ -401,7 +401,7 @@ function StockChart({ ticker }: { ticker: string | null }) {
 
 // ── V2 Tab: 요약 ──────────────────────────────────────────────────────────────
 
-function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefined }) {
+function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Source[] | undefined; onTabChange?: (tab: string) => void }) {
   const vcPos = VC_POSITION_CFG[s.value_chain_position] ?? VC_POSITION_CFG.midstream;
   // When a ticker is available, TradingView replaces the 시가총액 MetricCard
   const filteredMetrics = s.ticker
@@ -426,6 +426,12 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
           {filteredMetrics.map((m, i) => (
             <MetricCard key={i} value={m.value} label={m.label} trend={m.trend} />
           ))}
+        </div>
+      )}
+
+      {onTabChange && filteredMetrics.length > 0 && (
+        <div className="flex justify-end">
+          <button onClick={() => onTabChange('financials')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">재무 상세 보기 →</button>
         </div>
       )}
 
@@ -463,6 +469,12 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
           </SectionCard>
         )}
       </div>
+
+      {onTabChange && (s.products.length > 0 || s.key_markets.length > 0) && (
+        <div className="flex justify-end -mt-1">
+          <button onClick={() => onTabChange('business_model')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">비즈니스모델 보기 →</button>
+        </div>
+      )}
 
       {/* Top customers + concentration */}
       {(s.top_customers.length > 0 || s.customer_concentration) && (() => {
@@ -518,6 +530,12 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
         );
       })()}
 
+      {onTabChange && (s.top_customers.length > 0 || s.customer_concentration) && (
+        <div className="flex justify-end">
+          <button onClick={() => onTabChange('competitors')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">경쟁사 분석 보기 →</button>
+        </div>
+      )}
+
       {/* 성장 모멘텀 / 핵심 리스크 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="bg-green-50 border border-green-100 rounded-xl p-4">
@@ -529,6 +547,12 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
           <p className="text-sm text-gray-700 leading-relaxed">{s.bear_case}</p>
         </div>
       </div>
+
+      {onTabChange && (
+        <div className="flex justify-end">
+          <button onClick={() => onTabChange('strategy')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">전략 보기 →</button>
+        </div>
+      )}
 
       <SourcesList sources={sources} />
     </div>
@@ -2412,7 +2436,7 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
         {tab === 'summary' && (
           !batchDone(TAB_BATCH.summary) ? <SummarySkeleton /> :
           data.summary_v2
-            ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} />
+            ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => startTransition(() => setTab(key as TabKey))} />
             : <SummaryTab data={data} />
         )}
         {tab === 'industry_history' && (

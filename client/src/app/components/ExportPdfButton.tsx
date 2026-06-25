@@ -15,7 +15,10 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
     setLoading(true);
     setError(false);
     try {
-      const blob = await pdf(<AnalysisPdf data={data} />).toBlob();
+      const shareUrl = data.share_token
+        ? `${window.location.origin}/share/${data.share_token}`
+        : undefined;
+      const blob = await pdf(<AnalysisPdf data={data} shareUrl={shareUrl} />).toBlob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
