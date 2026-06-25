@@ -709,9 +709,17 @@ export async function refreshFinancials(companyName: string): Promise<Financials
 export async function analyzeCompany(
   companyName: string,
   financialContext?: string,
-  onSection?: (key: string, data: unknown, completed: number, total: number) => void,
+  onBatch?: (batchNum: number, data: Partial<AnalysisData>) => Promise<void>,
+  opts?: {
+    skipBatches?: Set<number>;
+    initialData?: Partial<AnalysisData>;
+    cachedFinancials?: FinancialsV2;
+  },
 ): Promise<AnalysisData> {
-  // Step 1: One web-search pass to gather research context
+  const skip = opts?.skipBatches ?? new Set<number>();
+  const result: AnalysisData = { ...DEFAULT_ANALYSIS_DATA, ...(opts?.initialData ?? {}) };
+
+  // Gather research context (always needed for any non-skipped batch)
   const t0 = Date.now();
   const researchText = await gatherResearch(companyName);
   console.log(`[claude] gatherResearch done ${Date.now() - t0}ms`);
@@ -722,64 +730,77 @@ export async function analyzeCompany(
     `\n[웹 리서치]\n${researchText}`,
   ].filter(Boolean).join('\n');
 
-  // Step 2: 10 sections in parallel — individual error handling so one hang/fail doesn't block others
-  const SECTION_TIMEOUT = 30_000;
-  const FOUNDER_TIMEOUT = 60_000;
-  const TOTAL = 10;
-  let completedCount = 0;
+  const BATCH_TIMEOUT = 75_000;
 
-  async function runSection<T>(key: string, promise: Promise<T | null>, timeout: number, fallback: T): Promise<T> {
+  async function runBatch(
+    batchNum: number,
+    makeRunners: () => Promise<any>[],
+    merge: (vals: any[]) => Partial<AnalysisData>,
+  ): Promise<void> {
+    if (skip.has(batchNum)) return;
+    const t = Date.now();
     try {
-      const result = await withTimeout(promise, timeout, key);
-      const value = result ?? fallback;
-      completedCount++;
-      onSection?.(key, value, completedCount, TOTAL);
-      return value;
-    } catch {
-      completedCount++;
-      onSection?.(key, fallback, completedCount, TOTAL);
-      return fallback;
+      const vals = await withTimeout(Promise.all(makeRunners()), BATCH_TIMEOUT, `batch${batchNum}`);
+      console.log(`[claude] batch${batchNum} OK ${Date.now() - t}ms`);
+      const data = merge(vals);
+      Object.assign(result, data);
+      await onBatch?.(batchNum, data);
+    } catch (err) {
+      console.error(`[claude] batch${batchNum} FAIL ${Date.now() - t}ms`, err);
+      await onBatch?.(batchNum, {});
     }
   }
 
-  const t1 = Date.now();
-  const [
-    summary_v2,
-    industry_history_v2,
-    tech_evolution_v2,
-    value_chain_v2,
-    business_model_v2,
-    competitors_v2,
-    strategy_v2,
-    financials_v2,
-    sources,
-    founder_v2,
-  ] = await Promise.all([
-    runSection('summary_v2',          callSection<SummaryV2>(sharedContext, 'summary_v2'),                 SECTION_TIMEOUT, { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName }),
-    runSection('industry_history_v2', callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'), SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.industry_history_v2),
-    runSection('tech_evolution_v2',   callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),     SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.tech_evolution_v2),
-    runSection('value_chain_v2',      callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),           SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.value_chain_v2),
-    runSection('business_model_v2',   callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),     SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.business_model_v2),
-    runSection('competitors_v2',      callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),          SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.competitors_v2),
-    runSection('strategy_v2',         callSection<StrategyV2>(sharedContext, 'strategy_v2'),               SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.strategy_v2),
-    runSection('financials_v2',       callSection<FinancialsV2>(sharedContext, 'financials_v2'),            SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.financials_v2),
-    runSection('sources',             callSection<AnalysisSources>(sharedContext, 'sources'),               SECTION_TIMEOUT, DEFAULT_ANALYSIS_DATA.sources),
-    runSection('founder_v2',          callFounderSection(companyName),                                      FOUNDER_TIMEOUT, DEFAULT_ANALYSIS_DATA.founder_v2),
-  ]);
-  console.log(`[claude] parallel sections done ${Date.now() - t1}ms`);
+  // Batch 1 — summary
+  await runBatch(1,
+    () => [callSection<SummaryV2>(sharedContext, 'summary_v2')],
+    ([s]) => ({ summary_v2: s ?? { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName } }),
+  );
 
-  return {
-    summary_v2,
-    industry_history_v2,
-    tech_evolution_v2,
-    value_chain_v2,
-    business_model_v2,
-    competitors_v2,
-    strategy_v2,
-    financials_v2,
-    sources,
-    founder_v2,
-  };
+  // Batch 2 — industry history · business model · competitors
+  await runBatch(2,
+    () => [
+      callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'),
+      callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
+      callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
+    ],
+    ([h, bm, c]) => ({
+      industry_history_v2: h  ?? DEFAULT_ANALYSIS_DATA.industry_history_v2,
+      business_model_v2:   bm ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
+      competitors_v2:      c  ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
+    }),
+  );
+
+  // Batch 3 — tech evolution · value chain · strategy
+  await runBatch(3,
+    () => [
+      callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),
+      callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
+      callSection<StrategyV2>(sharedContext, 'strategy_v2'),
+    ],
+    ([t, vc, s]) => ({
+      tech_evolution_v2: t  ?? DEFAULT_ANALYSIS_DATA.tech_evolution_v2,
+      value_chain_v2:    vc ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
+      strategy_v2:       s  ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
+    }),
+  );
+
+  // Batch 4 — financials · founder · sources
+  const cachedFin = opts?.cachedFinancials;
+  await runBatch(4,
+    () => [
+      cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2'),
+      callFounderSection(companyName),
+      callSection<AnalysisSources>(sharedContext, 'sources'),
+    ],
+    ([f, fo, src]) => ({
+      financials_v2: f   ?? DEFAULT_ANALYSIS_DATA.financials_v2,
+      founder_v2:    fo  ?? DEFAULT_ANALYSIS_DATA.founder_v2,
+      sources:       src ?? DEFAULT_ANALYSIS_DATA.sources,
+    }),
+  );
+
+  return result;
 }
 
 

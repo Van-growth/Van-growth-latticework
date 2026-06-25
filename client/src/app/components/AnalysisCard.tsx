@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, memo, useCallback } from 'react';
+import { useAnalysis } from '@/app/context/AnalysisContext';
 import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
@@ -2024,6 +2025,26 @@ function FounderV2Tab({ f }: { f: FounderV2 }) {
   );
 }
 
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function TabSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="h-14 bg-gray-200 rounded-xl" />
+      <div className="space-y-2">
+        <div className="h-4 bg-gray-200 rounded w-3/4" />
+        <div className="h-4 bg-gray-200 rounded w-1/2" />
+        <div className="h-4 bg-gray-200 rounded w-5/6" />
+      </div>
+      <div className="h-32 bg-gray-200 rounded-xl" />
+      <div className="space-y-2">
+        <div className="h-4 bg-gray-200 rounded w-2/3" />
+        <div className="h-4 bg-gray-200 rounded w-4/5" />
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -2040,8 +2061,23 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
+const TAB_BATCH: Record<TabKey, number> = {
+  summary:          1,
+  industry_history: 2,
+  business_model:   2,
+  competitors:      2,
+  tech_evolution:   3,
+  value_chain:      3,
+  strategy:         3,
+  financials:       4,
+  founder:          4,
+};
+
 function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
   const [tab, setTab] = useState<TabKey>('summary');
+  const { completedBatches } = useAnalysis();
+  // batchDone: true when not streaming OR when that batch has completed
+  const batchDone = (n: number) => completedBatches.size === 0 || completedBatches.has(n);
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
 
@@ -2110,41 +2146,49 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
       {/* Tab content — only active tab is mounted */}
       <div className="p-5 bg-gray-50 min-h-[300px]">
         {tab === 'summary' && (
+          !batchDone(TAB_BATCH.summary) ? <TabSkeleton /> :
           data.summary_v2
             ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} />
             : <SummaryTab data={data} />
         )}
         {tab === 'industry_history' && (
+          !batchDone(TAB_BATCH.industry_history) ? <TabSkeleton /> :
           data.industry_history_v2
             ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
             : <IndustryHistoryTab data={data} />
         )}
         {tab === 'tech_evolution' && (
+          !batchDone(TAB_BATCH.tech_evolution) ? <TabSkeleton /> :
           data.tech_evolution_v2
             ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
             : <TechEvolutionTab data={data} />
         )}
         {tab === 'value_chain' && (
+          !batchDone(TAB_BATCH.value_chain) ? <TabSkeleton /> :
           data.value_chain_v2
             ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
             : <ValueChainTab data={data} />
         )}
         {tab === 'business_model' && (
+          !batchDone(TAB_BATCH.business_model) ? <TabSkeleton /> :
           data.business_model_v2
             ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
             : <BusinessModelTab data={data} />
         )}
         {tab === 'competitors' && (
+          !batchDone(TAB_BATCH.competitors) ? <TabSkeleton /> :
           data.competitors_v2
             ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} />
             : <CompetitorsTab data={data} />
         )}
         {tab === 'strategy' && (
+          !batchDone(TAB_BATCH.strategy) ? <TabSkeleton /> :
           data.strategy_v2
             ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
             : <StrategyTab data={data} />
         )}
         {tab === 'financials' && (
+          !batchDone(TAB_BATCH.financials) ? <TabSkeleton /> :
           financialsV2Local
             ? <FinancialsV2Tab
                 f={financialsV2Local}
@@ -2156,6 +2200,7 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             : <FinancialsTab data={data} />
         )}
         {tab === 'founder' && (
+          !batchDone(TAB_BATCH.founder) ? <TabSkeleton /> :
           data.founder_v2
             ? <FounderV2Tab f={data.founder_v2} />
             : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>

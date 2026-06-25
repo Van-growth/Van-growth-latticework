@@ -49,7 +49,7 @@ export default function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlId = searchParams.get('id');
-  const { setAnalysisData } = useAnalysis();
+  const { setAnalysisData, setCompletedBatches } = useAnalysis();
 
   const [companyName, setCompanyName] = useState('');
   const [result, setResult] = useState<AnalysisDetail | null>(null);
@@ -142,6 +142,7 @@ export default function HomeContent() {
     setDisplayData(null);
     setProgress(null);
     setIsCached(false);
+    setCompletedBatches(new Set());
     streamingRef.current = null;
 
     try {
@@ -183,17 +184,16 @@ export default function HomeContent() {
           try {
             const payload = JSON.parse(dataStr);
 
-            if (eventType === 'section') {
-              const sectionKey = String(payload.section);
-              const sectionVal = payload.data as AnalysisDetail[keyof AnalysisDetail];
-              if (!streamingRef.current && sectionKey === 'summary_v2') {
-                streamingRef.current = Object.assign(emptyBase(name), { [sectionKey]: sectionVal });
-                setDisplayData({ ...streamingRef.current });
-              } else if (streamingRef.current) {
-                const next = Object.assign({ ...streamingRef.current }, { [sectionKey]: sectionVal }) as AnalysisDetail;
-                streamingRef.current = next;
-                setDisplayData(next);
+            if (eventType === 'batch') {
+              const batchNum = payload.batch as number;
+              const batchData = payload.data as Partial<AnalysisDetail>;
+              if (!streamingRef.current) {
+                streamingRef.current = Object.assign(emptyBase(name), batchData);
+              } else {
+                streamingRef.current = { ...streamingRef.current, ...batchData } as AnalysisDetail;
               }
+              setDisplayData({ ...streamingRef.current });
+              setCompletedBatches(prev => new Set([...prev, batchNum]));
               setProgress({ completed: payload.completed, total: payload.total });
 
             } else if (eventType === 'done') {
@@ -202,6 +202,7 @@ export default function HomeContent() {
               loadedIdRef.current = normalized.id;
               setResult(normalized);
               setAnalysisData(normalized);
+              setCompletedBatches(new Set([1, 2, 3, 4]));
               if (normalized.id) router.replace(`/?id=${normalized.id}`);
 
             } else if (eventType === 'error') {
@@ -266,8 +267,8 @@ export default function HomeContent() {
       {loading && progress && (
         <div className="max-w-2xl mx-auto mb-6">
           <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-            <span>분석 중</span>
-            <span>{progress.completed} / {progress.total}</span>
+            <span>분석 중 배치 {progress.completed} / {progress.total} 완료</span>
+            <span>{Math.round((progress.completed / progress.total) * 100)}%</span>
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div

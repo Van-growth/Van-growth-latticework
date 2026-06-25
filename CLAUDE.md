@@ -114,3 +114,77 @@ cd client && npm install && npm run dev
 - 본문 중 중요 수치 옆에 `[n]` 각주 마커 → `CitedText` 컴포넌트가 파란 superscript로 렌더링
 - 탭 하단 `SourcesList`에서 각주 목록: `[1] SEC EDGAR — 10-K FY2025 (L1)`
 - PDF export 시 각 섹션 하단 + 마지막 페이지 전체 출처 통합 목록 포함
+
+## 제품 SSOT 기준
+
+### 핵심 타겟 유저
+- 세일즈 담당자: 미팅 전 고객사 빠른 파악
+- BD 담당자: 파트너/협력사 리서치
+- 전략 담당자: 경쟁사 분석 / 밸류체인 / M&A 대상 탐색
+
+공통 use case: 미팅/협상/의사결정 전 1분 안에 핵심 파악
+
+### 콘텐츠 원칙
+- 데이터 나열 금지 → 비즈니스 의사결정 직결 인사이트 우선
+- 투자자 전용 언어 금지 (밸류에이션/수익률/PER 단독 언급)
+- Bull/Bear 금지 → 성장 모멘텀/핵심 리스크
+- "확인 필요" 남발 금지 → 추정값이라도 출처와 함께 제공
+
+### 성능 원칙
+- 외부 실시간 위젯 (iframe) 금지 — 정적 이미지로 대체
+- 탭 콘텐츠 조건부 렌더링 (unmount) 유지
+- 긴 리스트/테이블은 가상화 적용
+- 스켈레톤 UI: 데이터 로딩 전 레이아웃 미리 표시
+- 탭 전환 목표: 100ms 이하
+- 최초 요약 탭 표시 목표: 3초 이하
+- 전체 분석 완료 목표: 60초 이하
+
+### 플랜 경계
+- 기본: 웹검색 기반 전략 인사이트 (속도 우선)
+- 프리미엄: DART/EDGAR 정확한 재무 완전판 + 경쟁사 재무 비교
+- 프리미엄 전용 기능은 `isPremium` 플래그로 명시
+
+### UI/UX 원칙
+- 라이트 테마 고정
+- 탭별 검정 배경 한줄 요약 블록 필수
+- 국가 표시: 국기 이모지
+- 모바일 반응형 유지
+
+### 언어 정책
+- 기본값: 브라우저 언어 감지 (ko → KR, 그 외 → EN)
+- 우측 상단 EN/KR 토글로 변경 가능, localStorage에 저장
+- 분석 시 선택 언어로 Claude 프롬프트 분기
+- DB: analyses.language 컬럼으로 KR/EN 캐시 분리
+- KR 캐시 ≠ EN 캐시 (동일 기업이라도 언어별 별개 저장)
+- Claude 프롬프트에 언어 명시: "Generate all content in Korean/English"
+
+### 브랜딩
+- 제품명: 1min (Latticework는 내부 코드명)
+- 포지셔닝: "What used to take hours, now takes minutes"
+- "1분 안에" 약속 금지 — 실제 소요 3~5분
+- 투자자 타겟 포지셔닝 금지
+
+### 분석 배치 구조
+- 1배치 (병렬 1개): summary_v2 → 완료 시 요약 탭 즉시 표시
+- 2배치 (병렬 3개): industry_history_v2, business_model_v2, competitors_v2
+- 3배치 (병렬 3개): tech_evolution_v2, value_chain_v2, strategy_v2
+- 4배치 (병렬 3개): financials_v2, founder_v2, sources
+- 각 배치 완료 시 즉시 Supabase DB 저장 + 프론트엔드 반영
+- 배치 타임아웃: 75초
+- 배치 실패 시 해당 섹션만 "—" 표시, 나머지 계속 진행
+- 상단 진행바: "분석 중 N/10 완료" 표시
+
+### 보안
+- RLS 적용 필수 (현재 UNRESTRICTED — 로그인 구현 후 적용)
+- 환경변수: .env에만 관리, 코드 하드코딩 금지
+- 필수 API 키: ANTHROPIC_API_KEY, DART_API_KEY, FMP_API_KEY, KIS_APP_KEY, KIS_APP_SECRET
+
+### GTM 방향
+- 1차 타겟: 미국 시장 (영어 버전 우선)
+- 채널: Product Hunt, Reddit (r/sales, r/BusinessDevelopment, r/startups)
+- 랜딩페이지: Framer 무료 플랜
+- 결제: 앱 내 Stripe만 (랜딩페이지 결제 없음)
+- 도메인: 1min.so 또는 get1min.com (미정)
+- 온보딩: 구글 로그인 + 설문 (직무/지역/목적/회사규모)
+- 행동 로그: Posthog
+- 라이브 채팅: Crisp

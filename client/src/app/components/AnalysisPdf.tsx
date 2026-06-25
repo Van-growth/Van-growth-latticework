@@ -401,6 +401,16 @@ const s = StyleSheet.create({
   },
 });
 
+// ── Placeholder filtering (mirrors AnalysisCard.tsx isPlaceholder) ───────────
+
+function pdfVal(v: string | number | null | undefined): string {
+  if (v == null) return '—';
+  const s = String(v).trim();
+  if (!s || s === '-' || s === '확인 필요' || s === '공개 없음') return '—';
+  if (/^-999([.,]\d+)?([%\s]|$)/.test(s)) return '—';
+  return s;
+}
+
 // ── Primitives ───────────────────────────────────────────────────────────────
 
 function SectionHeader({ num, title }: { num: number; title: string }) {
@@ -788,12 +798,12 @@ function BusinessModelSection({ v }: { v: BusinessModelV2 }) {
       <SubHeader>유닛 이코노믹스</SubHeader>
       <View style={s.finGrid}>
         {[
-          { label: '매출총이익률', val: `${v.unit_economics.gross_margin}%` },
-          { label: '영업이익률',   val: `${v.unit_economics.operating_margin}%` },
-          { label: '순이익률',     val: `${v.unit_economics.net_margin}%` },
-          { label: 'FCF 마진',     val: `${v.unit_economics.fcf_margin}%` },
-          { label: 'NRR',         val: `${v.unit_economics.nrr}%` },
-        ].map(({ label, val }, i) => (
+          { label: '매출총이익률', val: pdfVal(v.unit_economics.gross_margin) !== '—' ? `${v.unit_economics.gross_margin}%` : '—' },
+          { label: '영업이익률',   val: pdfVal(v.unit_economics.operating_margin) !== '—' ? `${v.unit_economics.operating_margin}%` : '—' },
+          { label: '순이익률',     val: pdfVal(v.unit_economics.net_margin) !== '—' ? `${v.unit_economics.net_margin}%` : '—' },
+          { label: 'FCF 마진',     val: pdfVal(v.unit_economics.fcf_margin) !== '—' ? `${v.unit_economics.fcf_margin}%` : '—' },
+          { label: 'NRR',         val: pdfVal(v.unit_economics.nrr) !== '—' ? `${v.unit_economics.nrr}%` : '—' },
+        ].filter(m => m.val !== '—' && m.val !== '0%').map(({ label, val }, i) => (
           <View key={i} style={s.finChip}>
             <Text style={s.finChipLabel}>{label}</Text>
             <Text style={s.finChipValue}>{val}</Text>
@@ -817,9 +827,9 @@ function BusinessModelSection({ v }: { v: BusinessModelV2 }) {
               <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
                 <Text style={[s.td, { flex: 2 }]}>{r.name}</Text>
                 <Text style={s.td}>{r.type}</Text>
-                <Text style={s.td}>{r.revenue_share}%</Text>
-                <Text style={s.td}>{r.operating_margin}%</Text>
-                <Text style={s.td}>{r.growth_rate}%</Text>
+                <Text style={s.td}>{pdfVal(r.revenue_share) !== '—' ? `${r.revenue_share}%` : '—'}</Text>
+                <Text style={s.td}>{pdfVal(r.operating_margin) !== '—' ? `${r.operating_margin}%` : '—'}</Text>
+                <Text style={s.td}>{pdfVal(r.growth_rate) !== '—' ? `${r.growth_rate}%` : '—'}</Text>
               </View>
             ))}
           </View>
@@ -927,6 +937,10 @@ function CompetitorsSection({ v }: { v: CompetitorsV2 }) {
 // ── Section 7: 전략 분석 ─────────────────────────────────────────────────────
 
 function StrategySection({ v }: { v: StrategyV2 }) {
+  const hasCorp = !!(v.corporate.direction || v.corporate.portfolio || v.corporate.geographic || v.corporate.ma_partnerships?.length);
+  const hasBiz  = !!(v.business.direction || v.business.competitive_advantage || v.business.go_to_market || v.business.product_roadmap?.length);
+  const hasFin  = !!(v.financial.direction || v.financial.capital_allocation || v.financial.investment_priority || v.financial.return_target);
+  if (!hasCorp && !hasBiz && !hasFin && !v.strategy_coherence && !v.ten_year_durability) return null;
   return (
     <View style={s.section}>
       <SectionHeader num={7} title="전략 분석" />
@@ -934,57 +948,63 @@ function StrategySection({ v }: { v: StrategyV2 }) {
 
       <View style={s.grid2}>
         {/* Corporate */}
-        <View style={s.gridLeft}>
-          <View style={s.card}>
-            <Text style={s.cardTitle}>기업 전략</Text>
-            <Text style={s.cardText}>{v.corporate.direction}</Text>
-            {v.corporate.portfolio && (
-              <Text style={[s.cardText, { marginTop: 3 }]}>포트폴리오: {v.corporate.portfolio}</Text>
-            )}
-            {v.corporate.geographic && (
-              <Text style={[s.cardText, { marginTop: 3 }]}>지역 확장: {v.corporate.geographic}</Text>
-            )}
-            {v.corporate.ma_partnerships?.length > 0 && (
-              <Text style={[s.cardText, { marginTop: 3, color: C.blue }]}>
-                M&A/파트너십: {v.corporate.ma_partnerships.join(', ')}
-              </Text>
-            )}
+        {hasCorp && (
+          <View style={s.gridLeft}>
+            <View style={s.card}>
+              <Text style={s.cardTitle}>기업 전략</Text>
+              {v.corporate.direction ? <Text style={s.cardText}>{v.corporate.direction}</Text> : null}
+              {v.corporate.portfolio && (
+                <Text style={[s.cardText, { marginTop: 3 }]}>포트폴리오: {v.corporate.portfolio}</Text>
+              )}
+              {v.corporate.geographic && (
+                <Text style={[s.cardText, { marginTop: 3 }]}>지역 확장: {v.corporate.geographic}</Text>
+              )}
+              {v.corporate.ma_partnerships?.length > 0 && (
+                <Text style={[s.cardText, { marginTop: 3, color: C.blue }]}>
+                  M&A/파트너십: {v.corporate.ma_partnerships.join(', ')}
+                </Text>
+              )}
+            </View>
           </View>
-        </View>
+        )}
         {/* Business */}
-        <View style={s.gridRight}>
-          <View style={s.card}>
-            <Text style={s.cardTitle}>사업 전략</Text>
-            <Text style={s.cardText}>{v.business.direction}</Text>
-            {v.business.competitive_advantage && (
-              <Text style={[s.cardText, { marginTop: 3 }]}>경쟁 우위: {v.business.competitive_advantage}</Text>
-            )}
-            {v.business.go_to_market && (
-              <Text style={[s.cardText, { marginTop: 3 }]}>GTM: {v.business.go_to_market}</Text>
-            )}
-            {v.business.product_roadmap?.length > 0 && (
-              <Text style={[s.cardText, { marginTop: 3, color: C.blue }]}>
-                로드맵: {v.business.product_roadmap.join(', ')}
-              </Text>
-            )}
+        {hasBiz && (
+          <View style={s.gridRight}>
+            <View style={s.card}>
+              <Text style={s.cardTitle}>사업 전략</Text>
+              {v.business.direction ? <Text style={s.cardText}>{v.business.direction}</Text> : null}
+              {v.business.competitive_advantage && (
+                <Text style={[s.cardText, { marginTop: 3 }]}>경쟁 우위: {v.business.competitive_advantage}</Text>
+              )}
+              {v.business.go_to_market && (
+                <Text style={[s.cardText, { marginTop: 3 }]}>GTM: {v.business.go_to_market}</Text>
+              )}
+              {v.business.product_roadmap?.length > 0 && (
+                <Text style={[s.cardText, { marginTop: 3, color: C.blue }]}>
+                  로드맵: {v.business.product_roadmap.join(', ')}
+                </Text>
+              )}
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
       {/* Financial strategy */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>재무 전략</Text>
-        <Text style={s.cardText}>{v.financial.direction}</Text>
-        {v.financial.capital_allocation && (
-          <Text style={[s.cardText, { marginTop: 3 }]}>자본 배분: {v.financial.capital_allocation}</Text>
-        )}
-        {v.financial.investment_priority && (
-          <Text style={[s.cardText, { marginTop: 3 }]}>투자 우선순위: {v.financial.investment_priority}</Text>
-        )}
-        {v.financial.return_target && (
-          <Text style={[s.cardText, { marginTop: 3 }]}>수익 목표: {v.financial.return_target}</Text>
-        )}
-      </View>
+      {hasFin && (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>재무 전략</Text>
+          {v.financial.direction ? <Text style={s.cardText}>{v.financial.direction}</Text> : null}
+          {v.financial.capital_allocation && (
+            <Text style={[s.cardText, { marginTop: 3 }]}>자본 배분: {v.financial.capital_allocation}</Text>
+          )}
+          {v.financial.investment_priority && (
+            <Text style={[s.cardText, { marginTop: 3 }]}>투자 우선순위: {v.financial.investment_priority}</Text>
+          )}
+          {v.financial.return_target && (
+            <Text style={[s.cardText, { marginTop: 3 }]}>수익 목표: {v.financial.return_target}</Text>
+          )}
+        </View>
+      )}
 
       {v.strategy_coherence && (
         <>
@@ -1026,9 +1046,9 @@ function IncomeTable({ rows }: { rows: FinancialsV2Row[] }) {
         <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
           <Text style={s.tdItem}>{r.item}</Text>
           {years.map(y => (
-            <Text key={y} style={s.td}>{r[y] ?? '—'}</Text>
+            <Text key={y} style={s.td}>{pdfVal(r[y])}</Text>
           ))}
-          {hasYoy && <Text style={s.td}>{r.yoy ?? '—'}</Text>}
+          {hasYoy && <Text style={s.td}>{pdfVal(r.yoy)}</Text>}
         </View>
       ))}
     </View>
@@ -1053,7 +1073,7 @@ function BSTable({ rows }: { rows: FinancialsV2BSRow[] }) {
         <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
           <Text style={s.tdItem}>{r.item}</Text>
           {years.map(y => (
-            <Text key={y} style={s.td}>{r[y] ?? '—'}</Text>
+            <Text key={y} style={s.td}>{pdfVal(r[y])}</Text>
           ))}
         </View>
       ))}
@@ -1080,10 +1100,10 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
           { label: '부채비율',       val: mb.debt_to_equity },
           { label: '이자보상배율',    val: mb.interest_coverage },
           { label: '재투자율',       val: mb.reinvestment_rate },
-        ].map(({ label, val }, i) => (
+        ].filter(m => pdfVal(m.val) !== '—').map(({ label, val }, i) => (
           <View key={i} style={s.finChip}>
             <Text style={s.finChipLabel}>{label}</Text>
-            <Text style={s.finChipValue}>{val ?? '—'}</Text>
+            <Text style={s.finChipValue}>{pdfVal(val)}</Text>
           </View>
         ))}
       </View>
@@ -1106,10 +1126,10 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
               { label: '투자활동',    val: v.cash_flow.investing },
               { label: '재무활동',    val: v.cash_flow.financing },
               { label: 'FCF',        val: v.cash_flow.fcf },
-            ].map(({ label, val }, i) => (
+            ].filter(m => pdfVal(m.val) !== '—').map(({ label, val }, i) => (
               <View key={i} style={s.finChip}>
                 <Text style={s.finChipLabel}>{label}</Text>
-                <Text style={s.finChipValue}>{val ?? '—'}</Text>
+                <Text style={s.finChipValue}>{pdfVal(val)}</Text>
               </View>
             ))}
           </View>
