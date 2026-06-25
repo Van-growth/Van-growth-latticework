@@ -222,8 +222,9 @@ export interface ValueChainLayer {
   name: string;
   description: string;
   is_subject: boolean;
-  pricing_power: 'high' | 'medium' | 'low';
+  pricing_power?: 'high' | 'medium' | 'low';
   bottleneck: boolean;
+  buyer?: boolean;
   global_leaders: ValueChainLayerLeader[];
 }
 

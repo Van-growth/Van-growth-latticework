@@ -833,7 +833,9 @@ function ValueChainSection({ v }: { v: ValueChainV2 }) {
       {v.layers?.map((layer, i) => (
         <View key={i} style={[
           s.card,
-          layer.is_subject ? { borderLeftColor: C.blue } : { borderLeftColor: C.border },
+          layer.is_subject ? { borderLeftColor: C.blue }
+            : layer.buyer   ? { borderLeftColor: C.green, backgroundColor: '#F0FDF4' }
+            : { borderLeftColor: C.border },
         ]}>
           <View style={s.row}>
             <Text style={s.cardTitle}>{layer.name}</Text>
@@ -847,13 +849,14 @@ function ValueChainSection({ v }: { v: ValueChainV2 }) {
                 병목
               </Text>
             )}
-            <Text style={[s.tag, {
-              marginLeft: 4,
-              color: POWER_COLOR[layer.pricing_power],
-              backgroundColor: C.bg,
-            }]}>
-              가격협상력 {layer.pricing_power}
-            </Text>
+            {layer.buyer
+              ? <Text style={[s.tag, { marginLeft: 4, backgroundColor: '#DBEAFE', color: C.blue }]}>구매자</Text>
+              : layer.pricing_power
+                ? <Text style={[s.tag, { marginLeft: 4, color: POWER_COLOR[layer.pricing_power], backgroundColor: C.bg }]}>
+                    가격협상력 {layer.pricing_power}
+                  </Text>
+                : null
+            }
           </View>
           {layer.description && <Text style={s.cardText}>{layer.description}</Text>}
           {layer.global_leaders?.length > 0 && (

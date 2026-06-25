@@ -540,8 +540,11 @@ key_players는 해당 시기에 시장에서 실제 활동한 기업만 나열. 
 stages는 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.`,
 
   value_chain_v2: `아래 스키마의 JSON 객체만 출력:
-{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내","key_bullets":["밸류체인 위치/강점 20자이내","차별점/경쟁우위 20자이내","구조적 리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true 설정. value_flow·subject_position 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
+{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"buyer":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내","key_bullets":["밸류체인 위치/강점 20자이내","차별점/경쟁우위 20자이내","구조적 리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
+layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true 설정.
+최종 소비자·구매자 레이어(예: 소비자, 엔터프라이즈 고객, 정부 등)는 buyer:true로 설정하고 pricing_power 필드는 생략.
+공급자·제조·유통 레이어만 pricing_power:"high"|"medium"|"low" 설정.
+value_flow·subject_position 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   business_model_v2: `아래 스키마의 JSON 객체만 출력:
 {"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}],"key_bullets":["핵심 수익원/강점 20자이내","성장 모션/특징 20자이내","BM 약점/리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}

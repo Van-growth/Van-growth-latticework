@@ -911,19 +911,20 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
       <SectionCard title="밸류체인 레이어" dotColor="bg-indigo-400">
         <div className="flex flex-col items-stretch gap-0">
           {vc.layers.map((layer, i) => {
-            const pp = PRICING_POWER_CFG[layer.pricing_power] ?? PRICING_POWER_CFG.medium;
+            const pp = layer.pricing_power ? (PRICING_POWER_CFG[layer.pricing_power] ?? PRICING_POWER_CFG.medium) : null;
+            const cardCls = layer.is_subject
+              ? 'border-blue-400 bg-blue-50 shadow-sm'
+              : layer.buyer
+              ? 'border-green-200 bg-green-50'
+              : 'border-gray-200 bg-white';
             return (
               <div key={i} className="flex flex-col items-center">
                 {/* 레이어 카드 */}
-                <div className={`w-full rounded-xl border-2 px-4 py-3 ${
-                  layer.is_subject
-                    ? 'border-blue-400 bg-blue-50 shadow-sm'
-                    : 'border-gray-200 bg-white'
-                }`}>
+                <div className={`w-full rounded-xl border-2 px-4 py-3 ${cardCls}`}>
                   {/* 헤더 행 */}
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${layer.is_subject ? 'text-blue-700' : 'text-gray-800'}`}>
+                      <span className={`text-sm font-semibold ${layer.is_subject ? 'text-blue-700' : layer.buyer ? 'text-green-700' : 'text-gray-800'}`}>
                         {layer.name}
                       </span>
                       {layer.is_subject && (
@@ -933,7 +934,10 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
                         <span className="text-[10px] bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5 font-medium">Bottleneck</span>
                       )}
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${pp.cls}`}>{pp.label}</span>
+                    {layer.buyer
+                      ? <span className="text-[10px] bg-blue-100 text-blue-600 rounded-full px-2 py-0.5 font-medium">구매자</span>
+                      : pp && <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${pp.cls}`}>{pp.label}</span>
+                    }
                   </div>
                   {/* 설명 + 선도기업 */}
                   <p className="text-xs text-gray-500 leading-relaxed mb-2">{layer.description}</p>
