@@ -570,39 +570,67 @@ outlook 규칙: 재무 데이터 기반으로 작성. 근거 없는 낙관 금�
 - L3 항목은 반드시 isEstimate:true.`,
 };
 
-// ── Research gathering (1 web-search pass) ────────────────────────────────────
+// ── Research gathering (2-phase split) ───────────────────────────────────────
 
-async function gatherResearch(companyName: string): Promise<string> {
-  const systemPrompt = `당신은 기업 분석 리서처입니다. 웹 검색으로 핵심 정보를 빠르게 수집하여 항목별로 정리하세요.
+// Phase 1: 기업 기본 정보 + 최신 현황 (2 rounds) → batch1(summary) 즉시 가능
+async function gatherResearch1(companyName: string): Promise<string> {
+  const systemPrompt = `당신은 기업 분석 리서처입니다. 빠른 웹 검색으로 기업 기본 정보와 최신 현황만 수집하세요.
 
-[fetch_url 사용 규칙 — 속도 최우선]
-- fetch_url은 최대 2회만 사용. 가볍고 빠른 페이지만 대상.
-- 절대 fetch_url 금지: SEC EDGAR Archives 원문(.htm/.html), 대형 PDF, DART 원문
-- fetch_url 허용: IR 뉴스릴리즈, Yahoo Finance, Macrotrends, StockAnalysis, 주요 뉴스 기사
-- 검색 스니펫에 수치가 있으면 fetch_url 없이 스니펫 그대로 사용
+[규칙]
+- fetch_url 최대 1회. IR 뉴스릴리즈·Yahoo Finance·StockAnalysis만 허용.
+- 스니펫에 수치 있으면 fetch_url 없이 사용.
+- SEC Archives 원문·대형 PDF 절대 금지.
 
-[검색 순서 — 4회 이내 완료]
-1. web_search: "${companyName} revenue operating income net income 2023 2024 annual"
-2. web_search: "${companyName} business model competitors market share 2024 2025"
-3. web_search: "${companyName} strategy news 2025"
-4. (필요 시) fetch_url: IR 뉴스릴리즈 또는 Yahoo Finance/Macrotrends 페이지 1개만
+[검색 순서 — 2회 이내]
+1. web_search: "${companyName} overview products services revenue business model 2024 2025"
+2. web_search: "${companyName} news strategy recent 2025"
 
 [수집 항목]
-1. 기업 개요 (설립연도, 본사, 사업영역, 주요 제품/서비스, 시가총액, 티커)
-2. 최근 3~5년 재무 수치 (매출·영업이익·순이익·이익률) — 출처 병기, 없으면 "확인 필요"
-3. 사업 모델 (수익 구조, 고객 세그먼트, 성장 방식)
-4. 경쟁 현황 (주요 경쟁사, 시장점유율 추정)
-5. 전략 방향 (M&A, 신규 사업, 지역 확장)
-6. 산업 트렌드 / 리스크
+1. 기업 개요 (사업영역, 주요 제품/서비스, 설립연도, 본사, 티커)
+2. 매출 규모 대략 수치 (출처 병기, 없으면 생략)
+3. 사업 모델 요약 (수익 구조, 핵심 고객)
+4. 최신 뉴스 / 주요 동향 (2025)
+5. 성장 모멘텀 / 핵심 리스크
 
-JSON 불필요. 각 수치에 출처명 병기. 추정값은 "(추정)" 명시. 확인 불가 항목은 "확인 필요".`;
+추정값은 "(추정)" 명시.`;
 
   return runWithWebSearch(
     systemPrompt,
-    `기업명: ${companyName}\n\n4회 이내 검색으로 핵심 정보를 수집해주세요.`,
+    `기업명: ${companyName}\n\n2회 검색으로 기업 기본 정보를 빠르게 수집해주세요.`,
     'claude-sonnet-4-6',
-    4,
-    8000,
+    2,
+    4000,
+  );
+}
+
+// Phase 2: 경쟁사·재무 상세·산업 심층 (2 rounds) → batch2-4에 사용
+async function gatherResearch2(companyName: string): Promise<string> {
+  const systemPrompt = `당신은 기업 분석 리서처입니다. 경쟁사·재무 상세·산업 심층 정보를 수집하세요.
+
+[규칙]
+- fetch_url 최대 1회. Yahoo Finance·Macrotrends·StockAnalysis·IR 뉴스릴리즈만 허용.
+- 스니펫에 수치 있으면 fetch_url 없이 사용.
+- SEC Archives 원문·대형 PDF 절대 금지.
+
+[검색 순서 — 2회 이내]
+1. web_search: "${companyName} competitors market share industry trends value chain 2024 2025"
+2. web_search: "${companyName} annual revenue net income financials technology 2023 2024 2025"
+
+[수집 항목]
+1. 주요 경쟁사 + 시장점유율 추정 (출처 병기)
+2. 재무 수치 상세 (매출·영업이익·순이익, 최근 3년, 출처 병기)
+3. 산업 트렌드 / 기술 변화 동향
+4. 밸류체인 내 위치 / 공급망 구조
+5. 전략 방향 (M&A, 신규 사업, 지역 확장)
+
+추정값은 "(추정)" 명시. 출처 병기 필수.`;
+
+  return runWithWebSearch(
+    systemPrompt,
+    `기업명: ${companyName}\n\n2회 검색으로 경쟁사·재무·산업 상세 정보를 수집해주세요.`,
+    'claude-sonnet-4-6',
+    2,
+    4000,
   );
 }
 
@@ -719,17 +747,6 @@ export async function analyzeCompany(
   const skip = opts?.skipBatches ?? new Set<number>();
   const result: AnalysisData = { ...DEFAULT_ANALYSIS_DATA, ...(opts?.initialData ?? {}) };
 
-  // Gather research context (always needed for any non-skipped batch)
-  const t0 = Date.now();
-  const researchText = await gatherResearch(companyName);
-  console.log(`[claude] gatherResearch done ${Date.now() - t0}ms`);
-
-  const sharedContext = [
-    `기업명: ${companyName}`,
-    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
-    `\n[웹 리서치]\n${researchText}`,
-  ].filter(Boolean).join('\n');
-
   const BATCH_TIMEOUT = 75_000;
 
   async function runBatch(
@@ -751,11 +768,37 @@ export async function analyzeCompany(
     }
   }
 
-  // Batch 1 — summary
-  await runBatch(1,
-    () => [callSection<SummaryV2>(sharedContext, 'summary_v2')],
-    ([s]) => ({ summary_v2: s ?? { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName } }),
-  );
+  // ── Phase 1 research: 기본 정보·최신 현황 (2 rounds) ─────────────────────────
+  const t0 = Date.now();
+  const research1 = await gatherResearch1(companyName);
+  console.log(`[claude] gatherResearch1 done ${Date.now() - t0}ms`);
+
+  const phase1Context = [
+    `기업명: ${companyName}`,
+    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
+    `\n[웹 리서치 — 기본 정보]\n${research1}`,
+  ].filter(Boolean).join('\n');
+
+  // ── Batch 1 (summary) + Phase 2 research 병렬 실행 ────────────────────────────
+  // batch1은 완료 즉시 SSE 전송 → 요약 탭 표시
+  // gatherResearch2는 batch1과 동시에 실행, 완료 후 batch2-4에 사용
+  const t1 = Date.now();
+  const [, research2] = await Promise.all([
+    runBatch(1,
+      () => [callSection<SummaryV2>(phase1Context, 'summary_v2')],
+      ([s]) => ({ summary_v2: s ?? { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName } }),
+    ),
+    gatherResearch2(companyName),
+  ]);
+  console.log(`[claude] batch1 + gatherResearch2 done ${Date.now() - t1}ms`);
+
+  // ── Phase 2 컨텍스트 (1+2 합산) → batch2-4 공유 ──────────────────────────────
+  const sharedContext = [
+    `기업명: ${companyName}`,
+    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
+    `\n[웹 리서치 — 기본 정보]\n${research1}`,
+    `\n[웹 리서치 — 상세 정보]\n${research2}`,
+  ].filter(Boolean).join('\n');
 
   // Batch 2 — industry history · business model · competitors
   await runBatch(2,
