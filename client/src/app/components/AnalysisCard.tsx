@@ -2295,15 +2295,15 @@ function FounderSkeleton() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'summary',          label: '요약',         icon: Briefcase },
-  { key: 'industry_history', label: '산업역사',     icon: Clock },
-  { key: 'tech_evolution',   label: '기술변화',     icon: Zap },
-  { key: 'value_chain',      label: '밸류체인',     icon: GitBranch },
-  { key: 'business_model',   label: '비즈니스모델', icon: DollarSign },
-  { key: 'competitors',      label: '경쟁사',       icon: Users },
-  { key: 'strategy',         label: '전략',         icon: Target },
-  { key: 'financials',       label: '재무',         icon: BarChart2 },
-  { key: 'founder',          label: '창업자',       icon: User },
+  { key: 'summary',          label: '요약',         icon: Briefcase,  tooltip: '이 회사가 뭐 하는 곳인지 한눈에 확인할 수 있어요' },
+  { key: 'industry_history', label: '산업역사',     icon: Clock,      tooltip: '이 산업이 어떻게 발전해왔는지 확인할 수 있어요' },
+  { key: 'tech_evolution',   label: '기술변화',     icon: Zap,        tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
+  { key: 'value_chain',      label: '밸류체인',     icon: GitBranch,  tooltip: '이 회사가 산업 내 어디에 위치하는지 확인할 수 있어요' },
+  { key: 'business_model',   label: '비즈니스모델', icon: DollarSign, tooltip: '어떻게 돈을 버는지 확인할 수 있어요' },
+  { key: 'competitors',      label: '경쟁사',       icon: Users,      tooltip: '주요 경쟁사와 차별점을 확인할 수 있어요' },
+  { key: 'strategy',         label: '전략',         icon: Target,     tooltip: '앞으로의 성장 전략을 확인할 수 있어요' },
+  { key: 'financials',       label: '재무',         icon: BarChart2,  tooltip: '매출, 이익, 현금흐름 등 재무 데이터를 확인할 수 있어요' },
+  { key: 'founder',          label: '창업자',       icon: User,       tooltip: '창업자 배경과 이력을 확인할 수 있어요' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -2322,6 +2322,7 @@ const TAB_BATCH: Record<TabKey, number> = {
 
 function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
   const [tab, setTab] = useState<TabKey>('summary');
+  const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const { completedBatches } = useAnalysis();
   // batchDone: true when not streaming OR when that batch has completed
@@ -2378,6 +2379,8 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             <button
               key={t.key}
               onClick={() => startTransition(() => setTab(t.key))}
+              onMouseEnter={() => setHoveredTooltip(t.tooltip)}
+              onMouseLeave={() => setHoveredTooltip(null)}
               className={`shrink-0 flex items-center gap-1.5 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap ${
                 active
                   ? 'border-blue-600 text-blue-600'
@@ -2389,6 +2392,13 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             </button>
           );
         })}
+      </div>
+
+      {/* Tab tooltip strip — desktop only */}
+      <div className="hidden md:block h-7 bg-white border-b border-gray-100 px-4 flex items-center">
+        {hoveredTooltip && (
+          <span className="text-[11px] text-gray-400 leading-none">{hoveredTooltip}</span>
+        )}
       </div>
 
       {/* Tab content — only active tab is mounted */}
