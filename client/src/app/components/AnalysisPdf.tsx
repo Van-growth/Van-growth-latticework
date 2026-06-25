@@ -461,7 +461,7 @@ function SectionSources({ sources }: { sources?: Source[] | null }) {
       {sources.map((src, i) => {
         const idx = src.index ?? i + 1;
         const badgeCls = src.level === 'L1' ? s.srcBadgeL1 : src.level === 'L2' ? s.srcBadgeL2 : s.srcBadgeL3;
-        const label = src.level === 'L1' ? 'L1' : src.level === 'L2' ? 'L2' : 'L3';
+        const label = src.level === 'L1' ? '공식' : src.level === 'L2' ? '참고' : '추정';
         return (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 2 }}>
             <Text style={[s.srcBadge, badgeCls]}>{label}</Text>
@@ -1334,9 +1334,9 @@ function SourceRow({ src, idx }: { src: Source; idx: number }) {
     : src.level === 'L2' ? s.srcBadgeL2
     : s.srcBadgeL3;
   const label =
-    src.level === 'L1' ? 'L1 공식'
-    : src.level === 'L2' ? 'L2 기관'
-    : 'L3 추정';
+    src.level === 'L1' ? '공식'
+    : src.level === 'L2' ? '참고'
+    : '추정';
   return (
     <View style={s.srcRow}>
       <Text style={[s.srcBadge, badgeCls]}>{label}</Text>

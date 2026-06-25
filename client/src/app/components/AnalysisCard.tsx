@@ -181,9 +181,9 @@ function CfMetricCard({ label, value, dotColor }: { label: string; value: string
 }
 
 const LEVEL_BADGE: Record<string, { label: string; cls: string }> = {
-  L1: { label: 'L1 공식', cls: 'bg-green-50 text-green-700 border border-green-200' },
-  L2: { label: 'L2 기관', cls: 'bg-amber-50 text-amber-600 border border-amber-200' },
-  L3: { label: 'L3 추정', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
+  L1: { label: '🟢 공식', cls: 'bg-green-50 text-green-700 border border-green-200' },
+  L2: { label: '🟡 참고', cls: 'bg-amber-50 text-amber-600 border border-amber-200' },
+  L3: { label: '⚪ 추정', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
 };
 
 function SourcesList({ sources }: { sources: Source[] | undefined }) {
@@ -1026,18 +1026,15 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
     ...(ue.nrr ? [{ label: 'NRR', value: `${ue.nrr}%` }] : []),
   ].filter(m => m.value !== '0%' && !isPlaceholder(m.value));
 
-  const topStreams = bm.revenue_streams.slice(0, 2);
-  const restStreams = bm.revenue_streams.slice(2);
-
   return (
     <div className="space-y-4">
       <OneLinerBlock text={bm.one_liner} />
 
-      {/* Above fold: top 2 revenue streams */}
-      {topStreams.length > 0 && (
+      {/* Revenue Streams 전체 항상 표시 */}
+      {bm.revenue_streams.length > 0 && (
         <SectionCard title="Revenue Streams" dotColor="bg-green-400">
           <div className="space-y-3">
-            {topStreams.map((rs, i) => (
+            {bm.revenue_streams.map((rs, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
@@ -1075,28 +1072,9 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
         <p className="text-sm text-gray-600 leading-relaxed">{bm.growth_motion_detail}</p>
       </SectionCard>
 
-      {/* Below fold: remaining streams + unit economics + segments + moat */}
+      {/* Below fold: unit economics + segments + moat */}
       <ShowMore label="Unit Economics · 세그먼트 · 경제적 해자 보기">
         <>
-          {restStreams.length > 0 && (
-            <SectionCard title="Revenue Streams (전체)" dotColor="bg-green-400">
-              <div className="space-y-3">
-                {restStreams.map((rs, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-gray-700">{rs.name}</span>
-                        <Tag label={rs.type} color="gray" />
-                      </div>
-                      <span className="text-xs font-medium text-gray-800">{rs.revenue_share}%</span>
-                    </div>
-                    <ProgressBar value={rs.revenue_share} color={BAR_COLORS[(i + 2) % BAR_COLORS.length]} />
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
-
           <SectionCard title="Unit Economics" dotColor="bg-blue-400">
             {ueMetrics.length > 0 ? (
               <div className="grid grid-cols-2 gap-2">
@@ -1727,6 +1705,13 @@ const IS_COLS_V2: Array<keyof Omit<FinancialsV2Row, 'item' | 'yoy'>> =
 
 const IS_BOLD_ITEMS = ['매출', '영업이익', '순이익'];
 
+// YoY 값 정규화 — ▲/▼로 시작하지 않는 값(확인 필요%, 확인 필요% YoY 등)은 em dash로 표시
+function normalizeYoy(v: string | undefined): string {
+  if (!v || v === '—') return '—';
+  if (v.startsWith('▲') || v.startsWith('▼')) return v;
+  return '—';
+}
+
 const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing }: {
   f: FinancialsV2;
   sources: Source[] | undefined;
@@ -1734,8 +1719,9 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
   isRefreshing: boolean;
 }) {
   const yoyCls = (v?: string) => {
-    if (!v || v === '—') return 'text-gray-400';
-    return v.startsWith('▲') ? 'text-green-600 font-medium' : v.startsWith('▼') ? 'text-red-500 font-medium' : 'text-gray-500';
+    const n = normalizeYoy(v);
+    if (n === '—') return 'text-gray-400';
+    return n.startsWith('▲') ? 'text-green-600 font-medium' : 'text-red-500 font-medium';
   };
 
   const mbMetrics = [
@@ -1811,7 +1797,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                       <DataValue text={row[col] ?? '—'} />
                     </span>
                   ))}
-                  <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={row.yoy ?? '—'} /></span>
+                  <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={normalizeYoy(row.yoy)} /></span>
                 </>
               );
             }}
@@ -1962,7 +1948,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
                           <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
                           <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${isMedium ? 'font-medium text-gray-800' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
                           <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
-                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}>{row.yoy ?? '—'}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}>{normalizeYoy(row.yoy)}</td>
                         </tr>
                       );
                     })}
