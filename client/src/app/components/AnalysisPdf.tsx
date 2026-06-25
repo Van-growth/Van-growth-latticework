@@ -34,7 +34,6 @@ Font.register({
   family: 'NotoSansKR',
   fonts: [
     { src: `${_origin}/fonts/noto-sans-kr-400.woff`, fontWeight: 400 },
-    { src: `${_origin}/fonts/noto-sans-kr-700.woff`, fontWeight: 700 },
   ],
 });
 Font.registerHyphenationCallback(w => [w]);
@@ -468,11 +467,16 @@ function Divider() {
   return <View style={s.divider} />;
 }
 
-function OneLinerBoxPdf({ text }: { text?: string | null }) {
-  if (!text || text === '-') return null;
+function KeyBulletsPdf({ bullets }: { bullets?: string[] | null }) {
+  if (!bullets?.length) return null;
   return (
     <View style={{ backgroundColor: C.dark, borderRadius: 4, padding: 10, marginBottom: 10 }}>
-      <Text style={{ color: C.white, fontSize: 9, fontWeight: 700, lineHeight: 1.4 }}>{text}</Text>
+      {bullets.map((b, i) => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: i < bullets.length - 1 ? 3 : 0 }}>
+          <Text style={{ color: '#60A5FA', fontSize: 7, marginRight: 4, lineHeight: 1.5 }}>•</Text>
+          <Text style={{ color: C.white, fontSize: 8, lineHeight: 1.5, flex: 1 }}>{b}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -582,7 +586,7 @@ function SummarySection({ v }: { v: SummaryV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={1} title="기업 개요" />
-      <OneLinerBoxPdf text={v.one_line} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
 
       {/* Basic info */}
       <FieldRow label="기업명" value={v.company} />
@@ -718,7 +722,7 @@ function IndustryHistorySection({ v }: { v: IndustryHistoryV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={2} title={`산업 역사 — ${v.industry_name}`} />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
 
       {v.why_durable && (
         <>
@@ -769,7 +773,7 @@ function TechEvolutionSection({ v }: { v: TechEvolutionV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={3} title={`기술 진화 — ${v.tech_name}`} />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label="현재 단계" value={v.current_stage} />
       <FieldRow label="다음 변곡점" value={v.next_inflection} />
 
@@ -808,7 +812,7 @@ function ValueChainSection({ v }: { v: ValueChainV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={4} title={`밸류체인 — ${v.industry}`} />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label="가치 흐름" value={v.value_flow} />
       <FieldRow label="분석 기업 위치" value={v.subject_position} />
 
@@ -857,7 +861,7 @@ function BusinessModelSection({ v }: { v: BusinessModelV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={5} title="비즈니스 모델" />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
 
       <FieldRow label="성장 모션" value={v.growth_motion} />
       {v.growth_motion_detail && <Text style={[s.para, { marginTop: 2 }]}>{v.growth_motion_detail}</Text>}
@@ -929,7 +933,7 @@ function CompetitorsSection({ v }: { v: CompetitorsV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={6} title="경쟁사 분석" />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label="경쟁 포지션" value={v.competitive_position} />
 
       {/* Direct competitors */}
@@ -1012,7 +1016,7 @@ function StrategySection({ v }: { v: StrategyV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={7} title="전략 분석" />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
 
       <View style={s.grid2}>
         {/* Corporate */}
@@ -1154,7 +1158,7 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={8} title="재무 분석" />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
 
       {v.narrative && <Text style={[s.para, { marginBottom: 8 }]}>{v.narrative}</Text>}
 
@@ -1257,7 +1261,7 @@ function FounderSection({ v }: { v: FounderV2 }) {
   return (
     <View style={s.section}>
       <SectionHeader num={9} title="창업자 분석" />
-      <OneLinerBoxPdf text={v.one_liner} />
+      <KeyBulletsPdf bullets={v.key_bullets} />
 
       {/* Founder profiles */}
       {v.founders.length > 0 && (

@@ -33,7 +33,7 @@ function buildContext(data: AnalysisDetail): string {
   const fin = data.financials_v2;
   const cv2 = data.competitors_v2;
 
-  const summary = sv2?.one_line || data.summary || '';
+  const summary = sv2?.key_bullets?.join(' | ') || data.summary || '';
   const bullBear = sv2 ? `강세: ${sv2.bull_case} / 약세: ${sv2.bear_case}` : '';
 
   const metrics = sv2?.key_metrics?.map(m => `${m.label}: ${m.value}`).join(', ')

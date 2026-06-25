@@ -172,7 +172,7 @@ export interface SummaryV2 {
     trend: 'concentrating' | 'diversifying' | 'stable';
   };
   key_markets: { country: string; revenue_share: number }[];
-  one_line: string;
+  key_bullets: string[];
   bull_case: string;
   bear_case: string;
   oneLiner: string;
@@ -191,7 +191,7 @@ export interface IndustryHistoryV2 {
   }[];
   why_durable: string;
   chasm_points: string[];
-  one_liner?: string;
+  key_bullets?: string[];
   sources?: Source[];
 }
 
@@ -208,7 +208,7 @@ export interface TechEvolutionV2 {
   }[];
   current_stage: string;
   next_inflection: string;
-  one_liner?: string;
+  key_bullets?: string[];
   sources?: Source[];
 }
 
@@ -232,7 +232,7 @@ export interface ValueChainV2 {
   layers: ValueChainLayer[];
   value_flow: string;
   subject_position: string;
-  one_liner?: string;
+  key_bullets?: string[];
   sources?: Source[];
 }
 
@@ -269,7 +269,7 @@ export interface BusinessModelV2 {
     nrr: number;
   };
   moat: MoatV2[];
-  one_liner?: string;
+  key_bullets?: string[];
   sources?: Source[];
 }
 
@@ -287,7 +287,7 @@ export interface CompetitorsV2 {
   indirect: { name: string; threat: string }[];
   substitutes: { name: string; threat: string }[];
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
-  one_liner?: string;
+  key_bullets?: string[];
   sources?: Source[];
 }
 
@@ -312,7 +312,7 @@ export interface StrategyV2 {
   };
   strategy_coherence: string;
   ten_year_durability: string;
-  one_liner?: string;
+  key_bullets?: string[];
   sources?: Source[];
 }
 
@@ -358,7 +358,7 @@ export interface FinancialsV2 {
     midLongTerm: string;
     keyRisks: string[];
   };
-  one_liner?: string;
+  key_bullets?: string[];
   sources?: Source[];
 }
 
@@ -394,7 +394,7 @@ export interface FounderV2 {
     advisors_board: string[];
     cofounders: string[];
   };
-  one_liner: string;
+  key_bullets: string[];
   sources?: Source[];
 }
 

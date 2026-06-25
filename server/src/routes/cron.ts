@@ -41,7 +41,7 @@ router.post('/daily', async (_req: Request, res: Response) => {
       .from('analyses')
       .insert({
         company_id: company.id,
-        summary:              analysis.summary_v2?.one_line ?? '',
+        summary:              analysis.summary_v2?.key_bullets?.join(' | ') ?? '',
         industry_history:     analysis.industry_history_v2?.industry_name ?? '',
         tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
         value_chain_overview: analysis.value_chain_v2?.industry ?? '',

@@ -251,13 +251,20 @@ function DataSourceBadge({ source }: { source: DataSource }) {
   );
 }
 
-// ── One-liner block ───────────────────────────────────────────────────────────
+// ── Key bullets block ─────────────────────────────────────────────────────────
 
-function OneLinerBlock({ text }: { text?: string | null }) {
-  if (!text || text === '-') return null;
+function KeyBulletsBlock({ bullets }: { bullets?: string[] | null }) {
+  if (!bullets?.length) return null;
   return (
     <div className="bg-gray-900 rounded-xl px-5 py-4">
-      <p className="text-white font-semibold text-sm leading-snug">{text}</p>
+      <ul className="space-y-1.5">
+        {bullets.map((b, i) => (
+          <li key={i} className="text-white text-sm font-medium leading-snug flex items-start gap-2">
+            <span className="text-blue-400 shrink-0 mt-0.5">•</span>
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -411,13 +418,22 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
     : s.key_metrics;
   return (
     <div className="space-y-4">
-      {/* One-line headline */}
-      <div className="bg-gray-900 rounded-xl px-5 py-4 flex items-center justify-between gap-3">
-        <p className="text-white font-semibold text-sm leading-snug flex-1">{s.one_line}</p>
-        <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full ${vcPos.cls}`}>
-          {vcPos.label}
-        </span>
-      </div>
+      {/* Key bullets headline */}
+      {s.key_bullets?.length ? (
+        <div className="bg-gray-900 rounded-xl px-5 py-4 flex items-start justify-between gap-3">
+          <ul className="space-y-1.5 flex-1">
+            {s.key_bullets.map((b, i) => (
+              <li key={i} className="text-white text-sm font-medium leading-snug flex items-start gap-2">
+                <span className="text-blue-400 shrink-0 mt-0.5">•</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+          <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full self-start ${vcPos.cls}`}>
+            {vcPos.label}
+          </span>
+        </div>
+      ) : null}
 
       {/* Static stock chart */}
       <StockChart ticker={s.ticker} />
@@ -633,7 +649,7 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
   const hasMore = h.timeline.length > LIMIT;
   return (
     <div className="space-y-4">
-      <OneLinerBlock text={h.one_liner} />
+      <KeyBulletsBlock bullets={h.key_bullets} />
       <div>
         {visible.map((item, i) => {
           const isLast = i === visible.length - 1 && (!hasMore || expanded);
@@ -779,7 +795,7 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
 const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
   return (
     <div className="space-y-4">
-      <OneLinerBlock text={t.one_liner} />
+      <KeyBulletsBlock bullets={t.key_bullets} />
 
       {/* Above fold: current stage + next inflection */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -889,7 +905,7 @@ function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
 const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: ValueChainV2; sources: Source[] | undefined }) {
   return (
     <div className="space-y-4">
-      <OneLinerBlock text={vc.one_liner} />
+      <KeyBulletsBlock bullets={vc.key_bullets} />
 
       {/* 업스트림→다운스트림 세로 레이아웃 */}
       <SectionCard title="밸류체인 레이어" dotColor="bg-indigo-400">
@@ -1053,7 +1069,7 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
 
   return (
     <div className="space-y-4">
-      <OneLinerBlock text={bm.one_liner} />
+      <KeyBulletsBlock bullets={bm.key_bullets} />
 
       {/* Revenue Streams 전체 항상 표시 */}
       {bm.revenue_streams.length > 0 && (
@@ -1297,7 +1313,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources }: { c: Com
   const hasMore = restDirect.length > 0 || c.indirect.length > 0 || c.substitutes.length > 0;
   return (
     <div className="space-y-4">
-      <OneLinerBlock text={c.one_liner} />
+      <KeyBulletsBlock bullets={c.key_bullets} />
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-gray-400">경쟁 포지션</span>
         <span className={`text-sm font-semibold px-3 py-1 rounded-full ${pos.cls}`}>{pos.label}</span>
@@ -1543,7 +1559,7 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
 
   return (
     <div className="space-y-1">
-      <OneLinerBlock text={s.one_liner} />
+      <KeyBulletsBlock bullets={s.key_bullets} />
 
       {/* Above fold: Corporate + Business */}
       {aboveFoldSections.map((sec, i) => renderSection(sec, true))}
@@ -1767,7 +1783,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
 
   return (
     <div className="space-y-4">
-      <OneLinerBlock text={f.one_liner} />
+      <KeyBulletsBlock bullets={f.key_bullets} />
       {/* Refresh button */}
       <div className="flex justify-end">
         <button
@@ -2061,12 +2077,8 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
   const isSerial = f.founding_history.type === 'serial';
   return (
     <div className="space-y-4">
-      {/* One-liner */}
-      {f.one_liner && f.one_liner !== '-' && (
-        <div className="bg-gray-900 rounded-xl px-5 py-4">
-          <p className="text-white font-semibold text-sm leading-snug">{f.one_liner}</p>
-        </div>
-      )}
+      {/* Key bullets */}
+      <KeyBulletsBlock bullets={f.key_bullets} />
 
       {/* Founder profiles */}
       {f.founders.length > 0 && (

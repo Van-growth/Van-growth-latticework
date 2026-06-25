@@ -11,7 +11,7 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
   switch (batchNum) {
     case 1: return {
       summary_v2: data.summary_v2 ?? null,
-      summary:    data.summary_v2?.one_line ?? '',
+      summary:    data.summary_v2?.key_bullets?.join(' | ') ?? '',
     };
     case 2: return {
       industry_history_v2: data.industry_history_v2 ?? null,
@@ -43,7 +43,7 @@ function buildDonePayload(
     companyName,
     createdAt:    meta.createdAt,
     cached:       meta.cached,
-    summary:              data.summary_v2?.one_line ?? '',
+    summary:              data.summary_v2?.key_bullets?.join(' | ') ?? '',
     industry_history:     '',
     tech_evolution:       '',
     value_chain_overview: '',
@@ -115,7 +115,7 @@ router.post('/', async (req: Request, res: Response) => {
       .from('analyses')
       .insert({
         company_id:           company.id,
-        summary:              analysis.summary_v2?.one_line ?? '',
+        summary:              analysis.summary_v2?.key_bullets?.join(' | ') ?? '',
         industry_history:     analysis.industry_history_v2?.industry_name ?? '',
         tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
         value_chain_overview: analysis.value_chain_v2?.industry ?? '',
@@ -146,7 +146,7 @@ router.post('/', async (req: Request, res: Response) => {
       analysisId: savedAnalysis.id,
       companyName: name,
       createdAt:   savedAnalysis.created_at,
-      summary:              analysis.summary_v2?.one_line ?? '',
+      summary:              analysis.summary_v2?.key_bullets?.join(' | ') ?? '',
       industry_history:     analysis.industry_history_v2?.industry_name ?? '',
       tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
       value_chain_overview: analysis.value_chain_v2?.industry ?? '',
@@ -315,7 +315,7 @@ router.post('/stream', async (req: Request, res: Response) => {
             .from('analyses')
             .insert({
               company_id: company.id,
-              summary:    data.summary_v2?.one_line ?? '',
+              summary:    data.summary_v2?.key_bullets?.join(' | ') ?? '',
               industry_history: '', tech_evolution: '', value_chain_overview: '',
               business_model: '', financials: '',
               metrics: [], strengths: [], risks: [],

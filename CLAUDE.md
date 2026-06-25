@@ -397,3 +397,7 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - [x] 요약 탭 → 재무/비즈니스모델/경쟁사/전략 탭 이동 버튼
 - [x] PDF 목차 페이지 + 공유 URL 웹 링크
 - [x] 공유 링크 로그인/회원가입 CTA (토스트 "준비 중")
+- [x] KPI 3-col 레이아웃 + no-truncate, bar chart full-width, Finviz w-full
+- [x] one_liner → key_bullets 전환 (검정블록 3-bullet 배열, 전 탭·PDF·서버 일괄)
+- [x] PDF 로딩 오버레이 (9개 wit 메시지 회전, 바운싱 도트)
+- [x] PDF 경량화 (NotoSansKR 700 weight 제거)
