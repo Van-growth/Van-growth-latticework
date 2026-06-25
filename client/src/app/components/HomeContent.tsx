@@ -129,6 +129,7 @@ export default function HomeContent() {
       .then((data: AnalysisDetail) => {
         setResult(data);
         setAnalysisData(data);
+        setCompletedBatches(new Set([1, 2, 3, 4]));
         loadedIdRef.current = urlId;
       })
       .catch(() => setError('분석 결과를 불러오지 못했습니다.'))

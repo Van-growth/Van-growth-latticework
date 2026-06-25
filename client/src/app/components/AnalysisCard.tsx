@@ -359,12 +359,12 @@ function StockChart({ ticker }: { ticker: string | null }) {
   if (isKorean) {
     return (
       <a href={`https://finance.naver.com/item/main.nhn?code=${symbol}`} target="_blank" rel="noopener noreferrer"
-        className="block rounded-xl overflow-hidden border border-gray-100">
+        className="block rounded-xl border border-gray-100 overflow-hidden" style={{ maxHeight: 300 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`https://fchart.stock.naver.com/sise.nhn?symbol=${symbol}&timeframe=day&count=250&requestType=0`}
           alt={`${symbol} 주가 차트`}
-          className="w-full"
+          style={{ maxWidth: '100%', height: 'auto', maxHeight: 300, display: 'block' }}
           loading="lazy"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
@@ -374,12 +374,12 @@ function StockChart({ ticker }: { ticker: string | null }) {
   if (isUS) {
     return (
       <a href={`https://finviz.com/quote.ashx?t=${symbol}`} target="_blank" rel="noopener noreferrer"
-        className="block rounded-xl overflow-hidden border border-gray-100">
+        className="block rounded-xl border border-gray-100 overflow-hidden" style={{ maxHeight: 300 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`https://finviz.com/chart.ashx?t=${symbol}&ty=c&ta=1&p=d`}
           alt={`${symbol} 주가 차트`}
-          className="w-full"
+          style={{ maxWidth: '100%', height: 'auto', maxHeight: 300, display: 'block' }}
           loading="lazy"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
