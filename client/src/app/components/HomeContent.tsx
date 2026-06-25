@@ -237,7 +237,7 @@ export default function HomeContent() {
   const showCard = result ?? (loading ? (displayData ?? emptyBase(companyName.trim())) : null);
 
   return (
-    <div className="px-4 py-8">
+    <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Hero */}
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold text-gray-900 mb-3">기업 심층 분석</h1>
