@@ -349,10 +349,20 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
 
 // ── Low-level helpers ─────────────────────────────────────────────────────────
 
+// SEC EDGAR Archives 전체 원문 차단 — 수십 MB HTML 다운로드 방지
+const BLOCKED_URL_PATTERNS = [
+  /sec\.gov\/Archives\//i,         // 전체 10-K/10-Q 원문 (수십 MB)
+  /sec\.gov\/cgi-bin\/browse-edgar/i, // 검색 결과 페이지 (불필요)
+];
+
+function isBlockedUrl(url: string): boolean {
+  return BLOCKED_URL_PATTERNS.some(p => p.test(url));
+}
+
 async function fetchUrlContent(url: string): Promise<string> {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
+    const timer = setTimeout(() => controller.abort(), 5_000); // 10s → 5s
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
@@ -441,6 +451,10 @@ async function runWithWebSearch(
       toolUseBlocks.map(async (b) => {
         if (b.name === 'fetch_url') {
           const { url } = b.input as { url: string };
+          if (isBlockedUrl(url)) {
+            console.log(`[fetch_url] BLOCKED ${url}`);
+            return { type: 'tool_result' as const, tool_use_id: b.id, content: `Blocked: ${url} — SEC full filing skipped. Use web_search for financial summaries (Yahoo Finance, Macrotrends, StockAnalysis) instead.` };
+          }
           console.log(`[fetch_url] ${url}`);
           const content = await fetchUrlContent(url);
           return { type: 'tool_result' as const, tool_use_id: b.id, content };
@@ -559,49 +573,35 @@ outlook 규칙: 재무 데이터 기반으로 작성. 근거 없는 낙관 금�
 // ── Research gathering (1 web-search pass) ────────────────────────────────────
 
 async function gatherResearch(companyName: string): Promise<string> {
-  const systemPrompt = `당신은 기업 분석 리서처입니다. 아래 기업에 대해 웹 검색 및 페이지 전체 내용 읽기를 통해 핵심 정보를 수집하고, 수집된 사실을 항목별로 정리해주세요.
+  const systemPrompt = `당신은 기업 분석 리서처입니다. 웹 검색으로 핵심 정보를 빠르게 수집하여 항목별로 정리하세요.
 
-[도구 사용 방법]
-- web_search: 검색 쿼리로 관련 URL과 스니펫을 찾습니다
-- fetch_url: 검색 결과에서 중요한 URL의 전체 내용을 읽습니다
-  → SEC EDGAR 공시, DART 공시, 기업 IR 페이지, 주요 뉴스 기사 등은 반드시 fetch_url로 전체 내용을 읽어서 정확한 수치를 확보하세요
+[fetch_url 사용 규칙 — 속도 최우선]
+- fetch_url은 최대 2회만 사용. 가볍고 빠른 페이지만 대상.
+- 절대 fetch_url 금지: SEC EDGAR Archives 원문(.htm/.html), 대형 PDF, DART 원문
+- fetch_url 허용: IR 뉴스릴리즈, Yahoo Finance, Macrotrends, StockAnalysis, 주요 뉴스 기사
+- 검색 스니펫에 수치가 있으면 fetch_url 없이 스니펫 그대로 사용
 
-[소스 신뢰도 우선순위]
-1순위 — 공식 공시: SEC 10-K/10-Q, DART, 기업 IR 자료, 공식 프레스릴리즈
-2순위 — 주요 금융 데이터: Bloomberg, Reuters, Yahoo Finance, Macrotrends
-3순위 — 산업 리서치: CB Insights, Gartner, IDC, Statista
-4순위 — 주요 언론: Financial Times, WSJ, Forbes, 한국경제, 매일경제
-5순위 — 일반 뉴스/블로그: 추정/미확인 레이블 필수
-
-우선순위 높은 소스에서 데이터를 찾지 못한 경우에만 다음 순위로 이동.
-수치 데이터(매출, 마진, 점유율 등)는 반드시 1~2순위 소스에서만 확정값으로 사용.
-3순위 이하 소스의 수치는 반드시 '(추정)' 레이블 명시.
-소스에서 찾을 수 없는 데이터는 null 반환. 절대 임의로 채우지 말 것.
-
-[검색 및 읽기 순서]
-1. web_search: "${companyName} SEC 10-K annual report 2024 2025" → 결과 중 SEC EDGAR URL 있으면 fetch_url로 전체 읽기
-2. web_search: "${companyName} IR earnings revenue financials" → IR 페이지 URL 있으면 fetch_url로 전체 읽기
-3. web_search: "${companyName} market share competitors industry analysis"
-4. web_search: "${companyName} business model strategy"
-5. web_search: "${companyName} recent news 2025" → 중요 기사 1~2개 fetch_url로 전체 읽기
+[검색 순서 — 4회 이내 완료]
+1. web_search: "${companyName} revenue operating income net income 2023 2024 annual"
+2. web_search: "${companyName} business model competitors market share 2024 2025"
+3. web_search: "${companyName} strategy news 2025"
+4. (필요 시) fetch_url: IR 뉴스릴리즈 또는 Yahoo Finance/Macrotrends 페이지 1개만
 
 [수집 항목]
 1. 기업 개요 (설립연도, 본사, 사업영역, 주요 제품/서비스, 시가총액, 티커)
-2. 최근 3~5년 재무 데이터 (매출, 영업이익, 순이익, FCF, 이익률) — 1~2순위 소스 우선
+2. 최근 3~5년 재무 수치 (매출·영업이익·순이익·이익률) — 출처 병기, 없으면 "확인 필요"
 3. 사업 모델 (수익 구조, 고객 세그먼트, 성장 방식)
-4. 밸류체인 위치 (핵심 공급사, 주요 고객사) — 공시 확인된 것만
-5. 경쟁 현황 (주요 경쟁사, 시장점유율) — 출처 명시
-6. 전략 방향 (최근 M&A, 투자, 신규 사업, 지역 확장)
-7. 산업/기술 트렌드
-8. 리스크 요소
+4. 경쟁 현황 (주요 경쟁사, 시장점유율 추정)
+5. 전략 방향 (M&A, 신규 사업, 지역 확장)
+6. 산업 트렌드 / 리스크
 
-JSON 불필요. 각 수치에 출처 소스명 병기. 확인 불가 항목은 "확인 필요"로 명시.`;
+JSON 불필요. 각 수치에 출처명 병기. 추정값은 "(추정)" 명시. 확인 불가 항목은 "확인 필요".`;
 
   return runWithWebSearch(
     systemPrompt,
-    `기업명: ${companyName}\n\n위 검색 및 읽기 순서에 따라 정보를 수집해주세요.`,
+    `기업명: ${companyName}\n\n4회 이내 검색으로 핵심 정보를 수집해주세요.`,
     'claude-sonnet-4-6',
-    5,
+    4,
     8000,
   );
 }
