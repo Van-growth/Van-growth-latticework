@@ -127,11 +127,6 @@ function DataValue({ text, className = '' }: { text: string | null | undefined; 
 function MetricCard({ value, label, trend }: { value: string; label: string; trend?: 'up' | 'down' | 'flat' }) {
   const isUnknown = value === '확인 필요' || value === '공개 없음' || isPlaceholder(value);
   const displayValue = isPlaceholder(value) ? '—' : value;
-  const valueCls = !isUnknown && trend === 'up'
-    ? 'text-green-600'
-    : !isUnknown && trend === 'down'
-    ? 'text-red-500'
-    : 'text-gray-900';
   const trendEl = trend === 'up'
     ? <span className="text-green-500 text-xl font-bold ml-1.5 leading-none">▲</span>
     : trend === 'down'
@@ -142,7 +137,7 @@ function MetricCard({ value, label, trend }: { value: string; label: string; tre
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <div className="text-[11px] text-gray-400 mb-1 leading-tight">{label}</div>
-      <div className={`font-semibold leading-none flex items-center gap-0 ${isUnknown ? 'text-sm text-gray-900' : `text-xl ${valueCls}`}`}>
+      <div className={`font-semibold leading-none flex items-center gap-0 ${isUnknown ? 'text-sm text-gray-900' : 'text-xl text-gray-900'}`}>
         <DataValue text={displayValue} />
         {!isUnknown && trendEl}
       </div>
