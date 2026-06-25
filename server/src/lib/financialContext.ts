@@ -1,9 +1,10 @@
 // Orchestrates DART+KIS / EDGAR+FMP data fetch and formats as Claude prompt context
 
-import { fetchDartData, DartData }          from './dart';
-import { fetchEdgarData, EdgarData }        from './edgar';
-import { fetchKisQuote, KisQuote }          from './kis';
+import { fetchDartData, DartData }                from './dart';
+import { fetchEdgarData, EdgarData, lookupCikByName } from './edgar';
+import { fetchKisQuote, KisQuote }               from './kis';
 import { fetchFmpData, FmpData, buildFmpContext } from './fmp';
+import { supabase }                              from './supabase';
 
 export type DataSource = 'dart' | 'edgar' | 'web_search';
 
@@ -180,6 +181,22 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
         return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData) };
       }
     } else {
+      // financial_cache 선체크 (sync-edgar-sp500.mjs로 pre-cached 데이터)
+      const cikInfo = await lookupCikByName(companyName).catch(() => null);
+      if (cikInfo?.ticker) {
+        const ticker = cikInfo.ticker.toUpperCase();
+        const { data: cached } = await supabase
+          .from('financial_cache')
+          .select('context_text')
+          .eq('company_name', ticker)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+        if (cached?.context_text) {
+          console.log(`[financialCtx] "${companyName}" → financial_cache HIT (${ticker})`);
+          return { source: 'edgar', contextText: cached.context_text };
+        }
+      }
+
       // EDGAR + FMP 병렬
       const [edgar, fmpData] = await Promise.allSettled([
         fetchEdgarData(companyName),

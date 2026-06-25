@@ -171,6 +171,28 @@ async function getLatestXbrlValue(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+// cik_master DB 전용 조회 (EFTS API 없음 — 빠름, financial_cache 선체크용)
+export async function lookupCikByName(
+  name: string,
+): Promise<{ cik: string; ticker: string | null } | null> {
+  const norm = name.toUpperCase();
+  const sel = 'cik, ticker';
+
+  { const { data } = await supabase.from('cik_master').select(sel).ilike('ticker', norm).maybeSingle();
+    if (data) return { cik: data.cik, ticker: data.ticker ?? null }; }
+
+  { const { data } = await supabase.from('cik_master').select(sel).ilike('name', name).maybeSingle();
+    if (data) return { cik: data.cik, ticker: data.ticker ?? null }; }
+
+  { const { data } = await supabase.from('cik_master').select(sel).ilike('name', `${name}%`).limit(1).maybeSingle();
+    if (data) return { cik: data.cik, ticker: data.ticker ?? null }; }
+
+  { const { data } = await supabase.from('cik_master').select(sel).ilike('name', `%${name}%`).limit(1).maybeSingle();
+    if (data) return { cik: data.cik, ticker: data.ticker ?? null }; }
+
+  return null;
+}
+
 export async function fetchEdgarData(companyName: string): Promise<EdgarData | null> {
   console.log(`[edgar] fetchEdgarData start: "${companyName}"`);
   const found = await lookupCik(companyName);
