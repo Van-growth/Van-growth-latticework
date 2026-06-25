@@ -31,6 +31,40 @@ import {
   FounderV2,
 } from '@/types';
 
+// ── Country flag map ─────────────────────────────────────────────────────────
+
+const COUNTRY_FLAG: Record<string, string> = {
+  '미국': '🇺🇸', '한국': '🇰🇷', '대한민국': '🇰🇷', '중국': '🇨🇳', '일본': '🇯🇵',
+  '독일': '🇩🇪', '프랑스': '🇫🇷', '영국': '🇬🇧', '인도': '🇮🇳', '캐나다': '🇨🇦',
+  '호주': '🇦🇺', '이탈리아': '🇮🇹', '스페인': '🇪🇸', '네덜란드': '🇳🇱', '스웨덴': '🇸🇪',
+  '스위스': '🇨🇭', '노르웨이': '🇳🇴', '덴마크': '🇩🇰', '핀란드': '🇫🇮', '오스트리아': '🇦🇹',
+  '벨기에': '🇧🇪', '포르투갈': '🇵🇹', '아일랜드': '🇮🇪', '폴란드': '🇵🇱', '체코': '🇨🇿',
+  '헝가리': '🇭🇺', '루마니아': '🇷🇴', '그리스': '🇬🇷', '이스라엘': '🇮🇱', '싱가포르': '🇸🇬',
+  '대만': '🇹🇼', '홍콩': '🇭🇰', '브라질': '🇧🇷', '멕시코': '🇲🇽', '러시아': '🇷🇺',
+  '터키': '🇹🇷', '아랍에미리트': '🇦🇪', '사우디아라비아': '🇸🇦', '인도네시아': '🇮🇩',
+  '베트남': '🇻🇳', '태국': '🇹🇭', '말레이시아': '🇲🇾', '필리핀': '🇵🇭',
+  // English variants
+  'US': '🇺🇸', 'USA': '🇺🇸', 'United States': '🇺🇸', 'America': '🇺🇸',
+  'Korea': '🇰🇷', 'South Korea': '🇰🇷',
+  'China': '🇨🇳', 'Japan': '🇯🇵', 'Germany': '🇩🇪', 'France': '🇫🇷',
+  'UK': '🇬🇧', 'United Kingdom': '🇬🇧', 'Britain': '🇬🇧', 'India': '🇮🇳',
+  'Canada': '🇨🇦', 'Australia': '🇦🇺', 'Italy': '🇮🇹', 'Spain': '🇪🇸',
+  'Netherlands': '🇳🇱', 'Sweden': '🇸🇪', 'Switzerland': '🇨🇭', 'Norway': '🇳🇴',
+  'Denmark': '🇩🇰', 'Finland': '🇫🇮', 'Austria': '🇦🇹', 'Belgium': '🇧🇪',
+  'Portugal': '🇵🇹', 'Ireland': '🇮🇪', 'Poland': '🇵🇱', 'Czech Republic': '🇨🇿',
+  'Hungary': '🇭🇺', 'Romania': '🇷🇴', 'Greece': '🇬🇷', 'Israel': '🇮🇱',
+  'Singapore': '🇸🇬', 'Taiwan': '🇹🇼', 'Hong Kong': '🇭🇰', 'Brazil': '🇧🇷',
+  'Mexico': '🇲🇽', 'Russia': '🇷🇺', 'Turkey': '🇹🇷', 'UAE': '🇦🇪',
+  'Indonesia': '🇮🇩', 'Vietnam': '🇻🇳', 'Thailand': '🇹🇭', 'Malaysia': '🇲🇾',
+  'Philippines': '🇵🇭',
+};
+
+function flagOf(country: string): string {
+  if (!country) return '';
+  // try exact match, then first word match
+  return COUNTRY_FLAG[country.trim()] ?? COUNTRY_FLAG[country.trim().split(/[,/ ]/)[0]] ?? '';
+}
+
 // ── Primitives ────────────────────────────────────────────────────────────────
 
 function Tag({ label, color = 'gray' }: { label: string; color?: string }) {
@@ -411,7 +445,7 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
               {s.key_markets.map((m, i) => (
                 <div key={i}>
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-700">{m.country}</span>
+                    <span className="text-gray-700">{flagOf(m.country)} {m.country}</span>
                     <span className="font-medium text-gray-800">{m.revenue_share}%</span>
                   </div>
                   <ProgressBar value={m.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
@@ -838,7 +872,7 @@ function ValueChainV2Tab({ vc, sources }: { vc: ValueChainV2; sources: Source[] 
                     <div key={j} className="bg-gray-50 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-semibold text-gray-800">{leader.name}</span>
-                        <span className="text-[10px] bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">{leader.country}</span>
+                        <span className="text-[10px] bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">{flagOf(leader.country)} {leader.country}</span>
                       </div>
                       <p className="text-[11px] text-gray-500 leading-relaxed">{leader.why_leader}</p>
                     </div>
@@ -1212,7 +1246,7 @@ function CompetitorsV2Tab({ c, sources }: { c: CompetitorsV2; sources: Source[] 
               <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
-                  <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{comp.country}</span>
+                  <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>
                 </div>
                 {comp.market_share && (
                   <div className="text-blue-600 font-medium text-xs">{comp.market_share}</div>
@@ -1544,6 +1578,49 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
   );
 }
 
+// ── Scrollable grid table (replaces heavyweight virtualization for short tables) ─
+
+const V_ROW_H = 36;
+
+function VirtualTable({
+  rows,
+  colTemplate,
+  minWidth,
+  header,
+  renderRow,
+  maxVisible = 8,
+}: {
+  rows: any[];
+  colTemplate: string;
+  minWidth: number;
+  header: React.ReactNode;
+  renderRow: (row: any, index: number) => React.ReactNode;
+  maxVisible?: number;
+}) {
+  const maxH = maxVisible * V_ROW_H;
+  const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: colTemplate };
+  return (
+    <div className="overflow-x-auto">
+      <div style={{ minWidth }}>
+        <div style={gridStyle} className="border-b border-gray-100 pb-2 sticky top-0 bg-white z-10">
+          {header}
+        </div>
+        <div style={{ maxHeight: maxH, overflowY: rows.length > maxVisible ? 'auto' : 'visible' }}>
+          {rows.map((row, index) => (
+            <div
+              key={index}
+              style={{ ...gridStyle, height: V_ROW_H }}
+              className="items-center border-b border-gray-50 hover:bg-gray-50/50 transition-colors"
+            >
+              {renderRow(row, index)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── V2 Tab: 재무 ──────────────────────────────────────────────────────────────
 
 const IS_COLS_V2: Array<keyof Omit<FinancialsV2Row, 'item' | 'yoy'>> =
@@ -1610,70 +1687,70 @@ function FinancialsV2Tab({ f, sources, ticker, onRefresh, isRefreshing }: {
       {/* Income statement */}
       {f.income_statement.length > 0 && (
         <SectionCard title="손익계산서 (I/S)" dotColor="bg-blue-400">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[100px]">항목</th>
+          <VirtualTable
+            rows={f.income_statement}
+            colTemplate={`minmax(100px,1.5fr) repeat(${IS_COLS_V2.length},1fr) 80px`}
+            minWidth={520}
+            maxVisible={10}
+            header={
+              <>
+                <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
+                {IS_COLS_V2.map(col => (
+                  <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
+                    {col.replace('fy', 'FY')}
+                  </span>
+                ))}
+                <span className="py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">YoY</span>
+              </>
+            }
+            renderRow={(row: FinancialsV2Row) => {
+              const isBold = IS_BOLD_ITEMS.some(b => row.item.includes(b));
+              return (
+                <>
+                  <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
                   {IS_COLS_V2.map(col => (
-                    <th key={col} className={`text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
-                      {col.replace('fy', 'FY')}
-                    </th>
+                    <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === 'fy2024' ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
+                      <DataValue text={row[col] ?? '—'} />
+                    </span>
                   ))}
-                  <th className="text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">YoY</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {f.income_statement.map((row, i) => {
-                  const isBold = IS_BOLD_ITEMS.some(b => row.item.includes(b));
-                  return (
-                    <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                      <td className={`py-2.5 pr-3 text-xs ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
-                      {IS_COLS_V2.map(col => (
-                        <td key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === 'fy2024' ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
-                          <DataValue text={row[col] ?? '—'} />
-                        </td>
-                      ))}
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={row.yoy ?? '—'} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={row.yoy ?? '—'} /></span>
+                </>
+              );
+            }}
+          />
         </SectionCard>
       )}
 
       {/* Balance sheet */}
       {f.balance_sheet.length > 0 && (
         <SectionCard title="재무상태표 (B/S)" dotColor="bg-indigo-400">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[130px]">항목</th>
-                  {(['fy2023', 'fy2024', 'fy2025'] as const).map(col => (
-                    <th key={col} className={`text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
-                      {col.replace('fy', 'FY')}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {f.balance_sheet.map((row, i) => {
-                  const isBold = ['총자산', '총부채', '자본총계'].includes(row.item);
-                  return (
-                    <tr key={i} className={`hover:bg-gray-50/50 transition-colors ${isBold ? 'bg-gray-50' : ''}`}>
-                      <td className={`py-2.5 pr-3 text-xs ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2023 ?? '—'} /></td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><DataValue text={row.fy2024 ?? '—'} /></td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2025 ?? '—'} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <VirtualTable
+            rows={f.balance_sheet}
+            colTemplate="minmax(130px,1.5fr) 1fr 1fr 1fr"
+            minWidth={380}
+            maxVisible={10}
+            header={
+              <>
+                <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
+                {(['fy2023', 'fy2024', 'fy2025'] as const).map(col => (
+                  <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
+                    {col.replace('fy', 'FY')}
+                  </span>
+                ))}
+              </>
+            }
+            renderRow={(row: FinancialsV2Row) => {
+              const isBold = ['총자산', '총부채', '자본총계'].includes(row.item);
+              return (
+                <>
+                  <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
+                  <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2023 ?? '—'} /></span>
+                  <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><DataValue text={row.fy2024 ?? '—'} /></span>
+                  <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2025 ?? '—'} /></span>
+                </>
+              );
+            }}
+          />
         </SectionCard>
       )}
 
@@ -2025,22 +2102,95 @@ function FounderV2Tab({ f }: { f: FounderV2 }) {
   );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+// ── Skeleton components ───────────────────────────────────────────────────────
 
-function TabSkeleton() {
+function Sk({ w = 'w-full', h = 'h-4' }: { w?: string; h?: string }) {
+  return <div className={`skeleton ${w} ${h}`} />;
+}
+
+function SummarySkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-14 bg-gray-200 rounded-xl" />
-      <div className="space-y-2">
-        <div className="h-4 bg-gray-200 rounded w-3/4" />
-        <div className="h-4 bg-gray-200 rounded w-1/2" />
-        <div className="h-4 bg-gray-200 rounded w-5/6" />
+    <div className="space-y-4">
+      <Sk h="h-14" />
+      <div className="grid grid-cols-2 gap-2">
+        {[0,1,2,3].map(i => <Sk key={i} h="h-16" />)}
       </div>
-      <div className="h-32 bg-gray-200 rounded-xl" />
-      <div className="space-y-2">
-        <div className="h-4 bg-gray-200 rounded w-2/3" />
-        <div className="h-4 bg-gray-200 rounded w-4/5" />
+      <Sk h="h-24" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Sk h="h-20" />
+        <Sk h="h-20" />
       </div>
+    </div>
+  );
+}
+
+function TimelineSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Sk h="h-14" />
+      {[0,1,2,3].map(i => (
+        <div key={i} className="flex gap-4">
+          <Sk w="w-10 shrink-0" h="h-10" />
+          <div className="flex-1 space-y-2 pt-1">
+            <Sk w="w-1/2" />
+            <Sk />
+            <Sk w="w-3/4" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CardsSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div className="space-y-4">
+      <Sk h="h-14" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {Array.from({ length: count }).map((_, i) => <Sk key={i} h="h-32" />)}
+      </div>
+      <Sk h="h-20" />
+    </div>
+  );
+}
+
+function TableSkeleton({ rows = 5, cols = 6 }: { rows?: number; cols?: number }) {
+  const tpl = `2fr ${Array(cols - 1).fill('1fr').join(' ')}`;
+  return (
+    <div className="space-y-4">
+      <Sk h="h-14" />
+      <div style={{ display: 'grid', gridTemplateColumns: tpl, gap: '8px' }}>
+        {Array.from({ length: cols }).map((_, i) => <Sk key={i} h="h-3" />)}
+      </div>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} style={{ display: 'grid', gridTemplateColumns: tpl, gap: '8px' }}>
+          {Array.from({ length: cols }).map((_, i) => <Sk key={i} h="h-4" />)}
+        </div>
+      ))}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+        {[0,1,2,3].map(i => <Sk key={i} h="h-16" />)}
+      </div>
+    </div>
+  );
+}
+
+function FounderSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Sk h="h-14" />
+      <div className="grid grid-cols-2 gap-3">
+        <Sk h="h-24" />
+        <Sk h="h-24" />
+      </div>
+      {[0,1,2,3].map(i => (
+        <div key={i} className="flex gap-4">
+          <Sk w="w-10 shrink-0" h="h-10" />
+          <div className="flex-1 space-y-1.5 pt-1">
+            <Sk w="w-1/2" />
+            <Sk w="w-1/3" h="h-3" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -2146,49 +2296,49 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
       {/* Tab content — only active tab is mounted */}
       <div className="p-5 bg-gray-50 min-h-[300px]">
         {tab === 'summary' && (
-          !batchDone(TAB_BATCH.summary) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.summary) ? <SummarySkeleton /> :
           data.summary_v2
             ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} />
             : <SummaryTab data={data} />
         )}
         {tab === 'industry_history' && (
-          !batchDone(TAB_BATCH.industry_history) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.industry_history) ? <TimelineSkeleton /> :
           data.industry_history_v2
             ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
             : <IndustryHistoryTab data={data} />
         )}
         {tab === 'tech_evolution' && (
-          !batchDone(TAB_BATCH.tech_evolution) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.tech_evolution) ? <CardsSkeleton count={4} /> :
           data.tech_evolution_v2
             ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
             : <TechEvolutionTab data={data} />
         )}
         {tab === 'value_chain' && (
-          !batchDone(TAB_BATCH.value_chain) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.value_chain) ? <CardsSkeleton count={4} /> :
           data.value_chain_v2
             ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
             : <ValueChainTab data={data} />
         )}
         {tab === 'business_model' && (
-          !batchDone(TAB_BATCH.business_model) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.business_model) ? <CardsSkeleton count={3} /> :
           data.business_model_v2
             ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
             : <BusinessModelTab data={data} />
         )}
         {tab === 'competitors' && (
-          !batchDone(TAB_BATCH.competitors) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.competitors) ? <CardsSkeleton count={4} /> :
           data.competitors_v2
             ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} />
             : <CompetitorsTab data={data} />
         )}
         {tab === 'strategy' && (
-          !batchDone(TAB_BATCH.strategy) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.strategy) ? <CardsSkeleton count={3} /> :
           data.strategy_v2
             ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
             : <StrategyTab data={data} />
         )}
         {tab === 'financials' && (
-          !batchDone(TAB_BATCH.financials) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.financials) ? <TableSkeleton rows={5} cols={7} /> :
           financialsV2Local
             ? <FinancialsV2Tab
                 f={financialsV2Local}
@@ -2200,7 +2350,7 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             : <FinancialsTab data={data} />
         )}
         {tab === 'founder' && (
-          !batchDone(TAB_BATCH.founder) ? <TabSkeleton /> :
+          !batchDone(TAB_BATCH.founder) ? <FounderSkeleton /> :
           data.founder_v2
             ? <FounderV2Tab f={data.founder_v2} />
             : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>
