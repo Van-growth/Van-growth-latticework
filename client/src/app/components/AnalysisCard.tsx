@@ -134,32 +134,34 @@ function MetricCard({ value, label, trend }: { value: string; label: string; tre
   const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || isPlaceholder(cleaned);
   const displayValue = isPlaceholder(cleaned) ? '—' : cleaned;
   const trendEl = trend === 'up'
-    ? <span className="text-green-500 text-xl font-bold ml-1.5 leading-none">▲</span>
+    ? <span className="text-green-500 text-sm font-bold ml-1 leading-none shrink-0">▲</span>
     : trend === 'down'
-    ? <span className="text-red-500 text-xl font-bold ml-1.5 leading-none">▼</span>
+    ? <span className="text-red-500 text-sm font-bold ml-1 leading-none shrink-0">▼</span>
     : trend === 'flat'
-    ? <span className="text-gray-400 text-base ml-1.5 leading-none">→</span>
+    ? <span className="text-gray-400 text-sm ml-1 leading-none shrink-0">→</span>
     : null;
   return (
-    <div className="bg-gray-50 rounded-lg p-3">
+    <div className="bg-gray-50 rounded-lg p-3 min-w-0">
       <div className="text-[11px] text-gray-400 mb-1 leading-tight">{label}</div>
-      <div className={`font-semibold leading-none flex items-center gap-0 ${isUnknown ? 'text-sm text-gray-900' : 'text-xl text-gray-900'} truncate`}>
-        <DataValue text={displayValue} />
+      <div className="font-semibold text-sm text-gray-900 leading-snug flex items-center min-w-0">
+        <span className="break-all min-w-0 flex-1">
+          <DataValue text={displayValue} />
+        </span>
         {!isUnknown && trendEl}
       </div>
     </div>
   );
 }
 
-function ProgressBar({ value, color = 'bg-blue-400', height = 'h-1.5' }: {
+function ProgressBar({ value, color = 'bg-blue-400', height = 'h-2' }: {
   value: number;
   color?: string;
   height?: string;
 }) {
   const pct = Math.min(100, Math.max(0, value));
   return (
-    <div className={`${height} bg-gray-100 rounded-full overflow-hidden`}>
-      <div className={`${height} ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+    <div className={`w-full ${height} bg-gray-100 rounded-full overflow-hidden`}>
+      <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -365,12 +367,12 @@ function StockChart({ ticker }: { ticker: string | null }) {
   if (isKorean) {
     return (
       <a href={`https://finance.naver.com/item/main.nhn?code=${symbol}`} target="_blank" rel="noopener noreferrer"
-        className="block rounded-xl border border-gray-100 overflow-hidden" style={{ maxHeight: 300 }}>
+        className="block w-full rounded-xl border border-gray-100 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`https://fchart.stock.naver.com/sise.nhn?symbol=${symbol}&timeframe=day&count=250&requestType=0`}
           alt={`${symbol} 주가 차트`}
-          style={{ maxWidth: '100%', height: 'auto', maxHeight: 300, display: 'block' }}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
           loading="lazy"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
@@ -380,12 +382,12 @@ function StockChart({ ticker }: { ticker: string | null }) {
   if (isUS) {
     return (
       <a href={`https://finviz.com/quote.ashx?t=${symbol}`} target="_blank" rel="noopener noreferrer"
-        className="block rounded-xl border border-gray-100 overflow-hidden" style={{ maxHeight: 300 }}>
+        className="block w-full rounded-xl border border-gray-100 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`https://finviz.com/chart.ashx?t=${symbol}&ty=c&ta=1&p=d`}
           alt={`${symbol} 주가 차트`}
-          style={{ maxWidth: '100%', height: 'auto', maxHeight: 300, display: 'block' }}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
           loading="lazy"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
@@ -420,9 +422,9 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
       {/* Static stock chart */}
       <StockChart ticker={s.ticker} />
 
-      {/* Key metrics (without 시가총액 when ticker available) */}
+      {/* Key metrics — 3-col grid, no truncation */}
       {filteredMetrics.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {filteredMetrics.map((m, i) => (
             <MetricCard key={i} value={m.value} label={m.label} trend={m.trend} />
           ))}
@@ -435,8 +437,8 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
         </div>
       )}
 
-      {/* Products + Markets */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Products + Markets — 풀 너비 스택 (바 차트 전체 너비 확보) */}
+      <div className="space-y-3">
         {s.products.length > 0 && (
           <SectionCard title="주요 제품/서비스" dotColor="bg-blue-400">
             <div className="space-y-2.5">
