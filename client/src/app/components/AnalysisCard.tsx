@@ -1495,84 +1495,84 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
 // ── V2 Tab: 전략 ──────────────────────────────────────────────────────────────
 
 const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | undefined }) {
-  const aboveFoldSections = [
+  const sections = [
     {
-      label: '기업 전략 (Corporate)',
+      label: '기업 전략',
+      sub: 'Corporate',
       dotColor: 'bg-violet-400',
       direction: s.corporate.direction,
-      items: [
-        { label: '포트폴리오', value: s.corporate.portfolio },
-        { label: 'M&A / 파트너십', value: s.corporate.ma_partnerships.join(' · ') },
-        { label: '지역 확장', value: s.corporate.geographic },
-      ].filter(it => it.value),
+      bullets: [
+        s.corporate.portfolio          && `포트폴리오 — ${s.corporate.portfolio}`,
+        s.corporate.ma_partnerships?.length && `M&A/파트너십 — ${s.corporate.ma_partnerships.join(' · ')}`,
+        s.corporate.geographic         && `지역 확장 — ${s.corporate.geographic}`,
+      ].filter(Boolean) as string[],
     },
     {
-      label: '사업 전략 (Business)',
+      label: '사업 전략',
+      sub: 'Business',
       dotColor: 'bg-blue-400',
       direction: s.business.direction,
-      items: [
-        { label: '경쟁 우위', value: s.business.competitive_advantage },
-        { label: 'GTM', value: s.business.go_to_market },
-        { label: '제품 로드맵', value: s.business.product_roadmap.join(' / ') },
-      ].filter(it => it.value),
+      bullets: [
+        s.business.competitive_advantage && `경쟁 우위 — ${s.business.competitive_advantage}`,
+        s.business.go_to_market          && `GTM — ${s.business.go_to_market}`,
+        s.business.product_roadmap?.length && `로드맵 — ${s.business.product_roadmap.join(' / ')}`,
+      ].filter(Boolean) as string[],
+    },
+    {
+      label: '재무 전략',
+      sub: 'Financial',
+      dotColor: 'bg-emerald-400',
+      direction: s.financial.direction,
+      bullets: [
+        s.financial.capital_allocation   && `자본 배분 — ${s.financial.capital_allocation}`,
+        s.financial.investment_priority   && `투자 우선순위 — ${s.financial.investment_priority}`,
+        s.financial.return_target         && `목표 수익성 — ${s.financial.return_target}`,
+      ].filter(Boolean) as string[],
     },
   ];
-
-  const financialSection = {
-    label: '재무 전략 (Financial)',
-    dotColor: 'bg-emerald-400',
-    direction: s.financial.direction,
-    items: [
-      { label: '자본 배분', value: s.financial.capital_allocation },
-      { label: '투자 우선순위', value: s.financial.investment_priority },
-      { label: '목표 수익성', value: s.financial.return_target },
-    ].filter(it => it.value),
-  };
-
-  const renderSection = (sec: typeof aboveFoldSections[0], showConnector: boolean) => (
-    <div key={sec.label}>
-      <div className="bg-white border border-gray-100 rounded-xl p-4">
-        <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${sec.dotColor}`} />
-          {sec.label}
-        </div>
-        <p className="text-sm font-semibold text-gray-800 leading-snug mb-3 pl-3.5">{sec.direction}</p>
-        {sec.items.length > 0 && (
-          <div>
-            {sec.items.map((item, i) => (
-              <div key={i} className={`flex gap-3 items-start py-2.5 ${i < sec.items.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                <span className="shrink-0 w-24 text-[11px] text-gray-400 pt-0.5 leading-tight">{item.label}</span>
-                <p className="text-sm text-gray-700 leading-relaxed flex-1">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      {showConnector && (
-        <div className="flex justify-center py-1">
-          <div className="flex flex-col items-center gap-0.5">
-            <div className="w-px h-3 bg-gray-200" />
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="opacity-40">
-              <path d="M5 6L0 0h10L5 6z" fill="#6b7280" />
-            </svg>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <div className="space-y-1">
       <KeyBulletsBlock bullets={s.key_bullets} />
 
-      {/* Above fold: Corporate + Business */}
-      {aboveFoldSections.map((sec, i) => renderSection(sec, true))}
+      <div className="flex flex-col items-stretch">
+        {sections.map((sec, i) => (
+          <div key={sec.label} className="flex flex-col items-center">
+            <div className="w-full bg-white border border-gray-100 rounded-xl p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${sec.dotColor}`} />
+                {sec.label}
+                <span className="text-gray-300 font-normal normal-case tracking-normal">({sec.sub})</span>
+              </div>
+              {sec.direction && (
+                <p className="text-sm font-semibold text-gray-800 leading-snug mb-3 pl-3.5">{sec.direction}</p>
+              )}
+              {sec.bullets.length > 0 && (
+                <div className="space-y-1.5 pl-3.5">
+                  {sec.bullets.map((b, j) => (
+                    <div key={j} className="flex items-start gap-2">
+                      <span className="mt-[5px] w-1 h-1 rounded-full bg-gray-300 shrink-0" />
+                      <p className="text-xs text-gray-600 leading-relaxed">{b}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {i < sections.length - 1 && (
+              <div className="flex flex-col items-center py-0.5 select-none">
+                <div className="w-px h-3 bg-gray-200" />
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="opacity-30">
+                  <path d="M5 6L0 0h10L5 6z" fill="#6b7280" />
+                </svg>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
 
-      {/* Below fold: Financial + coherence + durability */}
-      <ShowMore label="재무 전략 · 전략 수렴 보기">
-        <>
-          {renderSection(financialSection, false)}
-          <div className="pt-2 space-y-3">
+      {(s.strategy_coherence || s.ten_year_durability) && (
+        <ShowMore label="전략 수렴 · 지속가능성 보기">
+          <div className="space-y-3 pb-1">
             {s.strategy_coherence && (
               <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
                 <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-500 mb-2">전략 수렴</div>
@@ -1586,8 +1586,8 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
               </div>
             )}
           </div>
-        </>
-      </ShowMore>
+        </ShowMore>
+      )}
 
       <div className="pt-2">
         <SourcesList sources={sources} />

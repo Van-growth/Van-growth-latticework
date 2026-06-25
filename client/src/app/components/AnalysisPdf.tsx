@@ -1025,82 +1025,61 @@ function CompetitorsSection({ v }: { v: CompetitorsV2 }) {
 // ── Section 7: 전략 분석 ─────────────────────────────────────────────────────
 
 function StrategySection({ v }: { v: StrategyV2 }) {
-  const hasCorp = !!(v.corporate.direction || v.corporate.portfolio || v.corporate.geographic || v.corporate.ma_partnerships?.length);
-  const hasBiz  = !!(v.business.direction || v.business.competitive_advantage || v.business.go_to_market || v.business.product_roadmap?.length);
-  const hasFin  = !!(v.financial.direction || v.financial.capital_allocation || v.financial.investment_priority || v.financial.return_target);
-  if (!hasCorp && !hasBiz && !hasFin && !v.strategy_coherence && !v.ten_year_durability) return null;
+  type StratItem = { label: string; value: string };
+  const pdfSections: { title: string; direction: string; items: StratItem[] }[] = [
+    {
+      title: '기업 전략 (Corporate)',
+      direction: v.corporate.direction ?? '',
+      items: [
+        v.corporate.portfolio            ? { label: '포트폴리오',    value: v.corporate.portfolio } : null,
+        v.corporate.ma_partnerships?.length ? { label: 'M&A/파트너십', value: v.corporate.ma_partnerships.join(', ') } : null,
+        v.corporate.geographic           ? { label: '지역 확장',    value: v.corporate.geographic } : null,
+      ].filter(Boolean) as StratItem[],
+    },
+    {
+      title: '사업 전략 (Business)',
+      direction: v.business.direction ?? '',
+      items: [
+        v.business.competitive_advantage ? { label: '경쟁 우위',      value: v.business.competitive_advantage } : null,
+        v.business.go_to_market          ? { label: 'GTM',            value: v.business.go_to_market } : null,
+        v.business.product_roadmap?.length ? { label: '로드맵',       value: v.business.product_roadmap.join(', ') } : null,
+      ].filter(Boolean) as StratItem[],
+    },
+    {
+      title: '재무 전략 (Financial)',
+      direction: v.financial.direction ?? '',
+      items: [
+        v.financial.capital_allocation   ? { label: '자본 배분',      value: v.financial.capital_allocation } : null,
+        v.financial.investment_priority   ? { label: '투자 우선순위',  value: v.financial.investment_priority } : null,
+        v.financial.return_target         ? { label: '목표 수익성',   value: v.financial.return_target } : null,
+      ].filter(Boolean) as StratItem[],
+    },
+  ];
+
+  const hasAny = pdfSections.some(sec => sec.direction || sec.items.length > 0);
+  if (!hasAny && !v.strategy_coherence && !v.ten_year_durability) return null;
+
   return (
     <View style={s.section}>
       <SectionHeader num={7} title="전략 분석" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
-      <View style={s.grid2}>
-        {/* Corporate */}
-        {hasCorp && (
-          <View style={s.gridLeft}>
-            <View style={s.card}>
-              <Text style={s.cardTitle}>기업 전략</Text>
-              {v.corporate.direction ? <Text style={s.cardText}>{v.corporate.direction}</Text> : null}
-              {v.corporate.portfolio && (
-                <Text style={[s.cardText, { marginTop: 3 }]}>포트폴리오: {v.corporate.portfolio}</Text>
-              )}
-              {v.corporate.geographic && (
-                <Text style={[s.cardText, { marginTop: 3 }]}>지역 확장: {v.corporate.geographic}</Text>
-              )}
-              {v.corporate.ma_partnerships?.length > 0 && (
-                <Text style={[s.cardText, { marginTop: 3, color: C.blue }]}>
-                  M&A/파트너십: {v.corporate.ma_partnerships.join(', ')}
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-        {/* Business */}
-        {hasBiz && (
-          <View style={s.gridRight}>
-            <View style={s.card}>
-              <Text style={s.cardTitle}>사업 전략</Text>
-              {v.business.direction ? <Text style={s.cardText}>{v.business.direction}</Text> : null}
-              {v.business.competitive_advantage && (
-                <Text style={[s.cardText, { marginTop: 3 }]}>경쟁 우위: {v.business.competitive_advantage}</Text>
-              )}
-              {v.business.go_to_market && (
-                <Text style={[s.cardText, { marginTop: 3 }]}>GTM: {v.business.go_to_market}</Text>
-              )}
-              {v.business.product_roadmap?.length > 0 && (
-                <Text style={[s.cardText, { marginTop: 3, color: C.blue }]}>
-                  로드맵: {v.business.product_roadmap.join(', ')}
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-      </View>
-
-      {/* Financial strategy */}
-      {hasFin && (
-        <View style={s.card}>
-          <Text style={s.cardTitle}>재무 전략</Text>
-          {v.financial.direction ? <Text style={s.cardText}>{v.financial.direction}</Text> : null}
-          {v.financial.capital_allocation && (
-            <Text style={[s.cardText, { marginTop: 3 }]}>자본 배분: {v.financial.capital_allocation}</Text>
-          )}
-          {v.financial.investment_priority && (
-            <Text style={[s.cardText, { marginTop: 3 }]}>투자 우선순위: {v.financial.investment_priority}</Text>
-          )}
-          {v.financial.return_target && (
-            <Text style={[s.cardText, { marginTop: 3 }]}>수익 목표: {v.financial.return_target}</Text>
-          )}
+      {pdfSections.map((sec, i) => (sec.direction || sec.items.length > 0) && (
+        <View key={i} style={[s.card, { marginBottom: 5 }]}>
+          <Text style={s.cardTitle}>{sec.title}</Text>
+          {sec.direction ? <Text style={[s.cardText, { marginTop: 2 }]}>{sec.direction}</Text> : null}
+          {sec.items.map((item, j) => (
+            <Text key={j} style={[s.cardText, { marginTop: 3 }]}>• {item.label}: {item.value}</Text>
+          ))}
         </View>
-      )}
+      ))}
 
       {v.strategy_coherence && (
         <>
-          <SubHeader>전략 일관성</SubHeader>
+          <SubHeader>전략 수렴</SubHeader>
           <Text style={s.para}>{v.strategy_coherence}</Text>
         </>
       )}
-
       {v.ten_year_durability && (
         <>
           <SubHeader>10년 지속 가능성</SubHeader>
