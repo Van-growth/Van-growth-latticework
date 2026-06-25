@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, memo, useCallback } from 'react';
+import { useState, memo, useCallback, useMemo, useTransition } from 'react';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import dynamic from 'next/dynamic';
 import {
@@ -594,13 +594,17 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 산업역사 ──────────────────────────────────────────────────────────
 
-function IndustryHistoryV2Tab({ h, sources }: { h: IndustryHistoryV2; sources: Source[] | undefined }) {
+const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: { h: IndustryHistoryV2; sources: Source[] | undefined }) {
+  const LIMIT = 5;
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? h.timeline : h.timeline.slice(0, LIMIT);
+  const hasMore = h.timeline.length > LIMIT;
   return (
     <div className="space-y-4">
       <OneLinerBlock text={h.one_liner} />
       <div>
-        {h.timeline.map((item, i) => {
-          const isLast = i === h.timeline.length - 1;
+        {visible.map((item, i) => {
+          const isLast = i === visible.length - 1 && (!hasMore || expanded);
           return (
             <div key={i} className="flex gap-4">
               <div className="flex flex-col items-center w-10 shrink-0">
@@ -638,6 +642,14 @@ function IndustryHistoryV2Tab({ h, sources }: { h: IndustryHistoryV2; sources: S
           );
         })}
       </div>
+      {hasMore && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full py-2 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg"
+        >
+          더 보기 ({h.timeline.length - LIMIT}개 더)
+        </button>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {h.why_durable && (
@@ -664,7 +676,7 @@ function IndustryHistoryV2Tab({ h, sources }: { h: IndustryHistoryV2; sources: S
       <SourcesList sources={sources} />
     </div>
   );
-}
+});
 
 // ── Legacy Tab: 산업역사 ──────────────────────────────────────────────────────
 
@@ -673,22 +685,25 @@ function Timeline({ text, sourcesKey, data }: {
   sourcesKey: keyof typeof data.sources;
   data: AnalysisDetail;
 }) {
-  const lines = splitLines(text);
   type Item = { period: string; sortYear: number; content: string };
-  const items: Item[] = [];
-  for (const line of lines) {
-    const m = line.match(/^((?:19|20)\d{2}(?:년대?|s)?(?:\s*[~\-–]\s*(?:(?:19|20)\d{2}(?:년대?|s)?|현재))?)\s*[:·]?\s*/);
-    if (m) {
-      const yearNum = parseInt(m[1].match(/\d{4}/)?.[0] ?? '0');
-      items.push({ period: m[1], sortYear: yearNum, content: line.slice(m[0].length) });
-    } else if (items.length > 0) {
-      items[items.length - 1].content += ' ' + line;
-    } else {
-      items.push({ period: '', sortYear: 0, content: line });
+  const { items, hasYears } = useMemo(() => {
+    const lines = splitLines(text);
+    const parsed: Item[] = [];
+    for (const line of lines) {
+      const m = line.match(/^((?:19|20)\d{2}(?:년대?|s)?(?:\s*[~\-–]\s*(?:(?:19|20)\d{2}(?:년대?|s)?|현재))?)\s*[:·]?\s*/);
+      if (m) {
+        const yearNum = parseInt(m[1].match(/\d{4}/)?.[0] ?? '0');
+        parsed.push({ period: m[1], sortYear: yearNum, content: line.slice(m[0].length) });
+      } else if (parsed.length > 0) {
+        parsed[parsed.length - 1].content += ' ' + line;
+      } else {
+        parsed.push({ period: '', sortYear: 0, content: line });
+      }
     }
-  }
-  const hasYears = items.some(it => it.period !== '');
-  if (hasYears) items.sort((a, b) => a.sortYear - b.sortYear);
+    const hy = parsed.some(it => it.period !== '');
+    if (hy) parsed.sort((a, b) => a.sortYear - b.sortYear);
+    return { items: parsed, hasYears: hy };
+  }, [text]);
 
   return (
     <>
@@ -729,12 +744,16 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 기술변화 ──────────────────────────────────────────────────────────
 
-function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
+const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
+  const LIMIT = 5;
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? t.stages : t.stages.slice(0, LIMIT);
+  const hasMore = t.stages.length > LIMIT;
   return (
     <div className="space-y-4">
       <OneLinerBlock text={t.one_liner} />
       <div className="space-y-3">
-        {t.stages.map((s, i) => {
+        {visible.map((s, i) => {
           const hype = HYPE_LEVEL_CFG[s.hype_level] ?? HYPE_LEVEL_CFG.mainstream;
           return (
             <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
@@ -765,6 +784,14 @@ function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Sourc
           );
         })}
       </div>
+      {hasMore && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full py-2 text-xs text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-lg"
+        >
+          더 보기 ({t.stages.length - LIMIT}개 더)
+        </button>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {t.current_stage && (
@@ -784,7 +811,7 @@ function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Sourc
       <SourcesList sources={sources} />
     </div>
   );
-}
+});
 
 // ── Legacy Tab: 기술변화 ──────────────────────────────────────────────────────
 
@@ -2236,6 +2263,7 @@ const TAB_BATCH: Record<TabKey, number> = {
 
 function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
   const [tab, setTab] = useState<TabKey>('summary');
+  const [, startTransition] = useTransition();
   const { completedBatches } = useAnalysis();
   // batchDone: true when not streaming OR when that batch has completed
   const batchDone = (n: number) => completedBatches.size === 0 || completedBatches.has(n);
@@ -2290,8 +2318,8 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
           return (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`shrink-0 flex items-center gap-1.5 py-3 px-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+              onClick={() => startTransition(() => setTab(t.key))}
+              className={`shrink-0 flex items-center gap-1.5 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap ${
                 active
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-50'
