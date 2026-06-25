@@ -601,7 +601,7 @@ JSON 불필요. 각 수치에 출처 소스명 병기. 확인 불가 항목은 "
     systemPrompt,
     `기업명: ${companyName}\n\n위 검색 및 읽기 순서에 따라 정보를 수집해주세요.`,
     'claude-sonnet-4-6',
-    10,
+    5,
     8000,
   );
 }
@@ -648,9 +648,9 @@ career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventu
 
     const raw = await runWithWebSearch(
       systemPrompt,
-      `기업명: ${companyName}\n\n아래 순서로 웹 검색하여 창업자/CEO 정보를 수집하세요:\n1. "${companyName} 창업자 CEO 이름 학력 경력" (또는 영문: "${companyName} founder CEO background education")\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} 투자자 investor board advisor"\n4. "${companyName} CEO SNS LinkedIn media interview"\n5. Blind 또는 Glassdoor에서 "${companyName}" 직원 평가 검색\n\n수집 후 아래 스키마로 반환:\n${schema}`,
+      `기업명: ${companyName}\n\n아래 순서로 웹 검색하여 창업자/CEO 정보를 수집하세요:\n1. "${companyName} 창업자 CEO 이름 학력 경력" (또는 영문: "${companyName} founder CEO background education")\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} 투자자 investor board advisor"\n\n수집 후 아래 스키마로 반환:\n${schema}`,
       'claude-sonnet-4-6',
-      8,
+      3,
       6000,
     );
     const result = extractJson<FounderV2>(raw, 'founder_v2');

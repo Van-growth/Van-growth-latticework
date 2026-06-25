@@ -143,7 +143,7 @@ export default function HomeContent() {
     setDisplayData(null);
     setProgress(null);
     setIsCached(false);
-    setCompletedBatches(new Set());
+    setCompletedBatches(new Set([-1])); // sentinel: streaming started, no batch done yet → all tabs show skeleton
     streamingRef.current = null;
 
     try {
@@ -233,7 +233,8 @@ export default function HomeContent() {
     await startAnalysis(companyName.trim(), true);
   }
 
-  const showCard = result ?? (loading ? displayData : null);
+  // Show card immediately when loading starts (skeleton state via sentinel completedBatches)
+  const showCard = result ?? (loading ? (displayData ?? emptyBase(companyName.trim())) : null);
 
   return (
     <div className="px-4 py-8">
@@ -280,8 +281,7 @@ export default function HomeContent() {
         </div>
       )}
 
-      {/* Loading skeleton — only before first section arrives */}
-      {loading && !displayData && <AnalysisLoader companyName={companyName.trim()} />}
+      {/* AnalysisLoader removed — card with skeleton shows immediately via showCard + sentinel completedBatches */}
 
       {fetchingId && !loading && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-10 text-center text-gray-400 text-sm">
