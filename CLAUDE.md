@@ -353,22 +353,21 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ## 백로그
 
-### 🔴 1순위 (속도/안정성)
-- [ ] gatherResearch 통합 웹검색 (중복 제거)
-- [ ] 탭 전환 100ms 이하
-- [ ] 구글 로그인 + 온보딩
+### 🔴 1순위 (베타 전 필수)
+- [ ] 탭 전환 100ms 이하 (실측 미완)
+- [ ] 구글 로그인 + 온보딩 설문 (직무/지역/목적/회사규모)
 
 ### 🟡 2순위 (데이터/기능)
 - [ ] EDGAR 태그 매핑 강화 + FMP 폴백
-- [ ] KPI 화살표 크기 개선
 - [ ] 한국 주식 KRX 티커 매핑
-- [ ] PDF 전체 섹션 완성
 - [ ] 세일즈 특화 기능 (임직원수/채용/LinkedIn/Glassdoor)
 - [ ] 산업군별 정리
+- [ ] AI 비서 재활성화 (현재 코드 주석 처리됨)
 
 ### 🟢 3순위 (GTM)
 - [ ] Framer 랜딩페이지
 - [ ] 영문화 (EN/KR 토글)
+- [ ] Reddit 포스팅 (r/sales, r/BusinessDevelopment, r/startups)
 - [ ] Posthog 행동 로그
 - [ ] Crisp 라이브 채팅
 - [ ] Stripe 결제 연동
@@ -377,10 +376,24 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### ✅ 완료
 - [x] 창업자 탭 추가
-- [x] 출처 각주 시스템
+- [x] 출처 각주 시스템 (🟢공식/🟡참고/⚪추정)
 - [x] 배치 구조 + 캐시 히트
 - [x] DART/EDGAR 매핑 118k/8k
 - [x] -999 placeholder 처리
 - [x] 성장 모멘텀/핵심 리스크 교체
 - [x] Finviz 정적 차트
 - [x] CLAUDE.md SSOT 완성
+- [x] 밸류체인 세로 구조 (업스트림→다운스트림 ↓ 화살표)
+- [x] 더 보기/접기 토글 (ShowMore)
+- [x] PDF 온디맨드 생성 (pdf().toBlob())
+- [x] AI 비서 우측 패널 임시 제거 (단일 컬럼)
+- [x] 스켈레톤 UI (sentinel completedBatches Set([-1]))
+- [x] gatherResearch 통합 웹검색 (1 pass 공유, 중복 제거, maxRounds=4)
+- [x] SEC EDGAR fetch 차단 (속도 개선, 5s timeout)
+- [x] Revenue Streams 통합 표시 (항상 전체 노출)
+- [x] 메인 앱 중앙 정렬 (max-w-4xl mx-auto)
+- [x] 탭 호버 툴팁 (툴팁 스트립 탭 바 아래)
+- [x] KPI 카드 간소화 (숫자+연도+화살표)
+- [x] 요약 탭 → 재무/비즈니스모델/경쟁사/전략 탭 이동 버튼
+- [x] PDF 목차 페이지 + 공유 URL 웹 링크
+- [x] 공유 링크 로그인/회원가입 CTA (토스트 "준비 중")
