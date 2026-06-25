@@ -525,7 +525,9 @@ oneLiner 규칙: 숫자 나열 금지. "왜 이 숫자가 의미있는가"를 �
 
   industry_history_v2: `아래 스키마의 JSON 객체만 출력:
 {"industry_name":"산업명","timeline":[{"period":"시기","title":"시대제목 15자이내","technology":"핵심기술 1줄","market_need":"시장수요 1줄","key_players":["기업명(국가)"],"significance":"중요성 1줄"}],"why_durable":"지속가능이유 2줄이내","chasm_points":["캐즘시점과이유 1줄 최대3개"],"key_bullets":["핵심 산업 특성 20자이내","현재 단계/트렌드 20자이내","주요 리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-timeline은 연대순 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.`,
+timeline은 연대순 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.
+각 타임라인 항목은 산업 전체의 기술·시장·규제 변곡점만 포함. 특정 기업의 펀딩·투자유치·VC 라운드·M&A 이벤트 절대 금지 — 그 기업이 이 산업을 바꿔놓은 기술/제품 출시라면 포함 가능.
+key_players는 해당 시기에 시장에서 실제 활동한 기업만 나열. VC·벤처캐피탈·사모펀드·재무적투자자·액셀러레이터 절대 포함 금지.`,
 
   tech_evolution_v2: `아래 스키마의 JSON 객체만 출력:
 {"tech_name":"핵심기술명","stages":[{"stage":1,"period":"시기","title":"단계제목 15자이내","description":"설명 2줄이내","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["핵심요인 최대3개"],"key_players":["기업명 최대4개"]}],"current_stage":"현재단계 1줄","next_inflection":"다음변곡점 1줄","key_bullets":["기술 현재 단계 20자이내","핵심 기회/전망 20자이내","주요 장벽/리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}

@@ -38,6 +38,19 @@ Font.register({
 });
 Font.registerHyphenationCallback(w => [w]);
 
+// NotoSansKR woff subset may lack certain glyphs — replace with ASCII equivalents
+function sp(text: string | undefined | null): string {
+  if (!text) return '';
+  return text
+    .replace(/₩/g, 'W')
+    .replace(/©/g, '(c)')
+    .replace(/®/g, '(R)')
+    .replace(/™/g, '(TM)')
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+    .replace(/…/g, '...');
+}
+
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
   blue:       '#2563EB',
@@ -727,14 +740,14 @@ function IndustryHistorySection({ v }: { v: IndustryHistoryV2 }) {
       {v.why_durable && (
         <>
           <SubHeader>산업 내구성</SubHeader>
-          <Text style={s.para}>{v.why_durable}</Text>
+          <Text style={s.para}>{sp(v.why_durable)}</Text>
         </>
       )}
 
       {v.chasm_points?.length > 0 && (
         <>
           <SubHeader>핵심 변곡점</SubHeader>
-          {v.chasm_points.map((c, i) => <Bullet key={i}>{c}</Bullet>)}
+          {v.chasm_points.map((c, i) => <Bullet key={i}>{sp(c)}</Bullet>)}
         </>
       )}
 
@@ -742,14 +755,14 @@ function IndustryHistorySection({ v }: { v: IndustryHistoryV2 }) {
       {v.timeline?.map((t, i) => (
         <View key={i} style={[s.card, { marginBottom: 5 }]}>
           <View style={[s.row, { marginBottom: 2 }]}>
-            <Text style={[s.cardTitle, { marginBottom: 0, flex: 1 }]}>{t.period} — {t.title}</Text>
+            <Text style={[s.cardTitle, { marginBottom: 0, flex: 1 }]}>{sp(t.period)} — {sp(t.title)}</Text>
           </View>
-          {t.technology && <Text style={s.cardText}>기술: {t.technology}</Text>}
-          {t.market_need && <Text style={s.cardText}>시장 니즈: {t.market_need}</Text>}
-          {t.significance && <Text style={[s.cardText, { marginTop: 2 }]}>{t.significance}</Text>}
+          {t.technology && <Text style={s.cardText}>기술: {sp(t.technology)}</Text>}
+          {t.market_need && <Text style={s.cardText}>시장 니즈: {sp(t.market_need)}</Text>}
+          {t.significance && <Text style={[s.cardText, { marginTop: 2 }]}>{sp(t.significance)}</Text>}
           {t.key_players?.length > 0 && (
             <Text style={[s.cardText, { marginTop: 2, color: C.blue }]}>
-              주요 플레이어: {t.key_players.join(', ')}
+              주요 플레이어: {t.key_players.map(sp).join(', ')}
             </Text>
           )}
         </View>
