@@ -858,32 +858,52 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
   return (
     <div className="space-y-4">
       <OneLinerBlock text={vc.one_liner} />
-      {/* Above fold: horizontal layer flow */}
+
+      {/* 업스트림→다운스트림 세로 레이아웃 */}
       <SectionCard title="밸류체인 레이어" dotColor="bg-indigo-400">
-        <div className="flex items-start gap-2 overflow-x-auto pb-2">
+        <div className="flex flex-col items-stretch gap-0">
           {vc.layers.map((layer, i) => {
             const pp = PRICING_POWER_CFG[layer.pricing_power] ?? PRICING_POWER_CFG.medium;
             return (
-              <div key={i} className="flex items-center gap-2 shrink-0">
-                <div className={`rounded-xl border-2 p-3 min-w-[130px] ${
+              <div key={i} className="flex flex-col items-center">
+                {/* 레이어 카드 */}
+                <div className={`w-full rounded-xl border-2 px-4 py-3 ${
                   layer.is_subject
-                    ? 'border-blue-400 bg-blue-50'
-                    : 'border-gray-100 bg-white'
+                    ? 'border-blue-400 bg-blue-50 shadow-sm'
+                    : 'border-gray-200 bg-white'
                 }`}>
-                  <div className={`text-xs font-semibold mb-1 ${layer.is_subject ? 'text-blue-700' : 'text-gray-800'}`}>
-                    {layer.name}
-                    {layer.is_subject && <span className="ml-1.5 text-[10px] bg-blue-600 text-white rounded-full px-1.5 py-0.5">분석 대상</span>}
+                  {/* 헤더 행 */}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${layer.is_subject ? 'text-blue-700' : 'text-gray-800'}`}>
+                        {layer.name}
+                      </span>
+                      {layer.is_subject && (
+                        <span className="text-[10px] bg-blue-600 text-white rounded-full px-2 py-0.5 font-medium">분석 대상</span>
+                      )}
+                      {layer.bottleneck && (
+                        <span className="text-[10px] bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5 font-medium">Bottleneck</span>
+                      )}
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${pp.cls}`}>{pp.label}</span>
                   </div>
-                  <p className="text-[11px] text-gray-500 leading-tight mb-2">{layer.description}</p>
-                  <div className="flex flex-wrap gap-1">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${pp.cls}`}>{pp.label}</span>
-                    {layer.bottleneck && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-50 text-red-600">Bottleneck</span>
-                    )}
-                  </div>
+                  {/* 설명 + 선도기업 */}
+                  <p className="text-xs text-gray-500 leading-relaxed mb-2">{layer.description}</p>
+                  {layer.global_leaders.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {layer.global_leaders.map((leader, j) => (
+                        <span key={j} className="inline-flex items-center gap-1 text-[11px] bg-gray-100 text-gray-600 rounded-md px-2 py-0.5">
+                          {flagOf(leader.country)}{leader.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
+                {/* 레이어 간 화살표 */}
                 {i < vc.layers.length - 1 && (
-                  <span className="text-gray-300 text-lg shrink-0">→</span>
+                  <div className="flex flex-col items-center my-1 text-gray-300 select-none">
+                    <span className="text-xl leading-none">↓</span>
+                  </div>
                 )}
               </div>
             );
@@ -891,49 +911,22 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
         </div>
       </SectionCard>
 
-      {/* Below fold: global leaders + value flow + subject position */}
-      <ShowMore label="글로벌 선도기업 · 포지션 상세 보기">
-        <>
-          {vc.layers.some(l => l.global_leaders.length > 0) && (
-            <SectionCard title="레이어별 글로벌 선도기업" dotColor="bg-indigo-400">
-              <div className="space-y-4">
-                {vc.layers.filter(l => l.global_leaders.length > 0).map((layer, i) => (
-                  <div key={i}>
-                    <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-1.5">
-                      <span className={`w-1.5 h-1.5 rounded-full ${layer.is_subject ? 'bg-blue-400' : 'bg-gray-300'}`} />
-                      {layer.name}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {layer.global_leaders.map((leader, j) => (
-                        <div key={j} className="bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-gray-800">{leader.name}</span>
-                            <span className="text-[10px] bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">{flagOf(leader.country)} {leader.country}</span>
-                          </div>
-                          <p className="text-[11px] text-gray-500 leading-relaxed">{leader.why_leader}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
+      {/* Below fold: 가격 전가 메커니즘 + 분석 기업 포지션 */}
+      <ShowMore label="포지션 상세 보기">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {vc.value_flow && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600 mb-2">가격 전가 메커니즘</div>
+              <p className="text-sm text-gray-700 leading-relaxed">{vc.value_flow}</p>
+            </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-            {vc.value_flow && (
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600 mb-2">가격 전가 메커니즘</div>
-                <p className="text-sm text-gray-700 leading-relaxed">{vc.value_flow}</p>
-              </div>
-            )}
-            {vc.subject_position && (
-              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-indigo-600 mb-2">분석 기업 포지션</div>
-                <p className="text-sm text-gray-700 leading-relaxed">{vc.subject_position}</p>
-              </div>
-            )}
-          </div>
-        </>
+          {vc.subject_position && (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-indigo-600 mb-2">분석 기업 포지션</div>
+              <p className="text-sm text-gray-700 leading-relaxed">{vc.subject_position}</p>
+            </div>
+          )}
+        </div>
       </ShowMore>
 
       <SourcesList sources={sources} />
