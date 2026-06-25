@@ -125,19 +125,24 @@ function DataValue({ text, className = '' }: { text: string | null | undefined; 
 }
 
 function MetricCard({ value, label, trend }: { value: string; label: string; trend?: 'up' | 'down' | 'flat' }) {
-  const trendEl = trend === 'up'
-    ? <span className="text-green-500 text-[10px] ml-1">↑</span>
-    : trend === 'down'
-    ? <span className="text-red-500 text-[10px] ml-1">↓</span>
-    : trend === 'flat'
-    ? <span className="text-gray-400 text-[10px] ml-1">→</span>
-    : null;
   const isUnknown = value === '확인 필요' || value === '공개 없음' || isPlaceholder(value);
   const displayValue = isPlaceholder(value) ? '—' : value;
+  const valueCls = !isUnknown && trend === 'up'
+    ? 'text-green-600'
+    : !isUnknown && trend === 'down'
+    ? 'text-red-500'
+    : 'text-gray-900';
+  const trendEl = trend === 'up'
+    ? <span className="text-green-500 text-xl font-bold ml-1.5 leading-none">▲</span>
+    : trend === 'down'
+    ? <span className="text-red-500 text-xl font-bold ml-1.5 leading-none">▼</span>
+    : trend === 'flat'
+    ? <span className="text-gray-400 text-base ml-1.5 leading-none">→</span>
+    : null;
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <div className="text-[11px] text-gray-400 mb-1 leading-tight">{label}</div>
-      <div className={`font-medium leading-none flex items-baseline ${isUnknown ? 'text-sm' : 'text-xl text-gray-900'}`}>
+      <div className={`font-semibold leading-none flex items-center gap-0 ${isUnknown ? 'text-sm text-gray-900' : `text-xl ${valueCls}`}`}>
         <DataValue text={displayValue} />
         {!isUnknown && trendEl}
       </div>
@@ -459,48 +464,58 @@ function SummaryV2Tab({ s, sources }: { s: SummaryV2; sources: Source[] | undefi
       </div>
 
       {/* Top customers + concentration */}
-      {(s.top_customers.length > 0 || s.customer_concentration) && (
-        <SectionCard title="주요 고객사" dotColor="bg-violet-400">
-          {s.top_customers.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {s.top_customers.map((c, i) => (
-                <Tag key={i} label={c} color="violet" />
-              ))}
-            </div>
-          )}
-          {s.customer_concentration && (
-            <div className="space-y-2 mt-2">
-              {/* Concentration badge */}
-              <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg font-medium ${
-                s.customer_concentration.is_concentrated
-                  ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                  : 'bg-green-50 text-green-700 border border-green-100'
-              }`}>
-                <span>{s.customer_concentration.is_concentrated ? '⚠️' : '✅'}</span>
-                <span>
-                  상위 {s.customer_concentration.top_n}개 고객이 매출 {s.customer_concentration.top_n_share}% 차지
-                  {s.customer_concentration.trend === 'diversifying' && ' — 다변화 진행 중'}
-                  {s.customer_concentration.trend === 'concentrating' && ' — 집중도 심화'}
-                </span>
+      {(s.top_customers.length > 0 || s.customer_concentration) && (() => {
+        const cc = s.customer_concentration;
+        // 유효한 고객 집중도: top_n_share가 존재하고 0이 아니며 placeholder가 아닐 때
+        const hasValidCc = cc && cc.top_n_share > 0 && !isPlaceholder(String(cc.top_n_share));
+        const validCustomers = hasValidCc
+          ? cc.customers.filter(c => c.revenue_share > 0 && !isPlaceholder(String(c.revenue_share)))
+          : [];
+        return (
+          <SectionCard title="주요 고객사" dotColor="bg-violet-400">
+            {s.top_customers.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {s.top_customers.map((c, i) => (
+                  <Tag key={i} label={c} color="violet" />
+                ))}
               </div>
-              {/* Per-customer bar chart */}
-              {s.customer_concentration.customers.length > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  {s.customer_concentration.customers.map((c, i) => (
-                    <div key={i}>
-                      <div className="flex justify-between text-xs mb-0.5">
-                        <span className="text-gray-600">{c.name}</span>
-                        <span className="font-medium text-gray-700">{c.revenue_share}%</span>
-                      </div>
-                      <ProgressBar value={c.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
-                    </div>
-                  ))}
+            )}
+            {hasValidCc ? (
+              <div className="space-y-2 mt-2">
+                <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg font-medium ${
+                  cc.is_concentrated
+                    ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                    : 'bg-green-50 text-green-700 border border-green-100'
+                }`}>
+                  <span>{cc.is_concentrated ? '⚠️' : '✅'}</span>
+                  <span>
+                    상위 {cc.top_n}개 고객이 매출 {cc.top_n_share}% 차지
+                    {cc.trend === 'diversifying' && ' — 다변화 진행 중'}
+                    {cc.trend === 'concentrating' && ' — 집중도 심화'}
+                  </span>
                 </div>
-              )}
-            </div>
-          )}
-        </SectionCard>
-      )}
+                {validCustomers.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    {validCustomers.map((c, i) => (
+                      <div key={i}>
+                        <div className="flex justify-between text-xs mb-0.5">
+                          <span className="text-gray-600">{c.name}</span>
+                          <span className="font-medium text-gray-700">{c.revenue_share}%</span>
+                        </div>
+                        <ProgressBar value={c.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              !s.top_customers.length && (
+                <p className="text-xs text-gray-400 mt-1">집중도 데이터 없음</p>
+              )
+            )}
+          </SectionCard>
+        );
+      })()}
 
       {/* 성장 모멘텀 / 핵심 리스크 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

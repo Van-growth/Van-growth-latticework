@@ -506,7 +506,7 @@ const SECTION_SCHEMAS: Record<string, string> = {
 top_customers: IR·공시에서 확인된 것만. 추정이면 빈 배열. key_markets.revenue_share: 공시 수치 없으면 해당 국가 항목 자체를 제외.
 ticker 필드는 반드시 TradingView 형식으로 반환: 미국 NASDAQ 상장 → "NASDAQ:심볼" (예: NASDAQ:NVDA), 미국 NYSE 상장 → "NYSE:심볼" (예: NYSE:PLTR), 한국 코스피 → "KRX:종목코드" (예: KRX:005930), 한국 코스닥 → "KOSDAQ:종목코드" (예: KOSDAQ:388130), 비상장 또는 불확실하면 null.
 bull_case/bear_case: 전략·실무 담당자 관점으로 작성. 주가·밸류에이션·투자 수익률 언급 금지.
-customer_concentration.customers: 공시에서 확인된 고객사별 매출 비중만. 없으면 빈 배열 []. top_n_share: 상위 N개 고객 합산 비중. is_concentrated: top_n_share >= 30이면 true.
+customer_concentration: 고객별 매출 비중을 공시·IR에서 확인할 수 없으면 반드시 null로 반환. 0%나 추정 불가 수치 절대 금지. customers 배열도 공시 확인된 수치만 포함, 불확실하면 빈 배열 []. top_n_share: 상위 N개 고객 합산 비중 (공시 미확인 시 null 전체 반환). is_concentrated: top_n_share >= 30이면 true.
 oneLiner 규칙: 숫자 나열 금지. "왜 이 숫자가 의미있는가"를 서사로 설명. 예시 스타일: "매출은 늘었는데 이익은 줄었다 — 글로벌 인프라에 돈을 쏟아붓는 투자 시즌".`,
 
   industry_history_v2: `아래 스키마의 JSON 객체만 출력:
