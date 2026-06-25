@@ -19,33 +19,128 @@ const MESSAGES = [
   '이 PDF 하나로 미팅 준비 끝입니다 ✅',
 ];
 
-function LoadingOverlay() {
-  const [msgIdx, setMsgIdx] = useState(0);
+const STAGES = [
+  { icon: '📊', label: '데이터 수집' },
+  { icon: '📝', label: '리포트 작성' },
+  { icon: '📄', label: 'PDF 변환' },
+] as const;
 
+function LoadingOverlay({ completed }: { completed: boolean }) {
+  const [msgIdx, setMsgIdx]     = useState(0);
+  const [msgVisible, setMsgVisible] = useState(true);
+  const [elapsed, setElapsed]   = useState(0);
+  const [progress, setProgress] = useState(0);
+
+  // 메시지 초기 랜덤 선택
   useEffect(() => {
     setMsgIdx(Math.floor(Math.random() * MESSAGES.length));
-    const id = setInterval(() => setMsgIdx(i => (i + 1) % MESSAGES.length), 3000);
+  }, []);
+
+  // 경과 시간
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(s => s + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
+  // 프로그레스 바 (가짜 0→90%, 완료 시 100%)
+  useEffect(() => {
+    if (completed) {
+      setProgress(100);
+      return;
+    }
+    const id = setInterval(() => {
+      setProgress(p => {
+        const remaining = 90 - p;
+        return Math.min(90, p + Math.max(0.4, remaining * 0.045));
+      });
+    }, 400);
+    return () => clearInterval(id);
+  }, [completed]);
+
+  // 메시지 fade out → 새 메시지 → fade in
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMsgVisible(false);
+      setTimeout(() => {
+        setMsgIdx(i => (i + 1) % MESSAGES.length);
+        setMsgVisible(true);
+      }, 300);
+    }, 3000);
+    return () => clearInterval(id);
+  }, []);
+
+  // 단계: 0-20s → 20-45s → 45s+
+  const stageIdx = elapsed < 20 ? 0 : elapsed < 45 ? 1 : 2;
+
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 px-8 py-8 max-w-sm w-full mx-4 flex flex-col items-center gap-5">
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 px-8 py-7 max-w-sm w-full mx-4 flex flex-col items-center gap-5">
+
+        {/* 아이콘 */}
         <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
           <FileText size={24} className="text-blue-600" />
         </div>
-        <p className="text-sm text-gray-700 text-center leading-relaxed min-h-[3em]">
+
+        {/* 메시지 (fade + slide 애니메이션) */}
+        <p
+          className="text-sm text-gray-700 text-center leading-relaxed min-h-[3em]"
+          style={{
+            opacity:    msgVisible ? 1 : 0,
+            transform:  msgVisible ? 'translateY(0)' : 'translateY(6px)',
+            transition: 'opacity 0.28s ease, transform 0.28s ease',
+          }}
+        >
           {MESSAGES[msgIdx]}
         </p>
-        <div className="flex gap-1.5">
-          {[0, 1, 2].map(i => (
+
+        {/* 단계 표시 */}
+        <div className="flex items-center gap-3 w-full justify-center">
+          {STAGES.map((stage, i) => (
             <div
               key={i}
-              className="w-2 h-2 rounded-full bg-blue-400 animate-bounce"
-              style={{ animationDelay: `${i * 0.15}s` }}
-            />
+              className="flex flex-col items-center gap-0.5"
+              style={{ transition: 'opacity 0.4s ease' }}
+            >
+              <div
+                className={`flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-all duration-300 ${
+                  i === stageIdx
+                    ? 'bg-blue-50 text-blue-600'
+                    : i < stageIdx
+                    ? 'text-gray-400 line-through'
+                    : 'text-gray-300'
+                }`}
+              >
+                <span>{stage.icon}</span>
+                <span>{stage.label}</span>
+              </div>
+              {/* 단계 간 구분선 */}
+              {i < STAGES.length - 1 && (
+                <span className="absolute" style={{ display: 'none' }} />
+              )}
+            </div>
           ))}
         </div>
+
+        {/* 프로그레스 바 */}
+        <div className="w-full space-y-1.5">
+          <div className="flex justify-between items-center text-[11px] text-gray-400">
+            <span>PDF 준비 중...</span>
+            <span>{elapsed}초</span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full"
+              style={{
+                width:      `${progress}%`,
+                transition: completed ? 'width 0.4s ease-out' : 'width 0.4s ease-out',
+              }}
+            />
+          </div>
+          <div className="text-right text-[11px] text-gray-300">
+            {Math.round(progress)}%
+          </div>
+        </div>
+
       </div>
     </div>,
     document.body,
@@ -53,21 +148,28 @@ function LoadingOverlay() {
 }
 
 export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [loading,   setLoading]   = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [error,     setError]     = useState(false);
+  const [mounted,   setMounted]   = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
   async function handleClick() {
     if (loading) return;
     setLoading(true);
+    setCompleted(false);
     setError(false);
     try {
       const shareUrl = data.share_token
         ? `${window.location.origin}/share/${data.share_token}`
         : undefined;
       const blob = await pdf(<AnalysisPdf data={data} shareUrl={shareUrl} />).toBlob();
+
+      // 100% 표시 후 0.6초 뒤 다운로드
+      setCompleted(true);
+      await new Promise(r => setTimeout(r, 600));
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -80,12 +182,13 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
       setError(true);
     } finally {
       setLoading(false);
+      setCompleted(false);
     }
   }
 
   return (
     <>
-      {mounted && loading && <LoadingOverlay />}
+      {mounted && loading && <LoadingOverlay completed={completed} />}
       <button
         onClick={handleClick}
         disabled={loading}
