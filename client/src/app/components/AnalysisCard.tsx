@@ -360,6 +360,7 @@ function StockChart({ ticker }: { ticker: string | null }) {
     return (
       <a href={`https://finance.naver.com/item/main.nhn?code=${symbol}`} target="_blank" rel="noopener noreferrer"
         className="block rounded-xl overflow-hidden border border-gray-100">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`https://fchart.stock.naver.com/sise.nhn?symbol=${symbol}&timeframe=day&count=250&requestType=0`}
           alt={`${symbol} 주가 차트`}
@@ -374,6 +375,7 @@ function StockChart({ ticker }: { ticker: string | null }) {
     return (
       <a href={`https://finviz.com/quote.ashx?t=${symbol}`} target="_blank" rel="noopener noreferrer"
         className="block rounded-xl overflow-hidden border border-gray-100">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`https://finviz.com/chart.ashx?t=${symbol}&ty=c&ta=1&p=d`}
           alt={`${symbol} 주가 차트`}
@@ -1590,11 +1592,11 @@ function VirtualTable({
   renderRow,
   maxVisible = 8,
 }: {
-  rows: any[];
+  rows: FinancialsV2Row[];
   colTemplate: string;
   minWidth: number;
   header: React.ReactNode;
-  renderRow: (row: any, index: number) => React.ReactNode;
+  renderRow: (row: FinancialsV2Row, index: number) => React.ReactNode;
   maxVisible?: number;
 }) {
   const maxH = maxVisible * V_ROW_H;
@@ -1628,10 +1630,9 @@ const IS_COLS_V2: Array<keyof Omit<FinancialsV2Row, 'item' | 'yoy'>> =
 
 const IS_BOLD_ITEMS = ['매출', '영업이익', '순이익'];
 
-function FinancialsV2Tab({ f, sources, ticker, onRefresh, isRefreshing }: {
+function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing }: {
   f: FinancialsV2;
   sources: Source[] | undefined;
-  ticker: string | null;
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
@@ -2343,7 +2344,6 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             ? <FinancialsV2Tab
                 f={financialsV2Local}
                 sources={financialsV2Local.sources ?? data.sources?.financials}
-                ticker={ticker}
                 onRefresh={handleRefreshFinancials}
                 isRefreshing={refreshingFinancials}
               />
