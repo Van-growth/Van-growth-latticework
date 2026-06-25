@@ -1290,7 +1290,12 @@ function FounderSection({ v }: { v: FounderV2 }) {
       {v.career_trajectory.length > 0 && (
         <>
           <SubHeader>커리어 궤적</SubHeader>
-          {v.career_trajectory.map((ct, i) => (
+          {[...v.career_trajectory]
+            .sort((a, b) => {
+              const yr = (s: string) => parseInt(s.match(/\d{4}/)?.[0] ?? '9999', 10);
+              return yr(a.period) - yr(b.period);
+            })
+            .map((ct, i) => (
             <View key={i} style={[s.row, { marginBottom: 4, paddingBottom: 4, borderBottom: `1 solid ${C.border}` }]}>
               <Text style={[s.label, { width: 80 }]}>{ct.period}</Text>
               <View style={{ flex: 1 }}>

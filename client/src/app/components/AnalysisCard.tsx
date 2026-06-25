@@ -2114,8 +2114,13 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
       {f.career_trajectory.length > 0 && (
         <SectionCard title="커리어 궤적" dotColor="bg-indigo-400">
           <div>
-            {f.career_trajectory.map((item, i) => {
-              const isLast = i === f.career_trajectory.length - 1;
+            {[...f.career_trajectory]
+              .sort((a, b) => {
+                const yr = (s: string) => parseInt(s.match(/\d{4}/)?.[0] ?? '9999', 10);
+                return yr(a.period) - yr(b.period);
+              })
+              .map((item, i, arr) => {
+              const isLast = i === arr.length - 1;
               return (
                 <div key={i} className="flex gap-4">
                   <div className="flex flex-col items-center w-10 shrink-0">
