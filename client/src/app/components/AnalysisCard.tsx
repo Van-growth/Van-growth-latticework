@@ -595,7 +595,7 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
 // ── V2 Tab: 산업역사 ──────────────────────────────────────────────────────────
 
 const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: { h: IndustryHistoryV2; sources: Source[] | undefined }) {
-  const LIMIT = 5;
+  const LIMIT = 3;
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? h.timeline : h.timeline.slice(0, LIMIT);
   const hasMore = h.timeline.length > LIMIT;
@@ -745,54 +745,11 @@ function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
 // ── V2 Tab: 기술변화 ──────────────────────────────────────────────────────────
 
 const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
-  const LIMIT = 5;
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? t.stages : t.stages.slice(0, LIMIT);
-  const hasMore = t.stages.length > LIMIT;
   return (
     <div className="space-y-4">
       <OneLinerBlock text={t.one_liner} />
-      <div className="space-y-3">
-        {visible.map((s, i) => {
-          const hype = HYPE_LEVEL_CFG[s.hype_level] ?? HYPE_LEVEL_CFG.mainstream;
-          return (
-            <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <div className="w-6 h-6 rounded-full bg-purple-50 border-2 border-purple-400 flex items-center justify-center shrink-0">
-                  <span className="text-[11px] font-semibold text-purple-800">{s.stage}</span>
-                </div>
-                <span className="text-sm font-semibold text-gray-800">{s.title}</span>
-                <span className="text-[11px] text-purple-600 font-medium">{s.period}</span>
-                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${hype.cls}`}>{hype.label}</span>
-              </div>
-              <p className="text-sm text-gray-600 leading-relaxed mb-2">{s.description}</p>
-              <div className="space-y-1.5">
-                {s.key_enablers.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] text-gray-400 shrink-0">Enablers</span>
-                    {s.key_enablers.map((e, j) => <Tag key={j} label={e} color="purple" />)}
-                  </div>
-                )}
-                {s.key_players.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] text-gray-400 shrink-0">Players</span>
-                    {s.key_players.map((p, j) => <Tag key={j} label={p} color="gray" />)}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {hasMore && !expanded && (
-        <button
-          onClick={() => setExpanded(true)}
-          className="w-full py-2 text-xs text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-lg"
-        >
-          더 보기 ({t.stages.length - LIMIT}개 더)
-        </button>
-      )}
 
+      {/* Above fold: current stage + next inflection */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {t.current_stage && (
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
@@ -807,6 +764,44 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
           </div>
         )}
       </div>
+
+      {/* Below fold: full stage history */}
+      {t.stages.length > 0 && (
+        <ShowMore label="기술 변화 단계 전체 보기">
+          <div className="space-y-3">
+            {t.stages.map((s, i) => {
+              const hype = HYPE_LEVEL_CFG[s.hype_level] ?? HYPE_LEVEL_CFG.mainstream;
+              return (
+                <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <div className="w-6 h-6 rounded-full bg-purple-50 border-2 border-purple-400 flex items-center justify-center shrink-0">
+                      <span className="text-[11px] font-semibold text-purple-800">{s.stage}</span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-800">{s.title}</span>
+                    <span className="text-[11px] text-purple-600 font-medium">{s.period}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${hype.cls}`}>{hype.label}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 leading-relaxed mb-2">{s.description}</p>
+                  <div className="space-y-1.5">
+                    {s.key_enablers.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] text-gray-400 shrink-0">Enablers</span>
+                        {s.key_enablers.map((e, j) => <Tag key={j} label={e} color="purple" />)}
+                      </div>
+                    )}
+                    {s.key_players.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] text-gray-400 shrink-0">Players</span>
+                        {s.key_players.map((p, j) => <Tag key={j} label={p} color="gray" />)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </ShowMore>
+      )}
 
       <SourcesList sources={sources} />
     </div>
@@ -859,11 +854,11 @@ function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 밸류체인 ──────────────────────────────────────────────────────────
 
-function ValueChainV2Tab({ vc, sources }: { vc: ValueChainV2; sources: Source[] | undefined }) {
+const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: ValueChainV2; sources: Source[] | undefined }) {
   return (
     <div className="space-y-4">
       <OneLinerBlock text={vc.one_liner} />
-      {/* Horizontal flow */}
+      {/* Above fold: horizontal layer flow */}
       <SectionCard title="밸류체인 레이어" dotColor="bg-indigo-400">
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
           {vc.layers.map((layer, i) => {
@@ -896,53 +891,55 @@ function ValueChainV2Tab({ vc, sources }: { vc: ValueChainV2; sources: Source[] 
         </div>
       </SectionCard>
 
-      {/* Global leaders per layer */}
-      {vc.layers.some(l => l.global_leaders.length > 0) && (
-        <SectionCard title="레이어별 글로벌 선도기업" dotColor="bg-indigo-400">
-          <div className="space-y-4">
-            {vc.layers.filter(l => l.global_leaders.length > 0).map((layer, i) => (
-              <div key={i}>
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${layer.is_subject ? 'bg-blue-400' : 'bg-gray-300'}`} />
-                  {layer.name}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {layer.global_leaders.map((leader, j) => (
-                    <div key={j} className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold text-gray-800">{leader.name}</span>
-                        <span className="text-[10px] bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">{flagOf(leader.country)} {leader.country}</span>
-                      </div>
-                      <p className="text-[11px] text-gray-500 leading-relaxed">{leader.why_leader}</p>
+      {/* Below fold: global leaders + value flow + subject position */}
+      <ShowMore label="글로벌 선도기업 · 포지션 상세 보기">
+        <>
+          {vc.layers.some(l => l.global_leaders.length > 0) && (
+            <SectionCard title="레이어별 글로벌 선도기업" dotColor="bg-indigo-400">
+              <div className="space-y-4">
+                {vc.layers.filter(l => l.global_leaders.length > 0).map((layer, i) => (
+                  <div key={i}>
+                    <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${layer.is_subject ? 'bg-blue-400' : 'bg-gray-300'}`} />
+                      {layer.name}
                     </div>
-                  ))}
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {layer.global_leaders.map((leader, j) => (
+                        <div key={j} className="bg-gray-50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-gray-800">{leader.name}</span>
+                            <span className="text-[10px] bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">{flagOf(leader.country)} {leader.country}</span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 leading-relaxed">{leader.why_leader}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </SectionCard>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+            {vc.value_flow && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600 mb-2">가격 전가 메커니즘</div>
+                <p className="text-sm text-gray-700 leading-relaxed">{vc.value_flow}</p>
+              </div>
+            )}
+            {vc.subject_position && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-indigo-600 mb-2">분석 기업 포지션</div>
+                <p className="text-sm text-gray-700 leading-relaxed">{vc.subject_position}</p>
+              </div>
+            )}
           </div>
-        </SectionCard>
-      )}
-
-      {/* Value flow + subject position */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {vc.value_flow && (
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600 mb-2">가격 전가 메커니즘</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{vc.value_flow}</p>
-          </div>
-        )}
-        {vc.subject_position && (
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-indigo-600 mb-2">분석 기업 포지션</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{vc.subject_position}</p>
-          </div>
-        )}
-      </div>
+        </>
+      </ShowMore>
 
       <SourcesList sources={sources} />
     </div>
   );
-}
+});
 
 // ── Legacy Tab: 밸류체인 ──────────────────────────────────────────────────────
 
@@ -1018,7 +1015,7 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 비즈니스모델 ──────────────────────────────────────────────────────
 
-function BusinessModelV2Tab({ bm, sources }: { bm: BusinessModelV2; sources: Source[] | undefined }) {
+const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { bm: BusinessModelV2; sources: Source[] | undefined }) {
   const gm = GROWTH_MOTION_CFG[bm.growth_motion] ?? GROWTH_MOTION_CFG.hybrid;
   const ue = bm.unit_economics;
   const ueMetrics = [
@@ -1029,14 +1026,18 @@ function BusinessModelV2Tab({ bm, sources }: { bm: BusinessModelV2; sources: Sou
     ...(ue.nrr ? [{ label: 'NRR', value: `${ue.nrr}%` }] : []),
   ].filter(m => m.value !== '0%' && !isPlaceholder(m.value));
 
+  const topStreams = bm.revenue_streams.slice(0, 2);
+  const restStreams = bm.revenue_streams.slice(2);
+
   return (
     <div className="space-y-4">
       <OneLinerBlock text={bm.one_liner} />
-      {/* Revenue streams */}
-      {bm.revenue_streams.length > 0 && (
+
+      {/* Above fold: top 2 revenue streams */}
+      {topStreams.length > 0 && (
         <SectionCard title="Revenue Streams" dotColor="bg-green-400">
           <div className="space-y-3">
-            {bm.revenue_streams.map((rs, i) => (
+            {topStreams.map((rs, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
@@ -1064,75 +1065,95 @@ function BusinessModelV2Tab({ bm, sources }: { bm: BusinessModelV2; sources: Sou
         </SectionCard>
       )}
 
-      {/* Growth motion + unit economics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <SectionCard title="Growth Motion" dotColor="bg-blue-400">
-          <div className="mb-3">
-            <span className={`inline-flex items-center text-sm font-semibold px-3 py-1.5 rounded-full ${gm.cls}`}>
-              {gm.label}
-            </span>
-          </div>
-          <p className="text-sm text-gray-600 leading-relaxed">{bm.growth_motion_detail}</p>
-        </SectionCard>
+      {/* Above fold: growth motion */}
+      <SectionCard title="Growth Motion" dotColor="bg-blue-400">
+        <div className="mb-3">
+          <span className={`inline-flex items-center text-sm font-semibold px-3 py-1.5 rounded-full ${gm.cls}`}>
+            {gm.label}
+          </span>
+        </div>
+        <p className="text-sm text-gray-600 leading-relaxed">{bm.growth_motion_detail}</p>
+      </SectionCard>
 
-        <SectionCard title="Unit Economics" dotColor="bg-blue-400">
-          {ueMetrics.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2">
-              {ueMetrics.map((m, i) => (
-                <MetricCard key={i} label={m.label} value={m.value} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400">데이터 없음</p>
-          )}
-        </SectionCard>
-      </div>
-
-      {/* Segments */}
-      {bm.segments.length > 0 && (
-        <SectionCard title="사업 세그먼트" dotColor="bg-indigo-400">
-          <div className="space-y-2.5">
-            {bm.segments.map((seg, i) => (
-              <div key={i}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-700">{seg.name}</span>
-                  <span className="font-medium text-gray-800">{seg.revenue_share}%</span>
-                </div>
-                <ProgressBar value={seg.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
-                <p className="text-[11px] text-gray-400 mt-0.5">{seg.characteristics}</p>
+      {/* Below fold: remaining streams + unit economics + segments + moat */}
+      <ShowMore label="Unit Economics · 세그먼트 · 경제적 해자 보기">
+        <>
+          {restStreams.length > 0 && (
+            <SectionCard title="Revenue Streams (전체)" dotColor="bg-green-400">
+              <div className="space-y-3">
+                {restStreams.map((rs, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-700">{rs.name}</span>
+                        <Tag label={rs.type} color="gray" />
+                      </div>
+                      <span className="text-xs font-medium text-gray-800">{rs.revenue_share}%</span>
+                    </div>
+                    <ProgressBar value={rs.revenue_share} color={BAR_COLORS[(i + 2) % BAR_COLORS.length]} />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </SectionCard>
-      )}
+            </SectionCard>
+          )}
 
-      {/* Moat */}
-      {bm.moat.length > 0 && (
-        <SectionCard title="경제적 해자 (Moat)" dotColor="bg-gray-400">
-          <div className="space-y-3">
-            {bm.moat.map((m, i) => {
-              const cfg = MOAT_STRENGTH_CFG[m.strength] ?? MOAT_STRENGTH_CFG.medium;
-              return (
-                <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-sm font-semibold text-gray-800">{m.type}</span>
-                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${cfg.cls}`}>{cfg.label}</span>
+          <SectionCard title="Unit Economics" dotColor="bg-blue-400">
+            {ueMetrics.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                {ueMetrics.map((m, i) => (
+                  <MetricCard key={i} label={m.label} value={m.value} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">데이터 없음</p>
+            )}
+          </SectionCard>
+
+          {bm.segments.length > 0 && (
+            <SectionCard title="사업 세그먼트" dotColor="bg-indigo-400">
+              <div className="space-y-2.5">
+                {bm.segments.map((seg, i) => (
+                  <div key={i}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-700">{seg.name}</span>
+                      <span className="font-medium text-gray-800">{seg.revenue_share}%</span>
+                    </div>
+                    <ProgressBar value={seg.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
+                    <p className="text-[11px] text-gray-400 mt-0.5">{seg.characteristics}</p>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full mb-2">
-                    <div className={`${cfg.width} ${cfg.barColor} h-1.5 rounded-full`} />
-                  </div>
-                  <p className="text-xs text-gray-600 leading-relaxed">{m.description}</p>
-                </div>
-              );
-            })}
-          </div>
-        </SectionCard>
-      )}
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {bm.moat.length > 0 && (
+            <SectionCard title="경제적 해자 (Moat)" dotColor="bg-gray-400">
+              <div className="space-y-3">
+                {bm.moat.map((m, i) => {
+                  const cfg = MOAT_STRENGTH_CFG[m.strength] ?? MOAT_STRENGTH_CFG.medium;
+                  return (
+                    <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-sm font-semibold text-gray-800">{m.type}</span>
+                        <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${cfg.cls}`}>{cfg.label}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-100 rounded-full mb-2">
+                        <div className={`${cfg.width} ${cfg.barColor} h-1.5 rounded-full`} />
+                      </div>
+                      <p className="text-xs text-gray-600 leading-relaxed">{m.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </SectionCard>
+          )}
+        </>
+      </ShowMore>
 
       <SourcesList sources={sources} />
     </div>
   );
-}
+});
 
 // ── Legacy Tab: 비즈니스 모델 ─────────────────────────────────────────────────
 
@@ -1266,22 +1287,24 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 경쟁사 ────────────────────────────────────────────────────────────
 
-function CompetitorsV2Tab({ c, sources }: { c: CompetitorsV2; sources: Source[] | undefined }) {
+const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources }: { c: CompetitorsV2; sources: Source[] | undefined }) {
   const pos = COMPETITIVE_POSITION_CFG[c.competitive_position] ?? COMPETITIVE_POSITION_CFG.niche;
+  const topDirect = c.direct.slice(0, 3);
+  const restDirect = c.direct.slice(3);
+  const hasMore = restDirect.length > 0 || c.indirect.length > 0 || c.substitutes.length > 0;
   return (
     <div className="space-y-4">
       <OneLinerBlock text={c.one_liner} />
-      {/* Position badge */}
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-gray-400">경쟁 포지션</span>
         <span className={`text-sm font-semibold px-3 py-1 rounded-full ${pos.cls}`}>{pos.label}</span>
       </div>
 
-      {/* Direct competitors */}
-      {c.direct.length > 0 && (
+      {/* Above fold: top 3 direct competitors */}
+      {topDirect.length > 0 && (
         <SectionCard title="직접 경쟁사" dotColor="bg-orange-400">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {c.direct.map((comp, i) => (
+            {topDirect.map((comp, i) => (
               <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
@@ -1321,40 +1344,66 @@ function CompetitorsV2Tab({ c, sources }: { c: CompetitorsV2; sources: Source[] 
         </SectionCard>
       )}
 
-      {/* Indirect + substitutes */}
-      {(c.indirect.length > 0 || c.substitutes.length > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {c.indirect.length > 0 && (
-            <SectionCard title="간접 경쟁사" dotColor="bg-orange-300">
-              <div className="flex flex-wrap gap-2">
-                {c.indirect.map((comp, i) => (
-                  <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
-                    <div className="text-xs font-medium text-gray-700 mb-0.5">{comp.name}</div>
-                    <div className="text-[11px] text-gray-400">{comp.threat}</div>
-                  </div>
-                ))}
+      {/* Below fold: remaining direct + indirect + substitutes */}
+      {hasMore && (
+        <ShowMore label="경쟁사 전체 보기">
+          <>
+            {restDirect.length > 0 && (
+              <SectionCard title="직접 경쟁사 (추가)" dotColor="bg-orange-400">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {restDirect.map((comp, i) => (
+                    <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
+                        <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>
+                      </div>
+                      {comp.market_share && <div className="text-blue-600 font-medium text-xs">{comp.market_share}</div>}
+                      {comp.vs_subject && (
+                        <div className="bg-blue-50 rounded-lg px-3 py-1.5">
+                          <p className="text-[11px] text-blue-700 leading-relaxed">{comp.vs_subject}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+            {(c.indirect.length > 0 || c.substitutes.length > 0) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                {c.indirect.length > 0 && (
+                  <SectionCard title="간접 경쟁사" dotColor="bg-orange-300">
+                    <div className="flex flex-wrap gap-2">
+                      {c.indirect.map((comp, i) => (
+                        <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
+                          <div className="text-xs font-medium text-gray-700 mb-0.5">{comp.name}</div>
+                          <div className="text-[11px] text-gray-400">{comp.threat}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </SectionCard>
+                )}
+                {c.substitutes.length > 0 && (
+                  <SectionCard title="대체재" dotColor="bg-amber-400">
+                    <div className="flex flex-wrap gap-2">
+                      {c.substitutes.map((sub, i) => (
+                        <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
+                          <div className="text-xs font-medium text-gray-700 mb-0.5">{sub.name}</div>
+                          <div className="text-[11px] text-gray-400">{sub.threat}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </SectionCard>
+                )}
               </div>
-            </SectionCard>
-          )}
-          {c.substitutes.length > 0 && (
-            <SectionCard title="대체재" dotColor="bg-amber-400">
-              <div className="flex flex-wrap gap-2">
-                {c.substitutes.map((sub, i) => (
-                  <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
-                    <div className="text-xs font-medium text-gray-700 mb-0.5">{sub.name}</div>
-                    <div className="text-[11px] text-gray-400">{sub.threat}</div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
-        </div>
+            )}
+          </>
+        </ShowMore>
       )}
 
       <SourcesList sources={sources} />
     </div>
   );
-}
+});
 
 // ── Legacy Tab: 경쟁사 ────────────────────────────────────────────────────────
 
@@ -1422,8 +1471,8 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 전략 ──────────────────────────────────────────────────────────────
 
-function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | undefined }) {
-  const sections = [
+const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | undefined }) {
+  const aboveFoldSections = [
     {
       label: '기업 전략 (Corporate)',
       dotColor: 'bg-violet-400',
@@ -1444,74 +1493,85 @@ function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | unde
         { label: '제품 로드맵', value: s.business.product_roadmap.join(' / ') },
       ].filter(it => it.value),
     },
-    {
-      label: '재무 전략 (Financial)',
-      dotColor: 'bg-emerald-400',
-      direction: s.financial.direction,
-      items: [
-        { label: '자본 배분', value: s.financial.capital_allocation },
-        { label: '투자 우선순위', value: s.financial.investment_priority },
-        { label: '목표 수익성', value: s.financial.return_target },
-      ].filter(it => it.value),
-    },
   ];
+
+  const financialSection = {
+    label: '재무 전략 (Financial)',
+    dotColor: 'bg-emerald-400',
+    direction: s.financial.direction,
+    items: [
+      { label: '자본 배분', value: s.financial.capital_allocation },
+      { label: '투자 우선순위', value: s.financial.investment_priority },
+      { label: '목표 수익성', value: s.financial.return_target },
+    ].filter(it => it.value),
+  };
+
+  const renderSection = (sec: typeof aboveFoldSections[0], showConnector: boolean) => (
+    <div key={sec.label}>
+      <div className="bg-white border border-gray-100 rounded-xl p-4">
+        <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
+          <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${sec.dotColor}`} />
+          {sec.label}
+        </div>
+        <p className="text-sm font-semibold text-gray-800 leading-snug mb-3 pl-3.5">{sec.direction}</p>
+        {sec.items.length > 0 && (
+          <div>
+            {sec.items.map((item, i) => (
+              <div key={i} className={`flex gap-3 items-start py-2.5 ${i < sec.items.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                <span className="shrink-0 w-24 text-[11px] text-gray-400 pt-0.5 leading-tight">{item.label}</span>
+                <p className="text-sm text-gray-700 leading-relaxed flex-1">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {showConnector && (
+        <div className="flex justify-center py-1">
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="w-px h-3 bg-gray-200" />
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="opacity-40">
+              <path d="M5 6L0 0h10L5 6z" fill="#6b7280" />
+            </svg>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-1">
       <OneLinerBlock text={s.one_liner} />
-      {sections.map((sec, si) => (
-        <div key={sec.label}>
-          <div className="bg-white border border-gray-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
-              <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${sec.dotColor}`} />
-              {sec.label}
-            </div>
-            <p className="text-sm font-semibold text-gray-800 leading-snug mb-3 pl-3.5">{sec.direction}</p>
-            {sec.items.length > 0 && (
-              <div>
-                {sec.items.map((item, i) => (
-                  <div key={i} className={`flex gap-3 items-start py-2.5 ${i < sec.items.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                    <span className="shrink-0 w-24 text-[11px] text-gray-400 pt-0.5 leading-tight">{item.label}</span>
-                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{item.value}</p>
-                  </div>
-                ))}
+
+      {/* Above fold: Corporate + Business */}
+      {aboveFoldSections.map((sec, i) => renderSection(sec, true))}
+
+      {/* Below fold: Financial + coherence + durability */}
+      <ShowMore label="재무 전략 · 전략 수렴 보기">
+        <>
+          {renderSection(financialSection, false)}
+          <div className="pt-2 space-y-3">
+            {s.strategy_coherence && (
+              <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-500 mb-2">전략 수렴</div>
+                <p className="text-sm text-gray-700 leading-relaxed">{s.strategy_coherence}</p>
+              </div>
+            )}
+            {s.ten_year_durability && (
+              <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">10년 지속 가능성</div>
+                <p className="text-sm text-gray-700 leading-relaxed">{s.ten_year_durability}</p>
               </div>
             )}
           </div>
-          {si < sections.length - 1 && (
-            <div className="flex justify-center py-1">
-              <div className="flex flex-col items-center gap-0.5">
-                <div className="w-px h-3 bg-gray-200" />
-                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="opacity-40">
-                  <path d="M5 6L0 0h10L5 6z" fill="#6b7280" />
-                </svg>
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-
-      <div className="pt-2 space-y-3">
-        {s.strategy_coherence && (
-          <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-500 mb-2">전략 수렴</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{s.strategy_coherence}</p>
-          </div>
-        )}
-        {s.ten_year_durability && (
-          <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">10년 지속 가능성</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{s.ten_year_durability}</p>
-          </div>
-        )}
-      </div>
+        </>
+      </ShowMore>
 
       <div className="pt-2">
         <SourcesList sources={sources} />
       </div>
     </div>
   );
-}
+});
 
 // ── Legacy Tab: 전략 ──────────────────────────────────────────────────────────
 
@@ -1667,7 +1727,7 @@ const IS_COLS_V2: Array<keyof Omit<FinancialsV2Row, 'item' | 'yoy'>> =
 
 const IS_BOLD_ITEMS = ['매출', '영업이익', '순이익'];
 
-function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing }: {
+const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing }: {
   f: FinancialsV2;
   sources: Source[] | undefined;
   onRefresh: () => void;
@@ -1759,85 +1819,86 @@ function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing }: {
         </SectionCard>
       )}
 
-      {/* Balance sheet */}
-      {f.balance_sheet.length > 0 && (
-        <SectionCard title="재무상태표 (B/S)" dotColor="bg-indigo-400">
-          <VirtualTable
-            rows={f.balance_sheet}
-            colTemplate="minmax(130px,1.5fr) 1fr 1fr 1fr"
-            minWidth={380}
-            maxVisible={10}
-            header={
-              <>
-                <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
-                {(['fy2023', 'fy2024', 'fy2025'] as const).map(col => (
-                  <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
-                    {col.replace('fy', 'FY')}
-                  </span>
-                ))}
-              </>
-            }
-            renderRow={(row: FinancialsV2Row) => {
-              const isBold = ['총자산', '총부채', '자본총계'].includes(row.item);
-              return (
-                <>
-                  <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
-                  <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2023 ?? '—'} /></span>
-                  <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><DataValue text={row.fy2024 ?? '—'} /></span>
-                  <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2025 ?? '—'} /></span>
-                </>
-              );
-            }}
-          />
-        </SectionCard>
-      )}
-
-      {/* Cash flow */}
-      {(f.cash_flow.operating || f.cash_flow.fcf) && (
-        <SectionCard title="현금흐름 (C/F)" dotColor="bg-green-400">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {([
-              { label: 'Operating CF', value: f.cash_flow.operating },
-              { label: 'Investing CF', value: f.cash_flow.investing },
-              { label: 'Financing CF', value: f.cash_flow.financing },
-              { label: 'FCF',          value: f.cash_flow.fcf },
-            ] as { label: string; value: string }[]).map(({ label, value }) => (
-              <CfMetricCard key={label} label={label} value={value || '—'} dotColor={cfDots[label] ?? 'bg-gray-400'} />
-            ))}
-          </div>
-          {f.cash_flow.notes && (
-            <p className="mt-3 text-xs text-gray-500 leading-relaxed border-t border-gray-50 pt-3">{f.cash_flow.notes}</p>
+      {/* Below fold: Balance sheet, Cash flow, Munger metrics, Key risks */}
+      <ShowMore label="재무상태표 · 현금흐름 · Munger 지표 보기">
+        <>
+          {f.balance_sheet.length > 0 && (
+            <SectionCard title="재무상태표 (B/S)" dotColor="bg-indigo-400">
+              <VirtualTable
+                rows={f.balance_sheet}
+                colTemplate="minmax(130px,1.5fr) 1fr 1fr 1fr"
+                minWidth={380}
+                maxVisible={10}
+                header={
+                  <>
+                    <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
+                    {(['fy2023', 'fy2024', 'fy2025'] as const).map(col => (
+                      <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
+                        {col.replace('fy', 'FY')}
+                      </span>
+                    ))}
+                  </>
+                }
+                renderRow={(row: FinancialsV2Row) => {
+                  const isBold = ['총자산', '총부채', '자본총계'].includes(row.item);
+                  return (
+                    <>
+                      <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
+                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2023 ?? '—'} /></span>
+                      <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><DataValue text={row.fy2024 ?? '—'} /></span>
+                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2025 ?? '—'} /></span>
+                    </>
+                  );
+                }}
+              />
+            </SectionCard>
           )}
-        </SectionCard>
-      )}
 
-      {/* Munger/Buffett metrics */}
-      {mbMetrics.length > 0 && (
-        <SectionCard title="Munger / Buffett Metrics" dotColor="bg-amber-400">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {mbMetrics.map((m, i) => <MetricCard key={i} label={m.label} value={m.value} />)}
-          </div>
-        </SectionCard>
-      )}
-
-      {/* Key risks */}
-      {f.key_risks.length > 0 && (
-        <SectionCard title="핵심 리스크" dotColor="bg-red-400">
-          <div className="space-y-1.5">
-            {f.key_risks.map((r, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-                <p className="text-sm text-gray-700 leading-relaxed">{r}</p>
+          {(f.cash_flow.operating || f.cash_flow.fcf) && (
+            <SectionCard title="현금흐름 (C/F)" dotColor="bg-green-400">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {([
+                  { label: 'Operating CF', value: f.cash_flow.operating },
+                  { label: 'Investing CF', value: f.cash_flow.investing },
+                  { label: 'Financing CF', value: f.cash_flow.financing },
+                  { label: 'FCF',          value: f.cash_flow.fcf },
+                ] as { label: string; value: string }[]).map(({ label, value }) => (
+                  <CfMetricCard key={label} label={label} value={value || '—'} dotColor={cfDots[label] ?? 'bg-gray-400'} />
+                ))}
               </div>
-            ))}
-          </div>
-        </SectionCard>
-      )}
+              {f.cash_flow.notes && (
+                <p className="mt-3 text-xs text-gray-500 leading-relaxed border-t border-gray-50 pt-3">{f.cash_flow.notes}</p>
+              )}
+            </SectionCard>
+          )}
+
+          {mbMetrics.length > 0 && (
+            <SectionCard title="Munger / Buffett Metrics" dotColor="bg-amber-400">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {mbMetrics.map((m, i) => <MetricCard key={i} label={m.label} value={m.value} />)}
+              </div>
+            </SectionCard>
+          )}
+
+          {f.key_risks.length > 0 && (
+            <SectionCard title="핵심 리스크" dotColor="bg-red-400">
+              <div className="space-y-1.5">
+                {f.key_risks.map((r, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                    <p className="text-sm text-gray-700 leading-relaxed">{r}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+        </>
+      </ShowMore>
 
       <SourcesList sources={sources} />
     </div>
   );
-}
+});
 
 // ── Legacy Tab: 재무 ──────────────────────────────────────────────────────────
 
@@ -1985,7 +2046,7 @@ const EXIT_TYPE_CFG: Record<string, { label: string; cls: string }> = {
   'IPO': { label: 'IPO',  cls: 'bg-emerald-50 text-emerald-700' },
 };
 
-function FounderV2Tab({ f }: { f: FounderV2 }) {
+const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
   const isSerial = f.founding_history.type === 'serial';
   return (
     <div className="space-y-4">
@@ -2051,92 +2112,109 @@ function FounderV2Tab({ f }: { f: FounderV2 }) {
         </SectionCard>
       )}
 
-      {/* Founding history */}
-      <SectionCard title="창업 이력" dotColor="bg-violet-400">
-        <div className="flex items-center gap-2 mb-3">
-          <span className={`text-sm font-semibold px-3 py-1 rounded-full ${isSerial ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>
-            {isSerial ? 'Serial Founder' : '1st Time Founder'}
-          </span>
-        </div>
-        {f.founding_history.previous_ventures.length > 0 ? (
-          <div className="space-y-2">
-            {f.founding_history.previous_ventures.map((v, i) => {
-              const res = RESULT_CFG[v.result] ?? RESULT_CFG.operating;
-              const exitType = v.exit_type ? EXIT_TYPE_CFG[v.exit_type] : null;
-              return (
-                <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                  <span className="text-xs font-medium text-gray-800 flex-1">{v.name}</span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${res.cls}`}>{res.label}</span>
-                  {exitType && (
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${exitType.cls}`}>{exitType.label}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-gray-400">이전 창업 이력 없음</p>
-        )}
-      </SectionCard>
+      {/* Below fold: founding history + reputation + network */}
+      <ShowMore label="창업 이력 · 평판 · 네트워크 보기">
+        <>
+          <SectionCard title="창업 이력" dotColor="bg-violet-400">
+            <div className="flex items-center gap-2 mb-3">
+              <span className={`text-sm font-semibold px-3 py-1 rounded-full ${isSerial ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>
+                {isSerial ? 'Serial Founder' : '1st Time Founder'}
+              </span>
+            </div>
+            {f.founding_history.previous_ventures.length > 0 ? (
+              <div className="space-y-2">
+                {f.founding_history.previous_ventures.map((v, i) => {
+                  const res = RESULT_CFG[v.result] ?? RESULT_CFG.operating;
+                  const exitType = v.exit_type ? EXIT_TYPE_CFG[v.exit_type] : null;
+                  return (
+                    <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                      <span className="text-xs font-medium text-gray-800 flex-1">{v.name}</span>
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${res.cls}`}>{res.label}</span>
+                      {exitType && (
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${exitType.cls}`}>{exitType.label}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">이전 창업 이력 없음</p>
+            )}
+          </SectionCard>
 
-      {/* Reputation */}
-      {(f.reputation.sns_style !== '-' || f.reputation.media_exposure !== '-' || f.reputation.blind_glassdoor !== '-') && (
-        <SectionCard title="평판 & 퍼블릭 시그널" dotColor="bg-amber-400">
-          <div className="space-y-2">
-            {f.reputation.sns_style !== '-' && (
-              <div className="flex gap-3 items-start py-2 border-b border-gray-50">
-                <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">SNS 스타일</span>
-                <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.sns_style}</p>
+          {(f.reputation.sns_style !== '-' || f.reputation.media_exposure !== '-' || f.reputation.blind_glassdoor !== '-') && (
+            <SectionCard title="평판 & 퍼블릭 시그널" dotColor="bg-amber-400">
+              <div className="space-y-2">
+                {f.reputation.sns_style !== '-' && (
+                  <div className="flex gap-3 items-start py-2 border-b border-gray-50">
+                    <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">SNS 스타일</span>
+                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.sns_style}</p>
+                  </div>
+                )}
+                {f.reputation.media_exposure !== '-' && (
+                  <div className="flex gap-3 items-start py-2 border-b border-gray-50">
+                    <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">미디어 노출</span>
+                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.media_exposure}</p>
+                  </div>
+                )}
+                {f.reputation.blind_glassdoor !== '-' && (
+                  <div className="flex gap-3 items-start py-2">
+                    <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">Blind / GD</span>
+                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.blind_glassdoor}</p>
+                  </div>
+                )}
               </div>
-            )}
-            {f.reputation.media_exposure !== '-' && (
-              <div className="flex gap-3 items-start py-2 border-b border-gray-50">
-                <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">미디어 노출</span>
-                <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.media_exposure}</p>
-              </div>
-            )}
-            {f.reputation.blind_glassdoor !== '-' && (
-              <div className="flex gap-3 items-start py-2">
-                <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">Blind / GD</span>
-                <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.blind_glassdoor}</p>
-              </div>
-            )}
-          </div>
-        </SectionCard>
-      )}
+            </SectionCard>
+          )}
 
-      {/* Network */}
-      {(f.network.investors.length > 0 || f.network.advisors_board.length > 0 || f.network.cofounders.length > 0) && (
-        <SectionCard title="네트워크" dotColor="bg-emerald-400">
-          <div className="space-y-3">
-            {f.network.cofounders.length > 0 && (
-              <div>
-                <div className="text-[11px] text-gray-400 mb-1.5">공동창업팀</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {f.network.cofounders.map((c, i) => <Tag key={i} label={c} color="emerald" />)}
-                </div>
+          {(f.network.investors.length > 0 || f.network.advisors_board.length > 0 || f.network.cofounders.length > 0) && (
+            <SectionCard title="네트워크" dotColor="bg-emerald-400">
+              <div className="space-y-3">
+                {f.network.cofounders.length > 0 && (
+                  <div>
+                    <div className="text-[11px] text-gray-400 mb-1.5">공동창업팀</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {f.network.cofounders.map((c, i) => <Tag key={i} label={c} color="emerald" />)}
+                    </div>
+                  </div>
+                )}
+                {f.network.investors.length > 0 && (
+                  <div>
+                    <div className="text-[11px] text-gray-400 mb-1.5">투자자</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {f.network.investors.map((inv, i) => <Tag key={i} label={inv} color="blue" />)}
+                    </div>
+                  </div>
+                )}
+                {f.network.advisors_board.length > 0 && (
+                  <div>
+                    <div className="text-[11px] text-gray-400 mb-1.5">어드바이저 / 보드</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {f.network.advisors_board.map((a, i) => <Tag key={i} label={a} color="gray" />)}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            {f.network.investors.length > 0 && (
-              <div>
-                <div className="text-[11px] text-gray-400 mb-1.5">투자자</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {f.network.investors.map((inv, i) => <Tag key={i} label={inv} color="blue" />)}
-                </div>
-              </div>
-            )}
-            {f.network.advisors_board.length > 0 && (
-              <div>
-                <div className="text-[11px] text-gray-400 mb-1.5">어드바이저 / 보드</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {f.network.advisors_board.map((a, i) => <Tag key={i} label={a} color="gray" />)}
-                </div>
-              </div>
-            )}
-          </div>
-        </SectionCard>
-      )}
+            </SectionCard>
+          )}
+        </>
+      </ShowMore>
     </div>
+  );
+});
+
+// ── ShowMore wrapper ──────────────────────────────────────────────────────────
+
+function ShowMore({ children, label = '더 보기' }: { children: React.ReactNode; label?: string }) {
+  const [open, setOpen] = useState(false);
+  if (open) return <>{children}</>;
+  return (
+    <button
+      onClick={() => setOpen(true)}
+      className="w-full py-2.5 text-xs text-gray-500 hover:text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-1.5 mt-1"
+    >
+      {label} ↓
+    </button>
   );
 }
 
