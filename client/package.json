@@ -10,26 +10,25 @@
     "postinstall": "node scripts/copy-fonts.js"
   },
   "dependencies": {
+    "@eslint/eslintrc": "^3",
     "@fontsource/noto-sans-kr": "^5.2.9",
     "@react-pdf/renderer": "^4.5.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "@types/react-window": "^1.8.8",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.15",
     "lucide-react": "^1.14.0",
     "next": "15.5.15",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-markdown": "^10.1.0",
     "react-window": "^2.2.7",
-    "remark-gfm": "^4.0.1"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.15",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "devDependencies": {}
 }
