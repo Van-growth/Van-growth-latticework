@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
-import { analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2 } from '../lib/claude';
+import { analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, reanalyzeSingleSection } from '../lib/claude';
 import { fetchFinancialContext } from '../lib/financialContext';
 
 const router = Router();
@@ -542,6 +542,80 @@ router.post('/stream', async (req: Request, res: Response) => {
     console.error('[POST /api/analyze/stream]', err);
     send('error', { message: '분석 중 오류가 발생했습니다.' });
     res.end();
+  }
+});
+
+// ── POST /api/analyze/reanalyze — 단일 섹션 재분석 ──────────────────────────────
+
+const REANALYZE_SECTION_MAP: Record<string, string> = {
+  summary:        'summary_v2',
+  industry:       'industry_history_v2',
+  business_model: 'business_model_v2',
+  competitors:    'competitors_v2',
+  tech:           'tech_evolution_v2',
+  value_chain:    'value_chain_v2',
+  strategy:       'strategy_v2',
+  financials:     'financials_v2',
+  founder:        'founder_v2',
+};
+
+function getReanalyzeSectionDbFields(sectionKey: string, data: any): Record<string, any> {
+  switch (sectionKey) {
+    case 'summary_v2':          return { summary_v2: data, summary: data?.key_bullets?.join(' | ') ?? '' };
+    case 'financials_v2':       return { financials_v2: data, financials: data?.narrative ?? '' };
+    case 'business_model_v2':   return { business_model_v2: data, business_model: data?.growth_motion_detail ?? '' };
+    default:                    return { [sectionKey]: data };
+  }
+}
+
+router.post('/reanalyze', async (req: Request, res: Response) => {
+  const { analysisId, companyName, section } = req.body as {
+    analysisId?: string;
+    companyName?: string;
+    section?: string;
+  };
+
+  if (!analysisId?.trim() || !companyName?.trim() || !section?.trim()) {
+    res.status(400).json({ error: 'analysisId, companyName, section 모두 필요합니다.' });
+    return;
+  }
+
+  const sectionKey = REANALYZE_SECTION_MAP[section];
+  if (!sectionKey) {
+    res.status(400).json({ error: `알 수 없는 섹션: ${section}` });
+    return;
+  }
+
+  const name = companyName.trim();
+  console.log(`[reanalyze] START ${section} (${sectionKey}) for "${name}"`);
+
+  try {
+    let financialCtx: string | undefined;
+    if (sectionKey === 'financials_v2') {
+      const { contextText } = await fetchFinancialContext(name);
+      financialCtx = contextText || undefined;
+    }
+
+    const data = await reanalyzeSingleSection(name, sectionKey, financialCtx);
+
+    if (!data) {
+      res.status(422).json({ error: '재분석 결과를 얻지 못했습니다. 잠시 후 다시 시도해주세요.' });
+      return;
+    }
+
+    const dbFields = getReanalyzeSectionDbFields(sectionKey, data);
+    const { error: updateErr } = await supabase
+      .from('analyses')
+      .update(dbFields)
+      .eq('id', analysisId.trim());
+
+    if (updateErr) throw updateErr;
+
+    console.log(`[reanalyze] OK ${section} for "${name}"`);
+    res.json({ section, data });
+  } catch (err) {
+    console.error(`[reanalyze] ${section} FAIL`, err);
+    res.status(500).json({ error: '재분석 중 오류가 발생했습니다.' });
   }
 });
 

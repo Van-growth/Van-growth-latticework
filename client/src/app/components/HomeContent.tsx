@@ -125,6 +125,7 @@ export default function HomeContent() {
   const [sharing, setSharing] = useState(false);
   const [toast, setToast] = useState('');
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [reanalyzingTabs, setReanalyzingTabs] = useState<Set<string>>(new Set());
 
   const loadedIdRef = useRef<string | null>(null);
   const streamingRef = useRef<AnalysisDetail | null>(null);
@@ -196,6 +197,43 @@ export default function HomeContent() {
       .catch(() => setError('분석 결과를 불러오지 못했습니다.'))
       .finally(() => setFetchingId(false));
   }, [urlId, setAnalysisData]);
+
+  const REANALYZE_FIELD: Record<string, keyof AnalysisDetail> = {
+    summary:        'summary_v2',
+    industry:       'industry_history_v2',
+    business_model: 'business_model_v2',
+    competitors:    'competitors_v2',
+    tech:           'tech_evolution_v2',
+    value_chain:    'value_chain_v2',
+    strategy:       'strategy_v2',
+    financials:     'financials_v2',
+    founder:        'founder_v2',
+  };
+
+  async function handleReanalyzeTab(tab: string) {
+    if (!result?.id) return;
+    setReanalyzingTabs(prev => new Set([...prev, tab]));
+    try {
+      const resp = await fetch(`${API_URL}/api/analyze/reanalyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysisId: result.id, companyName: result.companyName, section: tab }),
+      });
+      if (!resp.ok) throw new Error(`${resp.status}`);
+      const { data } = await resp.json();
+      const field = REANALYZE_FIELD[tab];
+      if (field && data) {
+        const updated = { ...result, [field]: data };
+        setResult(updated);
+        setAnalysisData(updated);
+        setDisplayData(updated);
+      }
+    } catch (err) {
+      console.error('[reanalyze]', tab, err);
+    } finally {
+      setReanalyzingTabs(prev => { const s = new Set(prev); s.delete(tab); return s; });
+    }
+  }
 
   async function startAnalysis(name: string, forceRefresh: boolean) {
     setLoading(true);
@@ -277,7 +315,7 @@ export default function HomeContent() {
               loadedIdRef.current = normalized.id;
               setResult(normalized);
               setAnalysisData(normalized);
-              setCompletedBatches(new Set([1, 2, 3, 4, 5, 40]));
+              setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
               if (normalized.id) router.replace(`/?id=${normalized.id}`);
 
             } else if (eventType === 'error') {
@@ -462,7 +500,7 @@ export default function HomeContent() {
             </div>
           )}
 
-          <AnalysisCard data={showCard} />
+          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} />
         </div>
       )}
 

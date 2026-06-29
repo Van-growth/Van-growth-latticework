@@ -131,14 +131,19 @@ function cleanMetricValue(v: string): string {
 
 // 재무 수치 옆 "(EDGAR)"/"(DART)" 텍스트 → 컬러 점 치환
 const FINANCIAL_SOURCE_RE = /\s*\((EDGAR|DART|FMP|DART 공시|EDGAR 공시|SEC EDGAR)\)/gi;
+// 서사 텍스트 내 "[SEC EDGAR] …" 형식 앞 태그 제거
+const BRACKET_SOURCE_RE = /^\[(?:SEC EDGAR|DART 공시|EDGAR|DART)\]\s*/;
 
-function FinancialValue({ text }: { text: string | null | undefined }) {
+function FinancialValue({ text, dataSource }: { text: string | null | undefined; dataSource?: DataSource }) {
   const str = text ?? '—';
   const match = str.match(FINANCIAL_SOURCE_RE);
   const cleaned = match ? str.replace(FINANCIAL_SOURCE_RE, '').trim() : str;
   const tag = (match?.[0] ?? '').replace(/[()]/g, '').trim().toUpperCase();
-  const isEdgar = tag.includes('EDGAR');
-  const isDart  = !isEdgar && tag.includes('DART');
+  const tagIsEdgar = tag.includes('EDGAR');
+  const tagIsDart  = !tagIsEdgar && tag.includes('DART');
+  // If value has no explicit tag, fall back to the tab-level dataSource
+  const isEdgar = tagIsEdgar || (!match && dataSource === 'edgar');
+  const isDart  = tagIsDart  || (!match && dataSource === 'dart');
   return (
     <span className="inline-flex items-center gap-0.5">
       <DataValue text={cleaned} />
@@ -1086,7 +1091,10 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
 
 const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { bm: BusinessModelV2; sources: Source[] | undefined }) {
   const gm = GROWTH_MOTION_CFG[bm.growth_motion] ?? GROWTH_MOTION_CFG.hybrid;
-  const ue = bm.unit_economics;
+  const ue = bm.unit_economics ?? { gross_margin: 0, operating_margin: 0, net_margin: 0, fcf_margin: 0, nrr: 0 };
+  const revenueStreams = bm.revenue_streams ?? [];
+  const segments = bm.segments ?? [];
+  const moat = bm.moat ?? [];
   const ueMetrics = [
     { label: 'Gross Margin', value: `${ue.gross_margin}%` },
     { label: 'Operating Margin', value: `${ue.operating_margin}%` },
@@ -1100,10 +1108,10 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
       <KeyBulletsBlock bullets={bm.key_bullets} />
 
       {/* Revenue Streams 전체 항상 표시 */}
-      {bm.revenue_streams.length > 0 && (
+      {revenueStreams.length > 0 && (
         <SectionCard title="Revenue Streams" dotColor="bg-green-400">
           <div className="space-y-3">
-            {bm.revenue_streams.map((rs, i) => (
+            {revenueStreams.map((rs, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
@@ -1156,10 +1164,10 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
             )}
           </SectionCard>
 
-          {bm.segments.length > 0 && (
+          {segments.length > 0 && (
             <SectionCard title="사업 세그먼트" dotColor="bg-indigo-400">
               <div className="space-y-2.5">
-                {bm.segments.map((seg, i) => (
+                {segments.map((seg, i) => (
                   <div key={i}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-gray-700">{seg.name}</span>
@@ -1173,10 +1181,10 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
             </SectionCard>
           )}
 
-          {bm.moat.length > 0 && (
+          {moat.length > 0 && (
             <SectionCard title="경제적 해자 (Moat)" dotColor="bg-gray-400">
               <div className="space-y-3">
-                {bm.moat.map((m, i) => {
+                {moat.map((m, i) => {
                   const cfg = MOAT_STRENGTH_CFG[m.strength] ?? MOAT_STRENGTH_CFG.medium;
                   return (
                     <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
@@ -1844,7 +1852,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
           <div className="space-y-1.5">
             {splitLines(f.narrative).map((l, i) => (
               <p key={i} className="text-sm text-gray-700 leading-relaxed">
-                <CitedText text={l} />
+                <CitedText text={l.replace(BRACKET_SOURCE_RE, '')} />
               </p>
             ))}
           </div>
@@ -1877,7 +1885,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                   <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
                   {IS_COLS_V2.map(col => (
                     <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === 'fy2024' ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
-                      <FinancialValue text={row[col] ?? '—'} />
+                      <FinancialValue text={row[col] ?? '—'} dataSource={dataSource} />
                     </span>
                   ))}
                   <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={normalizeYoy(row.yoy)} /></span>
@@ -1913,9 +1921,9 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                   return (
                     <>
                       <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
-                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2023 ?? '—'} /></span>
-                      <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><FinancialValue text={row.fy2024 ?? '—'} /></span>
-                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2025 ?? '—'} /></span>
+                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2023 ?? '—'} dataSource={dataSource} /></span>
+                      <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><FinancialValue text={row.fy2024 ?? '—'} dataSource={dataSource} /></span>
+                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2025 ?? '—'} dataSource={dataSource} /></span>
                     </>
                   );
                 }}
@@ -2411,13 +2419,30 @@ const TAB_BATCH: Record<TabKey, number> = {
   founder:          5,
 };
 
-function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
+function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze }: {
+  data: AnalysisDetail;
+  reanalyzingTabs?: Set<string>;
+  onReanalyze?: (tab: string) => void;
+}) {
   const [tab, setTab] = useState<TabKey>('summary');
   const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const { completedBatches } = useAnalysis();
   // batchDone: true when not streaming OR when that batch has completed
   const batchDone = (n: number) => completedBatches.size === 0 || completedBatches.has(n);
+  // isReanalyzing: that tab is being reanalyzed right now
+  const isReanalyzing = (t: string) => reanalyzingTabs?.has(t) ?? false;
+  // reanalyzeBtn: small text-link shown when v2 data is missing
+  const reanalyzeBtn = (t: string) => onReanalyze && !isReanalyzing(t) ? (
+    <div className="text-right mb-2">
+      <button
+        onClick={() => onReanalyze(t)}
+        className="text-[11px] text-gray-400 hover:text-blue-500 hover:underline transition-colors"
+      >
+        ↻ 이 섹션 다시 분석
+      </button>
+    </div>
+  ) : null;
 
   // Task 1: 분석 시작 시 요약 탭 자동 이동
   useEffect(() => {
@@ -2529,43 +2554,43 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             : <SummaryTab data={data} />
         )}
         {tab === 'industry_history' && (
-          !batchDone(TAB_BATCH.industry_history) ? <TimelineSkeleton /> :
+          (isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <TimelineSkeleton /> :
           data.industry_history_v2
             ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
-            : <IndustryHistoryTab data={data} />
+            : <>{reanalyzeBtn('industry')}<IndustryHistoryTab data={data} /></>
         )}
         {tab === 'tech_evolution' && (
-          !batchDone(TAB_BATCH.tech_evolution) ? <CardsSkeleton count={4} /> :
+          (isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <CardsSkeleton count={4} /> :
           data.tech_evolution_v2
             ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
-            : <TechEvolutionTab data={data} />
+            : <>{reanalyzeBtn('tech')}<TechEvolutionTab data={data} /></>
         )}
         {tab === 'value_chain' && (
-          !batchDone(TAB_BATCH.value_chain) ? <CardsSkeleton count={4} /> :
+          (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :
           data.value_chain_v2
             ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
-            : <ValueChainTab data={data} />
+            : <>{reanalyzeBtn('value_chain')}<ValueChainTab data={data} /></>
         )}
         {tab === 'business_model' && (
-          !batchDone(TAB_BATCH.business_model) ? <CardsSkeleton count={3} /> :
+          (isReanalyzing('business_model') || !batchDone(TAB_BATCH.business_model)) ? <CardsSkeleton count={3} /> :
           data.business_model_v2
             ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
-            : <BusinessModelTab data={data} />
+            : <>{reanalyzeBtn('business_model')}<BusinessModelTab data={data} /></>
         )}
         {tab === 'competitors' && (
-          !batchDone(TAB_BATCH.competitors) ? <CardsSkeleton count={4} /> :
+          (isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <CardsSkeleton count={4} /> :
           data.competitors_v2
             ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} />
-            : <CompetitorsTab data={data} />
+            : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>
         )}
         {tab === 'strategy' && (
-          !batchDone(TAB_BATCH.strategy) ? <CardsSkeleton count={3} /> :
+          (isReanalyzing('strategy') || !batchDone(TAB_BATCH.strategy)) ? <CardsSkeleton count={3} /> :
           data.strategy_v2
             ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
-            : <StrategyTab data={data} />
+            : <>{reanalyzeBtn('strategy')}<StrategyTab data={data} /></>
         )}
         {tab === 'financials' && (
-          !batchDone(TAB_BATCH.financials) ? <TableSkeleton rows={5} cols={7} /> :
+          (isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <TableSkeleton rows={5} cols={7} /> :
           financialsV2Local
             ? <FinancialsV2Tab
                 f={financialsV2Local}
@@ -2574,13 +2599,13 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
                 isRefreshing={refreshingFinancials}
                 dataSource={data.dataSource}
               />
-            : <FinancialsTab data={data} />
+            : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>
         )}
         {tab === 'founder' && (
-          !batchDone(TAB_BATCH.founder) ? <FounderSkeleton /> :
+          (isReanalyzing('founder') || !batchDone(TAB_BATCH.founder)) ? <FounderSkeleton /> :
           data.founder_v2
             ? <FounderV2Tab f={data.founder_v2} />
-            : <p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p>
+            : <>{reanalyzeBtn('founder')}<p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>
         )}
       </div>
     </div>

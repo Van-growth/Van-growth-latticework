@@ -941,6 +941,28 @@ export async function analyzeCompany(
 }
 
 
+// ── Single-section reanalysis (used by /api/analyze/reanalyze) ────────────────
+export async function reanalyzeSingleSection(
+  companyName: string,
+  sectionKey: string,
+  financialContext?: string,
+): Promise<any> {
+  if (sectionKey === 'founder_v2') {
+    return callFounderSection(companyName);
+  }
+  const [research1, research2] = await Promise.all([
+    gatherResearch1(companyName),
+    gatherResearch2(companyName),
+  ]);
+  const context = [
+    `기업명: ${companyName}`,
+    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
+    `\n[웹 리서치 — 기본 정보]\n${research1}`,
+    `\n[웹 리서치 — 상세 정보]\n${research2}`,
+  ].filter(Boolean).join('\n');
+  return callSection(context, sectionKey);
+}
+
 export async function selectDailyCompany(): Promise<string> {
   const systemPrompt = `당신은 기업 분석 전문가입니다. 오늘 분석하기에 흥미로운 글로벌 또는 한국 기업 하나를 선정하세요.
 최신 뉴스, 트렌드, 업계 이슈를 고려하여 선정하고, 기업명만 응답하세요. 설명 없이 기업명만.`;
