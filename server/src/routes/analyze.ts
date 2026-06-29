@@ -233,14 +233,12 @@ router.post('/stream', async (req: Request, res: Response) => {
       }
     }
 
-    // 3. Check analysis cache (24h) — full or partial
+    // 3. Check analysis cache (무기한 — forceRefresh: true 시에만 재분석)
     if (!forceRefresh) {
-      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: cached } = await supabase
         .from('analyses')
         .select('id, created_at, summary_v2, industry_history_v2, tech_evolution_v2, value_chain_v2, business_model_v2, competitors_v2, strategy_v2, financials_v2, founder_v2, sources, data_source')
         .eq('company_id', company.id)
-        .gte('created_at', cutoff)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
