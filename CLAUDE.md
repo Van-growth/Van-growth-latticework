@@ -1,4 +1,4 @@
-# Latticework — CLAUDE.md
+﻿# Latticework — CLAUDE.md
 
 ## Project overview
 기업 분석 플랫폼. 기업명 입력 시 Claude Sonnet + Web Search로 심층 분석 후 결과를 Supabase에 저장·표시.
@@ -429,3 +429,14 @@ Claude API 응답에서 아래 이상값 감지 시 해당 섹션만 "—" 처�
 - financials에 최소 1개 이상의 실제 수치가 있는가?
 - sources 배열이 비어있지 않은가?
 - 모든 섹션이 "—" 또는 null이 아닌가? (전체 실패 감지)
+---
+
+## 버전 히스토리
+
+| 버전 | 내용 |
+|---|---|
+| v1.0.0 | 초기 출시 — 순차 배치, 24시간 캐시, 기본 분석 |
+| v2.0.0 | 2026-06-29 — EDGAR/DART 배치 적재(9,583개), 배치 병렬화(75s→35s), founder 독립 batch5, financial_cache 우선순위 + 출처 뱃지, TTL 무기한, Quality Gate, Prompt Caching, 로딩 애니메이션, 탭 상태 아이콘, nudge 배너, 탭별 재분석 버튼, Render Cron Job 매월 1일 자동화 |
+| v2.1.0 | 구글 로그인 + 온보딩 설문 |
+| v2.2.0 | 영문화 (언어 토글 EN/KR) |
+| v3.0.0 | 유료 플랜 출시 (Stripe) |
