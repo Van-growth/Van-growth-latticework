@@ -166,6 +166,26 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
 
   try {
     if (isKorean) {
+      // financial_cache 선체크 (DART 배치 프리컴퓨트 데이터)
+      const { data: corpRow } = await supabase
+        .from('corp_master')
+        .select('stock_code')
+        .ilike('corp_name', companyName)
+        .not('stock_code', 'is', null)
+        .maybeSingle();
+      if (corpRow?.stock_code) {
+        const { data: cachedDart } = await supabase
+          .from('financial_cache')
+          .select('context_text')
+          .eq('company_name', corpRow.stock_code)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+        if (cachedDart?.context_text) {
+          console.log(`[financialCtx] "${companyName}" → financial_cache HIT DART (${corpRow.stock_code})`);
+          return { source: 'dart', contextText: cachedDart.context_text };
+        }
+      }
+
       // DART + KIS 병렬
       const dart = await fetchDartData(companyName);
       if (dart) {
@@ -181,18 +201,21 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
         return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData) };
       }
     } else {
-      // financial_cache 선체크 (sync-edgar-sp500.mjs로 pre-cached 데이터)
+      // financial_cache 선체크 (EDGAR 배치 프리컴퓨트 데이터)
       const cikInfo = await lookupCikByName(companyName).catch(() => null);
-      if (cikInfo?.ticker) {
-        const ticker = cikInfo.ticker.toUpperCase();
+      // CIK 조회 티커 우선, 없으면 companyName 자체가 ticker인 경우 직접 시도
+      const lookupTicker =
+        cikInfo?.ticker?.toUpperCase() ??
+        (/^[A-Z0-9]{1,6}$/.test(companyName.toUpperCase()) ? companyName.toUpperCase() : null);
+      if (lookupTicker) {
         const { data: cached } = await supabase
           .from('financial_cache')
           .select('context_text')
-          .eq('company_name', ticker)
+          .eq('company_name', lookupTicker)
           .gt('expires_at', new Date().toISOString())
           .maybeSingle();
         if (cached?.context_text) {
-          console.log(`[financialCtx] "${companyName}" → financial_cache HIT (${ticker})`);
+          console.log(`[financialCtx] "${companyName}" → financial_cache HIT EDGAR (${lookupTicker})`);
           return { source: 'edgar', contextText: cached.context_text };
         }
       }
