@@ -670,6 +670,28 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
       .map(b => b.text)
       .join('');
     const result = extractJson<T>(raw, sectionKey);
+    // ── Quality Gate (Rules 1–3) ──────────────────────────────────────────
+    if (result !== null) {
+      // Rule 1: -999 placeholder 감지 → 섹션 null 처리
+      if (JSON.stringify(result).includes('-999')) {
+        console.warn(`[quality-gate] ${sectionKey} -999 감지 → null`);
+        return null;
+      }
+      // Rule 2: 핵심 텍스트 필드가 placeholder이면 섹션 null 처리
+      const r = result as any;
+      const mainText: string | null =
+        r.oneLiner ?? r.narrative ?? r.industry_name ?? r.tech_name ??
+        r.value_flow ?? r.growth_motion_detail ?? r.strategy_coherence ?? null;
+      if (mainText !== null && ['', '확인 필요', 'N/A', 'unknown'].includes(mainText.trim())) {
+        console.warn(`[quality-gate] ${sectionKey} 핵심 텍스트 placeholder → null`);
+        return null;
+      }
+      // Rule 3: sources 배열 비어있음 — 경고만 (전체 중단 금지)
+      if (Array.isArray(r.sources) && r.sources.length === 0) {
+        console.warn(`[quality-gate] ${sectionKey} sources 배열 비어있음`);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────
     console.log(`[claude] ${sectionKey} OK  ${Date.now() - t0}ms`);
     return result;
   } catch (err) {
@@ -853,12 +875,61 @@ export async function analyzeCompany(
       callFounderSection(companyName),
       callSection<AnalysisSources>(sharedContext, 'sources'),
     ],
-    ([f, fo, src]) => ({
-      financials_v2: f   ?? DEFAULT_ANALYSIS_DATA.financials_v2,
-      founder_v2:    fo  ?? DEFAULT_ANALYSIS_DATA.founder_v2,
-      sources:       src ?? DEFAULT_ANALYSIS_DATA.sources,
-    }),
+    ([f, fo, src]) => {
+      // Rule 4: 재무 수치 전년 대비 10배 이상 변동 → (추정) 뱃지 강제 적용
+      if (f?.income_statement) {
+        for (const row of f.income_statement) {
+          const pct = row.yoy?.match(/[▲▼](\d+(?:\.\d+)?)%/);
+          if (pct && parseFloat(pct[1]) >= 900) {
+            const yr = (['fy2025', 'fy2024', 'fy2023', 'fy2022', 'fy2021'] as const)
+              .find(y => row[y] && row[y] !== '확인 필요');
+            if (yr && !row[yr]!.includes('추정')) {
+              row[yr] = row[yr] + ' (추정)';
+              console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} (추정) 강제 적용`);
+            }
+          }
+        }
+      }
+      return {
+        financials_v2: f   ?? DEFAULT_ANALYSIS_DATA.financials_v2,
+        founder_v2:    fo  ?? DEFAULT_ANALYSIS_DATA.founder_v2,
+        sources:       src ?? DEFAULT_ANALYSIS_DATA.sources,
+      };
+    },
   );
+
+  // ── Golden Set 검증 (전체 배치 완료 후 1회) ───────────────────────────────
+  if (!result.summary_v2.company.toLowerCase().includes(companyName.toLowerCase())) {
+    console.warn(`[golden-set] summary.company에 기업명 없음 (got: "${result.summary_v2.company}")`);
+  }
+  const hasRealFinancials = result.financials_v2.income_statement.some(row =>
+    (['fy2021', 'fy2022', 'fy2023', 'fy2024', 'fy2025'] as const).some(
+      y => row[y] && row[y] !== '확인 필요'
+    )
+  );
+  if (!hasRealFinancials) {
+    console.warn(`[golden-set] financials 실제 수치 없음`);
+  }
+  const hasAnySources = Object.values(result.sources).some(
+    arr => Array.isArray(arr) && arr.length > 0
+  );
+  if (!hasAnySources) {
+    console.warn(`[golden-set] sources 전체 비어있음`);
+  }
+  const emptySectionCount = [
+    result.industry_history_v2.timeline.length === 0,
+    result.tech_evolution_v2.stages.length === 0,
+    result.value_chain_v2.layers.length === 0,
+    result.business_model_v2.revenue_streams.length === 0,
+    result.competitors_v2.direct.length === 0,
+    result.strategy_v2.corporate.direction === '',
+    result.financials_v2.income_statement.length === 0,
+    result.founder_v2.founders.length === 0,
+  ].filter(Boolean).length;
+  if (emptySectionCount >= 4) {
+    console.warn(`[golden-set] ⚠️ ${emptySectionCount}개 섹션 데이터 없음 — 전체 분석 실패 가능성`);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   return result;
 }
