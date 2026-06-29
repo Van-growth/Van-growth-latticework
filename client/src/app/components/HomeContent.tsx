@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import { useState, useEffect, useRef, useMemo, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
-import AnalysisLoader from './AnalysisLoader';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { AnalysisDetail, AnalyzeResponse } from '@/types';
 
@@ -45,11 +44,74 @@ function emptyBase(name: string): AnalysisDetail {
   };
 }
 
+const SCAN_MESSAGES = [
+  'SEC 공시 문서 분석 중...',
+  '10-K 497페이지 정독 중...',
+  '밸류체인 끝까지 추적 중...',
+  '경쟁사 포지셔닝 파악 중...',
+  '재무 데이터 교차 검증 중...',
+  '창업자 히스토리 조사 중...',
+  '산업 구조 매핑 중...',
+];
+
+function AnalysisLoadingScreen({ companyName }: { companyName: string }) {
+  const messages = useMemo(() => [
+    ...SCAN_MESSAGES,
+    `${companyName} 분석 마무리 중...`,
+  ], [companyName]);
+
+  const [idx, setIdx]   = useState(0);
+  const [show, setShow] = useState(true);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setShow(false);
+      const t = setTimeout(() => { setIdx(i => (i + 1) % messages.length); setShow(true); }, 350);
+      return () => clearTimeout(t);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [messages.length]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-20 px-8 min-h-[320px]">
+      {/* Scanning magnifier */}
+      <div className="relative w-40 h-10 mb-10 overflow-hidden flex items-center">
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-blue-100 rounded-full" />
+        <div className="anim-scan-lr">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="13" cy="13" r="9" stroke="#3B82F6" strokeWidth="2.5" />
+            <path d="M20 20L28 28" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Rotating message */}
+      <p
+        className="text-sm font-medium text-gray-600 text-center h-5 transition-opacity duration-300"
+        style={{ opacity: show ? 1 : 0 }}
+      >
+        {messages[idx]}
+      </p>
+
+      {/* Bouncing dots */}
+      <div className="flex gap-1.5 mt-6">
+        {[0, 1, 2].map(i => (
+          <span
+            key={i}
+            className="w-2 h-2 rounded-full bg-blue-400 inline-block"
+            style={{ animation: `bounce 1.4s ease-in-out ${i * 0.2}s infinite` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlId = searchParams.get('id');
-  const { setAnalysisData, setCompletedBatches } = useAnalysis();
+  const { setAnalysisData, setCompletedBatches, completedBatches } = useAnalysis();
 
   const [companyName, setCompanyName] = useState('');
   const [result, setResult] = useState<AnalysisDetail | null>(null);
@@ -64,6 +126,7 @@ export default function HomeContent() {
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [toast, setToast] = useState('');
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
   const loadedIdRef = useRef<string | null>(null);
   const streamingRef = useRef<AnalysisDetail | null>(null);
@@ -129,7 +192,7 @@ export default function HomeContent() {
       .then((data: AnalysisDetail) => {
         setResult(data);
         setAnalysisData(data);
-        setCompletedBatches(new Set([1, 2, 3, 4]));
+        setCompletedBatches(new Set([1, 2, 3, 4, 5, 40]));
         loadedIdRef.current = urlId;
       })
       .catch(() => setError('분석 결과를 불러오지 못했습니다.'))
@@ -185,7 +248,17 @@ export default function HomeContent() {
           try {
             const payload = JSON.parse(dataStr);
 
-            if (eventType === 'batch') {
+            if (eventType === 'fin_preview') {
+              const previewData = payload as Partial<AnalysisDetail>;
+              if (!streamingRef.current) {
+                streamingRef.current = Object.assign(emptyBase(name), previewData);
+              } else {
+                streamingRef.current = { ...streamingRef.current, ...previewData } as AnalysisDetail;
+              }
+              setDisplayData({ ...streamingRef.current });
+              setCompletedBatches(prev => new Set([...prev, 40]));
+
+            } else if (eventType === 'batch') {
               const batchNum = payload.batch as number;
               const batchData = payload.data as Partial<AnalysisDetail>;
               if (!streamingRef.current) {
@@ -194,7 +267,10 @@ export default function HomeContent() {
                 streamingRef.current = { ...streamingRef.current, ...batchData } as AnalysisDetail;
               }
               setDisplayData({ ...streamingRef.current });
-              setCompletedBatches(prev => new Set([...prev, batchNum]));
+              // batch 4 also unlocks financials tab (batch 40) in case fin_preview wasn't sent
+              const extra = batchNum === 4 ? [40] : [];
+              setCompletedBatches(prev => new Set([...prev, batchNum, ...extra]));
+
               setProgress({ completed: payload.completed, total: payload.total });
 
             } else if (eventType === 'done') {
@@ -203,7 +279,7 @@ export default function HomeContent() {
               loadedIdRef.current = normalized.id;
               setResult(normalized);
               setAnalysisData(normalized);
-              setCompletedBatches(new Set([1, 2, 3, 4]));
+              setCompletedBatches(new Set([1, 2, 3, 4, 5, 40]));
               if (normalized.id) router.replace(`/?id=${normalized.id}`);
 
             } else if (eventType === 'error') {
@@ -233,8 +309,33 @@ export default function HomeContent() {
     await startAnalysis(companyName.trim(), true);
   }
 
-  // Show card immediately when loading starts (skeleton state via sentinel completedBatches)
-  const showCard = result ?? (loading ? (displayData ?? emptyBase(companyName.trim())) : null);
+  // Phase 1: batch 1 (summary) not yet done → show loading screen
+  // Phase 2: batch 1 done → show card (summary real, others skeleton)
+  const phase1 = loading && completedBatches.has(-1) && !completedBatches.has(1);
+  const showCard = result ?? (loading && completedBatches.has(1) ? (displayData ?? emptyBase(companyName.trim())) : null);
+
+  // Nudge banner: visible during streaming after batch 1 completes
+  const isStreaming = completedBatches.has(-1);
+  const nudgeItems = [
+    { label: '산업분석', done: completedBatches.has(2) },
+    { label: '재무',     done: completedBatches.has(40) || completedBatches.has(4) },
+    { label: '경쟁사',   done: completedBatches.has(2) },
+    { label: '전략',     done: completedBatches.has(3) },
+    { label: '창업자',   done: completedBatches.has(5) },
+  ];
+  const allNudgeDone = nudgeItems.every(it => it.done);
+  const showNudge = isStreaming && completedBatches.has(1) && !nudgeDismissed;
+
+  // Reset dismissed state when a new analysis begins, auto-dismiss 3s after all done
+  useEffect(() => {
+    if (isStreaming && !completedBatches.has(1)) setNudgeDismissed(false);
+  }, [isStreaming, completedBatches]);
+
+  useEffect(() => {
+    if (!allNudgeDone || nudgeDismissed) return;
+    const t = setTimeout(() => setNudgeDismissed(true), 3000);
+    return () => clearTimeout(t);
+  }, [allNudgeDone, nudgeDismissed]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -265,8 +366,8 @@ export default function HomeContent() {
         </div>
       </form>
 
-      {/* Progress bar */}
-      {loading && progress && (
+      {/* Phase 2 progress bar — only shows after batch 1 completes */}
+      {loading && progress && completedBatches.has(1) && (
         <div className="max-w-2xl mx-auto mb-6">
           <div className="flex justify-between text-xs text-gray-500 mb-1.5">
             <span>분석 중 배치 {progress.completed} / {progress.total} 완료</span>
@@ -281,7 +382,10 @@ export default function HomeContent() {
         </div>
       )}
 
-      {/* AnalysisLoader removed — card with skeleton shows immediately via showCard + sentinel completedBatches */}
+      {/* Phase 1: full loading screen before summary arrives */}
+      {phase1 && !error && (
+        <AnalysisLoadingScreen companyName={companyName.trim() || '기업'} />
+      )}
 
       {fetchingId && !loading && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-10 text-center text-gray-400 text-sm">
@@ -361,6 +465,40 @@ export default function HomeContent() {
           )}
 
           <AnalysisCard data={showCard} />
+        </div>
+      )}
+
+      {/* Nudge banner — fixed bottom, appears in phase 2 while streaming */}
+      {showNudge && (
+        <div className="fixed bottom-0 inset-x-0 z-40 flex justify-center pb-3 px-4 pointer-events-none">
+          <div className={`pointer-events-auto flex items-center gap-3 shadow-lg border rounded-full px-4 py-2 transition-all duration-500 text-[11px] ${
+            allNudgeDone
+              ? 'bg-emerald-50 border-emerald-200'
+              : 'bg-white/95 backdrop-blur-sm border-gray-200'
+          }`}>
+            {allNudgeDone ? (
+              <span className="font-medium text-emerald-700 flex items-center gap-1.5">
+                <span className="anim-fadein inline-block">✓</span>
+                분석 완료
+              </span>
+            ) : (
+              <>
+                <span className="text-gray-400 shrink-0 font-medium">분석 중</span>
+                <span className="w-px h-3 bg-gray-200 shrink-0" />
+                <div className="flex items-center gap-2.5">
+                  {nudgeItems.map(item => (
+                    <span key={item.label} className={`flex items-center gap-0.5 transition-colors duration-300 ${item.done ? 'text-emerald-600' : 'text-gray-400'}`}>
+                      {item.done
+                        ? <span className="anim-fadein inline-block font-bold mr-0.5">✓</span>
+                        : <span className="w-1 h-1 rounded-full bg-current opacity-50 mr-0.5 animate-pulse" />
+                      }
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

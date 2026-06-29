@@ -843,6 +843,8 @@ export async function analyzeCompany(
   // 각 runBatch는 완료 즉시 onBatch → send('batch') 호출 → 탭 순차 채워짐
   // financial_cache 히트 시 batch4(financials)가 가장 먼저 완료될 수 있음
   const cachedFin = opts?.cachedFinancials;
+  // Batch 4 (financials + sources) and Batch 5 (founder) run in parallel with Batch 2 & 3.
+  // Founder is decoupled so financials can surface faster.
   await Promise.all([
     runBatch(2,
       () => [
@@ -869,32 +871,36 @@ export async function analyzeCompany(
       }),
     ),
     runBatch(4,
-    () => [
-      cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2'),
-      callFounderSection(companyName),
-      callSection<AnalysisSources>(sharedContext, 'sources'),
-    ],
-    ([f, fo, src]) => {
-      // Rule 4: 재무 수치 전년 대비 10배 이상 변동 → (추정) 뱃지 강제 적용
-      if (f?.income_statement) {
-        for (const row of f.income_statement) {
-          const pct = row.yoy?.match(/[▲▼](\d+(?:\.\d+)?)%/);
-          if (pct && parseFloat(pct[1]) >= 900) {
-            const yr = (['fy2025', 'fy2024', 'fy2023', 'fy2022', 'fy2021'] as const)
-              .find(y => row[y] && row[y] !== '확인 필요');
-            if (yr && !row[yr]!.includes('추정')) {
-              row[yr] = row[yr] + ' (추정)';
-              console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} (추정) 강제 적용`);
+      () => [
+        cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2'),
+        callSection<AnalysisSources>(sharedContext, 'sources'),
+      ],
+      ([f, src]) => {
+        // Rule 4: 재무 수치 전년 대비 10배 이상 변동 → (추정) 뱃지 강제 적용
+        if (f?.income_statement) {
+          for (const row of f.income_statement) {
+            const pct = row.yoy?.match(/[▲▼](\d+(?:\.\d+)?)%/);
+            if (pct && parseFloat(pct[1]) >= 900) {
+              const yr = (['fy2025', 'fy2024', 'fy2023', 'fy2022', 'fy2021'] as const)
+                .find(y => row[y] && row[y] !== '확인 필요');
+              if (yr && !row[yr]!.includes('추정')) {
+                row[yr] = row[yr] + ' (추정)';
+                console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} (추정) 강제 적용`);
+              }
             }
           }
         }
-      }
-      return {
-        financials_v2: f   ?? DEFAULT_ANALYSIS_DATA.financials_v2,
-        founder_v2:    fo  ?? DEFAULT_ANALYSIS_DATA.founder_v2,
-        sources:       src ?? DEFAULT_ANALYSIS_DATA.sources,
-      };
-    },
+        return {
+          financials_v2: f   ?? DEFAULT_ANALYSIS_DATA.financials_v2,
+          sources:       src ?? DEFAULT_ANALYSIS_DATA.sources,
+        };
+      },
+    ),
+    runBatch(5,
+      () => [callFounderSection(companyName)],
+      ([fo]) => ({
+        founder_v2: fo ?? DEFAULT_ANALYSIS_DATA.founder_v2,
+      }),
     ),
   ]);
 

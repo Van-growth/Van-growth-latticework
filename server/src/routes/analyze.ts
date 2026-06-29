@@ -118,10 +118,12 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
       strategy_v2:       data.strategy_v2       ?? null,
     };
     case 4: return {
-      financials_v2: data.financials_v2  ?? null,
-      founder_v2:    data.founder_v2     ?? null,
-      sources:       data.sources        ?? {},
+      financials_v2: data.financials_v2 ?? null,
+      sources:       data.sources       ?? {},
       financials:    data.financials_v2?.narrative ?? '',
+    };
+    case 5: return {
+      founder_v2: data.founder_v2 ?? null,
     };
     default: return {};
   }
@@ -341,9 +343,10 @@ router.post('/stream', async (req: Request, res: Response) => {
         const b1 = !!cached.summary_v2;
         const b2 = !!(cached.industry_history_v2 && cached.business_model_v2 && cached.competitors_v2);
         const b3 = !!(cached.tech_evolution_v2 && cached.value_chain_v2 && cached.strategy_v2);
-        const b4 = !!(cached.financials_v2 && cached.founder_v2);
+        const b4 = !!cached.financials_v2;
+        const b5 = !!cached.founder_v2;
 
-        if (b1 && b2 && b3 && b4) {
+        if (b1 && b2 && b3 && b4 && b5) {
           // Full cache hit — financial_cache 조회 (web_search 기반 캐시만 업그레이드)
           let effectiveFinancials = cached.financials_v2;
           let effectiveSource: string = cached.data_source ?? 'web_search';
@@ -400,23 +403,35 @@ router.post('/stream', async (req: Request, res: Response) => {
           completedCount++;
           skipBatches.add(batchNum);
           Object.assign(initialData, data);
-          send('batch', { batch: batchNum, data, completed: completedCount, total: 4, analysisId: cached.id });
+          send('batch', { batch: batchNum, data, completed: completedCount, total: 5, analysisId: cached.id });
         };
 
         if (b1) sendCached(1, { summary_v2: cached.summary_v2 });
         if (b2) sendCached(2, { industry_history_v2: cached.industry_history_v2, business_model_v2: cached.business_model_v2, competitors_v2: cached.competitors_v2 });
         if (b3) sendCached(3, { tech_evolution_v2: cached.tech_evolution_v2, value_chain_v2: cached.value_chain_v2, strategy_v2: cached.strategy_v2 });
-        if (b4) sendCached(4, { financials_v2: cached.financials_v2, founder_v2: cached.founder_v2, sources: cached.sources ?? {} });
+        if (b4) sendCached(4, { financials_v2: cached.financials_v2, sources: cached.sources ?? {} });
+        if (b5) sendCached(5, { founder_v2: cached.founder_v2 });
 
-        const { source: dataSource, contextText } = await fetchFinancialContext(name);
+        const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name);
         const useCachedFin = !skipBatches.has(4) ? cachedFinancials : undefined;
+
+        // fin_preview: send financials immediately from raw cache if batch 4 hasn't loaded yet
+        if (!skipBatches.has(4)) {
+          const quickFin = (rawEdgar || rawDart)
+            ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR')
+            : (useCachedFin ?? null);
+          if (quickFin) {
+            const previewSource = rawDart ? 'dart' : (rawEdgar ? 'edgar' : dataSource);
+            send('fin_preview', { financials_v2: quickFin, dataSource: previewSource });
+          }
+        }
 
         const analysis = await analyzeCompany(
           name,
           contextText || undefined,
           async (batchNum, data) => {
             completedCount++;
-            send('batch', { batch: batchNum, data, completed: completedCount, total: 4, analysisId: cached.id });
+            send('batch', { batch: batchNum, data, completed: completedCount, total: 5, analysisId: cached.id });
             const fields = getBatchDbFields(batchNum, data);
             if (Object.keys(fields).length > 0) {
               await supabase.from('analyses').update(fields).eq('id', cached.id);
@@ -444,7 +459,19 @@ router.post('/stream', async (req: Request, res: Response) => {
     }
 
     // 4. No cache — full analysis with per-batch DB saves
-    const { source: dataSource, contextText } = await fetchFinancialContext(name);
+    const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name);
+
+    // fin_preview: show financials immediately from raw/cached data if available
+    {
+      const quickFin = (rawEdgar || rawDart)
+        ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR')
+        : (cachedFinancials ?? null);
+      if (quickFin) {
+        const previewSource = rawDart ? 'dart' : (rawEdgar ? 'edgar' : dataSource);
+        send('fin_preview', { financials_v2: quickFin, dataSource: previewSource });
+      }
+    }
+
     let savedId: string | null = null;
     let savedAt: string | null = null;
     let batchCount = 0;
@@ -481,14 +508,14 @@ router.post('/stream', async (req: Request, res: Response) => {
             .select('id, created_at')
             .single();
           if (!error && saved) { savedId = saved.id; savedAt = saved.created_at; }
-          send('batch', { batch: batchNum, data, completed: batchCount, total: 4, analysisId: savedId });
+          send('batch', { batch: batchNum, data, completed: batchCount, total: 5, analysisId: savedId });
 
         } else if (savedId) {
           const fields = getBatchDbFields(batchNum, data);
           if (Object.keys(fields).length > 0) {
             await supabase.from('analyses').update(fields).eq('id', savedId);
           }
-          send('batch', { batch: batchNum, data, completed: batchCount, total: 4, analysisId: savedId });
+          send('batch', { batch: batchNum, data, completed: batchCount, total: 5, analysisId: savedId });
 
           if (batchNum === 4 && !cachedFinancials && data.financials_v2) {
             await supabase.from('financials_v2_cache').upsert(

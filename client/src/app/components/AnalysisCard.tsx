@@ -129,6 +129,29 @@ function cleanMetricValue(v: string): string {
   return v.replace(/\((\d{4}[^,)]*),([^)]*)\)/g, '($1)');
 }
 
+// 재무 수치 옆 "(EDGAR)"/"(DART)" 텍스트 → 컬러 점 치환
+const FINANCIAL_SOURCE_RE = /\s*\((EDGAR|DART|FMP|DART 공시|EDGAR 공시|SEC EDGAR)\)/gi;
+
+function FinancialValue({ text }: { text: string | null | undefined }) {
+  const str = text ?? '—';
+  const match = str.match(FINANCIAL_SOURCE_RE);
+  const cleaned = match ? str.replace(FINANCIAL_SOURCE_RE, '').trim() : str;
+  const tag = (match?.[0] ?? '').replace(/[()]/g, '').trim().toUpperCase();
+  const isEdgar = tag.includes('EDGAR');
+  const isDart  = !isEdgar && tag.includes('DART');
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <DataValue text={cleaned} />
+      {(isEdgar || isDart) && (
+        <span
+          className={`w-1.5 h-1.5 rounded-full shrink-0 cursor-help ${isEdgar ? 'bg-blue-500' : 'bg-emerald-500'}`}
+          title={isEdgar ? 'SEC EDGAR 공식 데이터' : 'DART 공식 데이터'}
+        />
+      )}
+    </span>
+  );
+}
+
 function MetricCard({ value, label, trend }: { value: string; label: string; trend?: 'up' | 'down' | 'flat' }) {
   const cleaned = cleanMetricValue(value);
   const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || isPlaceholder(cleaned);
@@ -175,7 +198,8 @@ function splitCfValue(raw: string): [string, string] {
 }
 
 function CfMetricCard({ label, value, dotColor }: { label: string; value: string; dotColor: string }) {
-  const [numPart, descPart] = splitCfValue(value);
+  const stripped = value.replace(FINANCIAL_SOURCE_RE, '').trim();
+  const [numPart, descPart] = splitCfValue(stripped);
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <div className="flex items-center gap-1.5 mb-1.5">
@@ -1853,7 +1877,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                   <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
                   {IS_COLS_V2.map(col => (
                     <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === 'fy2024' ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
-                      <DataValue text={row[col] ?? '—'} />
+                      <FinancialValue text={row[col] ?? '—'} />
                     </span>
                   ))}
                   <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={normalizeYoy(row.yoy)} /></span>
@@ -1889,9 +1913,9 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                   return (
                     <>
                       <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
-                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2023 ?? '—'} /></span>
-                      <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><DataValue text={row.fy2024 ?? '—'} /></span>
-                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><DataValue text={row.fy2025 ?? '—'} /></span>
+                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2023 ?? '—'} /></span>
+                      <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><FinancialValue text={row.fy2024 ?? '—'} /></span>
+                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2025 ?? '—'} /></span>
                     </>
                   );
                 }}
@@ -2383,8 +2407,8 @@ const TAB_BATCH: Record<TabKey, number> = {
   tech_evolution:   3,
   value_chain:      3,
   strategy:         3,
-  financials:       4,
-  founder:          4,
+  financials:       40,
+  founder:          5,
 };
 
 function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
@@ -2402,33 +2426,6 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
     }
   }, [completedBatches]);
 
-  // Task 2: 탭 완료 시 체크 표시 (1.5s 후 사라짐)
-  const [recentlyCompleted, setRecentlyCompleted] = useState<Set<TabKey>>(new Set());
-  const prevBatchesRef = useRef<Set<number>>(new Set());
-  useEffect(() => {
-    const prev = prevBatchesRef.current;
-    const isStreaming = completedBatches.has(-1);
-    if (!isStreaming) { prevBatchesRef.current = completedBatches; return; }
-
-    const newlyDone: TabKey[] = [];
-    for (const [key, batchNum] of Object.entries(TAB_BATCH) as [TabKey, number][]) {
-      if (!prev.has(batchNum) && completedBatches.has(batchNum)) {
-        newlyDone.push(key);
-      }
-    }
-    prevBatchesRef.current = completedBatches;
-    if (!newlyDone.length) return;
-
-    setRecentlyCompleted(prev => new Set([...prev, ...newlyDone]));
-    const id = setTimeout(() => {
-      setRecentlyCompleted(prev => {
-        const next = new Set(prev);
-        newlyDone.forEach(k => next.delete(k));
-        return next;
-      });
-    }, 1500);
-    return () => clearTimeout(id);
-  }, [completedBatches]);
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
 
@@ -2478,15 +2475,21 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
           const Icon = t.icon;
           const active = tab === t.key;
           const isStreaming = completedBatches.has(-1);
-          const isTabLoading = isStreaming && !completedBatches.has(TAB_BATCH[t.key]);
-          const isJustDone = recentlyCompleted.has(t.key);
+          const batch1Done = completedBatches.has(1);
+          const tabDone = completedBatches.has(TAB_BATCH[t.key]);
+          // waiting: streaming, batch1 not done, non-summary tab (batches haven't notified yet)
+          const isWaiting    = isStreaming && !batch1Done && t.key !== 'summary';
+          // in-progress: streaming, batch1 done (or is summary tab), this tab not done
+          const isInProgress = isStreaming && !tabDone && !isWaiting;
+          // done: streaming and this tab's batch has arrived
+          const isDoneNow    = isStreaming && tabDone;
           return (
             <button
               key={t.key}
               onClick={() => startTransition(() => setTab(t.key))}
               onMouseEnter={() => setHoveredTooltip(t.tooltip)}
               onMouseLeave={() => setHoveredTooltip(null)}
-              className={`shrink-0 flex items-center gap-1.5 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
+              className={`shrink-0 flex items-center gap-1 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
                 active
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-50'
@@ -2494,11 +2497,16 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
             >
               <Icon size={12} />
               {t.label}
-              {isTabLoading && (
-                <span className="w-2.5 h-2.5 shrink-0 border border-current border-t-transparent rounded-full animate-spin opacity-50" />
+              {isWaiting && (
+                <span className="flex gap-[2px] items-center ml-0.5" aria-hidden>
+                  {[0,1,2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
+                </span>
               )}
-              {isJustDone && !isTabLoading && (
-                <span className="text-emerald-500 text-[9px] font-bold leading-none">✓</span>
+              {isInProgress && (
+                <span className="w-2 h-2 shrink-0 border border-current border-t-transparent rounded-full animate-spin opacity-40 ml-0.5" />
+              )}
+              {isDoneNow && (
+                <span key={`done-${t.key}`} className="text-emerald-500 text-[10px] font-bold anim-fadein leading-none ml-0.5">✓</span>
               )}
             </button>
           );

@@ -11,6 +11,8 @@ export type DataSource = 'dart' | 'edgar' | 'web_search';
 export interface FinancialContext {
   source:      DataSource;
   contextText: string;
+  rawEdgar?:   any;
+  rawDart?:    any;
 }
 
 // 한글 음절이 포함되면 한국 기업으로 판단
@@ -176,13 +178,13 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
       if (corpRow?.stock_code) {
         const { data: cachedDart } = await supabase
           .from('financial_cache')
-          .select('context_text')
+          .select('context_text, raw_dart')
           .eq('company_name', corpRow.stock_code)
           .gt('expires_at', new Date().toISOString())
           .maybeSingle();
         if (cachedDart?.context_text) {
           console.log(`[financialCtx] "${companyName}" → financial_cache HIT DART (${corpRow.stock_code})`);
-          return { source: 'dart', contextText: cachedDart.context_text };
+          return { source: 'dart', contextText: cachedDart.context_text, rawDart: cachedDart.raw_dart ?? undefined };
         }
       }
 
@@ -210,13 +212,13 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
       if (lookupTicker) {
         const { data: cached } = await supabase
           .from('financial_cache')
-          .select('context_text')
+          .select('context_text, raw_edgar')
           .eq('company_name', lookupTicker)
           .gt('expires_at', new Date().toISOString())
           .maybeSingle();
         if (cached?.context_text) {
           console.log(`[financialCtx] "${companyName}" → financial_cache HIT EDGAR (${lookupTicker})`);
-          return { source: 'edgar', contextText: cached.context_text };
+          return { source: 'edgar', contextText: cached.context_text, rawEdgar: cached.raw_edgar ?? undefined };
         }
       }
 

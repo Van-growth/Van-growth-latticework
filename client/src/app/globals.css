@@ -63,3 +63,15 @@ body {
   animation: shimmer 1.5s infinite linear;
   border-radius: 0.375rem;
 }
+
+@keyframes scan-lr {
+  0%, 100% { transform: translateX(0px); }
+  50%       { transform: translateX(108px); }
+}
+.anim-scan-lr { animation: scan-lr 2.5s ease-in-out infinite; }
+
+@keyframes fadein {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.anim-fadein { animation: fadein 0.35s ease-out forwards; }
