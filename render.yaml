@@ -50,3 +50,47 @@ services:
     envVars:
       - key: SERVER_URL
         sync: false   # e.g. https://latticework-server.onrender.com
+
+  # ── Monthly EDGAR Batch ─────────────────────────────────────────────────────
+  - type: cron
+    name: edgar-batch-monthly
+    runtime: node
+    rootDir: server
+    schedule: "0 2 1 * *"   # 매월 1일 02:00 UTC
+    buildCommand: npm install --production=false && npm run build
+    startCommand: npx ts-node scripts/edgarBatchPrecompute.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DART_API_KEY
+        sync: false
+      - key: FMP_API_KEY
+        sync: false
+
+  # ── Monthly DART Batch ──────────────────────────────────────────────────────
+  - type: cron
+    name: dart-batch-monthly
+    runtime: node
+    rootDir: server
+    schedule: "0 3 1 * *"   # 매월 1일 03:00 UTC (EDGAR 완료 후 1시간 간격)
+    buildCommand: npm install --production=false && npm run build
+    startCommand: npx ts-node scripts/dartBatchPrecompute.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DART_API_KEY
+        sync: false
+      - key: FMP_API_KEY
+        sync: false
