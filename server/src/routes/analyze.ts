@@ -5,6 +5,100 @@ import { fetchFinancialContext } from '../lib/financialContext';
 
 const router = Router();
 
+// ── financial_cache → FinancialsV2 변환 (배치 프리컴퓨트 raw 데이터 → 표시용 구조체) ──
+
+function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' | 'DART'): FinancialsV2 | null {
+  const fmtUsd = (v: number | null): string => {
+    if (v == null) return '—';
+    const sign = v < 0 ? '-' : '';
+    const abs  = Math.abs(v);
+    return abs >= 1_000_000_000
+      ? `${sign}${(abs / 1_000_000_000).toFixed(1)}B USD`
+      : `${sign}${(abs / 1_000_000).toFixed(0)}M USD`;
+  };
+  const fmtKrw = (v: number | null): string => {
+    if (v == null) return '—';
+    const sign = v < 0 ? '-' : '';
+    const abs  = Math.abs(v);
+    if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}조원`;
+    if (abs >= 100_000_000)       return `${sign}${(abs / 100_000_000).toFixed(0)}억원`;
+    return `${sign}${Math.round(abs / 10_000).toLocaleString()}만원`;
+  };
+
+  const series = rawEdgar ?? rawDart?.cfs ?? rawDart?.ofs;
+  if (!series) return null;
+  const fmt: (v: number | null) => string = rawEdgar ? fmtUsd : fmtKrw;
+  const fyrs: string[] = (series.fiscalYears ?? []).filter(
+    (y: string) => ['2021','2022','2023','2024','2025'].includes(y),
+  );
+  if (fyrs.length === 0) return null;
+
+  const IS_COLS = ['2021','2022','2023','2024','2025'];
+  const BS_COLS = ['2023','2024','2025'];
+
+  const toIsRow = (label: string, vals: (number | null)[] = []) => {
+    const row: any = { item: label };
+    IS_COLS.forEach(yr => {
+      const idx = fyrs.indexOf(yr);
+      row[`fy${yr}`] = idx >= 0 ? fmt(vals[idx] ?? null) : undefined;
+    });
+    const idx0 = 0, idx1 = 1;
+    if (vals[idx0] != null && vals[idx1] != null && vals[idx1] !== 0) {
+      const pct = ((vals[idx0]! - vals[idx1]!) / Math.abs(vals[idx1]!)) * 100;
+      row.yoy = pct >= 0 ? `▲${pct.toFixed(0)}%` : `▼${Math.abs(pct).toFixed(0)}%`;
+    } else {
+      row.yoy = '—';
+    }
+    return row;
+  };
+
+  const toBsRow = (label: string, vals: (number | null)[] = []) => {
+    const row: any = { item: label };
+    BS_COLS.forEach(yr => {
+      const idx = fyrs.indexOf(yr);
+      row[`fy${yr}`] = idx >= 0 ? fmt(vals[idx] ?? null) : undefined;
+    });
+    return row;
+  };
+
+  const isKr   = source === 'DART';
+  const name   = rawDart?.corp_name ?? rawEdgar?.ticker ?? '';
+  const yr     = fyrs[0];
+  const srcLbl = isKr ? 'DART 공시' : 'SEC EDGAR';
+
+  const hasVal = (row: any) => Object.keys(row).some(k => k.startsWith('fy') && row[k] && row[k] !== '—');
+
+  return {
+    key_bullets: ([
+      `${srcLbl} 공식 데이터 (${yr}년 기준)`,
+      series.revenue?.[0]        != null ? `${yr}년 ${isKr ? '매출액' : 'Revenue'}: ${fmt(series.revenue[0])}` : null,
+      series.operatingIncome?.[0] != null ? `${yr}년 ${isKr ? '영업이익' : 'Operating Income'}: ${fmt(series.operatingIncome[0])}` : null,
+    ] as (string | null)[]).filter((x): x is string => x !== null),
+    narrative: `[${srcLbl}] ${name} ${yr}년 재무 수치 (${isKr ? '연결재무제표' : '10-K 기준'})`,
+    income_statement: [
+      toIsRow(isKr ? '매출액'     : 'Revenue',           series.revenue),
+      toIsRow(isKr ? '영업이익'   : 'Operating Income',  series.operatingIncome),
+      toIsRow(isKr ? '당기순이익' : 'Net Income',        series.netIncome),
+    ].filter(hasVal),
+    balance_sheet: [
+      toBsRow(isKr ? '총자산'   : 'Total Assets',          series.assets),
+      toBsRow(isKr ? '총부채'   : 'Total Liabilities',     series.liabilities),
+      toBsRow(isKr ? '자본총계' : "Shareholders' Equity",  series.equity),
+    ].filter(hasVal),
+    cash_flow: { operating: '—', investing: '—', financing: '—', fcf: '—', notes: `${srcLbl} 배치 데이터 — 현금흐름 미포함` },
+    munger_buffett_metrics: { roe: '—', roic: '—', owner_earnings: '—', debt_to_equity: '—', interest_coverage: '—', reinvestment_rate: '—' },
+    key_risks: [],
+    outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
+    sources: [{
+      index: 1, level: 'L1' as const, organization: srcLbl, date: yr,
+      content: `${name} 연간 재무제표 (공식 공시)`, isEstimate: false,
+      url: source === 'EDGAR' && rawEdgar?.cik
+        ? `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${rawEdgar.cik}&type=10-K`
+        : undefined,
+    }],
+  } as unknown as FinancialsV2;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record<string, any> {
@@ -250,13 +344,50 @@ router.post('/stream', async (req: Request, res: Response) => {
         const b4 = !!(cached.financials_v2 && cached.founder_v2);
 
         if (b1 && b2 && b3 && b4) {
-          // Full cache hit
-          send('done', buildDonePayload(cached, name, {
-            cached: true,
-            analysisId: cached.id,
-            createdAt:  cached.created_at,
-            dataSource: cached.data_source ?? 'web_search',
-          }));
+          // Full cache hit — financial_cache 조회 (web_search 기반 캐시만 업그레이드)
+          let effectiveFinancials = cached.financials_v2;
+          let effectiveSource: string = cached.data_source ?? 'web_search';
+
+          if (cached.data_source === 'web_search') {
+            try {
+              const isKorean = /[가-힯]/.test(name);
+              const now = new Date().toISOString();
+              if (isKorean) {
+                const { data: corpRow } = await supabase
+                  .from('corp_master').select('stock_code')
+                  .ilike('corp_name', name).not('stock_code', 'is', null).maybeSingle();
+                if (corpRow?.stock_code) {
+                  const { data: fc } = await supabase
+                    .from('financial_cache').select('source, raw_edgar, raw_dart')
+                    .eq('company_name', corpRow.stock_code).gt('expires_at', now).maybeSingle();
+                  if (fc) {
+                    const built = buildFinancialsV2FromRaw(fc.raw_edgar, fc.raw_dart, fc.source as 'EDGAR' | 'DART');
+                    if (built) { effectiveFinancials = built; effectiveSource = fc.source.toLowerCase(); }
+                  }
+                }
+              } else {
+                // 티커 직접 입력 케이스 (AAPL, MSFT 등 1~6자 대문자)
+                const nameTicker = name.toUpperCase().replace(/\s+/g, '');
+                if (/^[A-Z]{1,6}$/.test(nameTicker)) {
+                  const { data: fc } = await supabase
+                    .from('financial_cache').select('source, raw_edgar, raw_dart')
+                    .eq('company_name', nameTicker).gt('expires_at', now).maybeSingle();
+                  if (fc) {
+                    const built = buildFinancialsV2FromRaw(fc.raw_edgar, fc.raw_dart, fc.source as 'EDGAR' | 'DART');
+                    if (built) { effectiveFinancials = built; effectiveSource = fc.source.toLowerCase(); }
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[financial_cache full-hit check]', (e as Error).message);
+            }
+          }
+
+          send('done', buildDonePayload(
+            { ...cached, financials_v2: effectiveFinancials },
+            name,
+            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource },
+          ));
           return res.end();
         }
 

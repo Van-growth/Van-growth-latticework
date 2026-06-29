@@ -1757,11 +1757,12 @@ function normalizeYoy(v: string | undefined): string {
   return '—';
 }
 
-const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing }: {
+const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing, dataSource }: {
   f: FinancialsV2;
   sources: Source[] | undefined;
   onRefresh: () => void;
   isRefreshing: boolean;
+  dataSource?: DataSource;
 }) {
   const yoyCls = (v?: string) => {
     const n = normalizeYoy(v);
@@ -1788,8 +1789,21 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
   return (
     <div className="space-y-4">
       <KeyBulletsBlock bullets={f.key_bullets} />
-      {/* Refresh button */}
-      <div className="flex justify-end">
+      {/* 데이터 출처 뱃지 + Refresh 버튼 */}
+      <div className="flex items-center justify-between">
+        {dataSource === 'edgar' ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />🟢 SEC EDGAR 공식
+          </span>
+        ) : dataSource === 'dart' ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />🟢 DART 공식
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />⚪ 웹 검색 추정치
+          </span>
+        )}
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
@@ -2550,6 +2564,7 @@ function AnalysisCardInner({ data }: { data: AnalysisDetail }) {
                 sources={financialsV2Local.sources ?? data.sources?.financials}
                 onRefresh={handleRefreshFinancials}
                 isRefreshing={refreshingFinancials}
+                dataSource={data.dataSource}
               />
             : <FinancialsTab data={data} />
         )}
