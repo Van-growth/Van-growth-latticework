@@ -411,7 +411,7 @@ const WEB_SEARCH_TOOL = [
 ] as any;
 
 async function runWithWebSearch(
-  systemPrompt: string,
+  systemPrompt: string | { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }[],
   userMessage: string,
   model: string,
   maxRounds = 10,
@@ -659,7 +659,7 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
-      system: SECTION_SYSTEM,
+      system: [{ type: 'text', text: SECTION_SYSTEM, cache_control: { type: 'ephemeral' } }] as any,
       messages: [{
         role: 'user',
         content: `${context}\n\n---\n\n${SECTION_SCHEMAS[sectionKey]}`,
@@ -683,9 +683,9 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
 async function callFounderSection(companyName: string): Promise<FounderV2 | null> {
   const t0 = Date.now();
   try {
-    const systemPrompt = `당신은 기업 창업자 분석 전문가입니다. 웹 검색으로 창업자/CEO 정보를 수집한 뒤 지정된 JSON 스키마로만 반환합니다.
+    const systemPrompt = [{ type: 'text' as const, text: `당신은 기업 창업자 분석 전문가입니다. 웹 검색으로 창업자/CEO 정보를 수집한 뒤 지정된 JSON 스키마로만 반환합니다.
 규칙: 마크다운·코드블록·추가 설명 없이 순수 JSON만 출력. 모든 텍스트는 한국어 (인명·기업명은 원어 유지).
-정보가 없는 항목은 반드시 "-" 표시. 비상장사일 경우 재무보다 이 섹션 분량을 더 깊게 조사.`;
+정보가 없는 항목은 반드시 "-" 표시. 비상장사일 경우 재무보다 이 섹션 분량을 더 깊게 조사.`, cache_control: { type: 'ephemeral' as const } }];
 
     const schema = `아래 스키마의 JSON 객체만 출력:
 {"founders":[{"name":"이름","title":"직책","education":"출신학교 또는 '-'","major":"전공 또는 '-'"}],"career_trajectory":[{"period":"기간(예: 2018–현재)","company":"기업명","role":"직책/역할"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"기업명","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"SNS 스타일 1줄 또는 '-'","media_exposure":"주요 미디어 노출 1줄 또는 '-'","blind_glassdoor":"Blind/Glassdoor 평판 요약 1줄 또는 '-'"},"network":{"investors":["투자자 이름/기관 최대 5개"],"advisors_board":["어드바이저/보드 최대 5개"],"cofounders":["공동창업자 이름 최대 5개"]},"key_bullets":["창업자의 핵심 강점 — 왜 이 사람이 이 사업을 해야 하나 20자이내","창업자 네트워크/실적 중 가장 주목할 것 20자이내","창업자 리스크 — 가장 우려되는 약점 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
