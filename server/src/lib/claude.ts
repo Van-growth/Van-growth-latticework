@@ -839,37 +839,36 @@ export async function analyzeCompany(
     `\n[웹 리서치 — 상세 정보]\n${research2}`,
   ].filter(Boolean).join('\n');
 
-  // Batch 2 — industry history · business model · competitors
-  await runBatch(2,
-    () => [
-      callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'),
-      callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
-      callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
-    ],
-    ([h, bm, c]) => ({
-      industry_history_v2: h  ?? DEFAULT_ANALYSIS_DATA.industry_history_v2,
-      business_model_v2:   bm ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
-      competitors_v2:      c  ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
-    }),
-  );
-
-  // Batch 3 — tech evolution · value chain · strategy
-  await runBatch(3,
-    () => [
-      callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),
-      callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
-      callSection<StrategyV2>(sharedContext, 'strategy_v2'),
-    ],
-    ([t, vc, s]) => ({
-      tech_evolution_v2: t  ?? DEFAULT_ANALYSIS_DATA.tech_evolution_v2,
-      value_chain_v2:    vc ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
-      strategy_v2:       s  ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
-    }),
-  );
-
-  // Batch 4 — financials · founder · sources
+  // Batch 2-4 병렬 실행 — sharedContext 공유, 완료 순서대로 즉시 SSE 전송
+  // 각 runBatch는 완료 즉시 onBatch → send('batch') 호출 → 탭 순차 채워짐
+  // financial_cache 히트 시 batch4(financials)가 가장 먼저 완료될 수 있음
   const cachedFin = opts?.cachedFinancials;
-  await runBatch(4,
+  await Promise.all([
+    runBatch(2,
+      () => [
+        callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'),
+        callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
+        callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
+      ],
+      ([h, bm, c]) => ({
+        industry_history_v2: h  ?? DEFAULT_ANALYSIS_DATA.industry_history_v2,
+        business_model_v2:   bm ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
+        competitors_v2:      c  ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
+      }),
+    ),
+    runBatch(3,
+      () => [
+        callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),
+        callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
+        callSection<StrategyV2>(sharedContext, 'strategy_v2'),
+      ],
+      ([t, vc, s]) => ({
+        tech_evolution_v2: t  ?? DEFAULT_ANALYSIS_DATA.tech_evolution_v2,
+        value_chain_v2:    vc ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
+        strategy_v2:       s  ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
+      }),
+    ),
+    runBatch(4,
     () => [
       cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2'),
       callFounderSection(companyName),
@@ -896,7 +895,8 @@ export async function analyzeCompany(
         sources:       src ?? DEFAULT_ANALYSIS_DATA.sources,
       };
     },
-  );
+    ),
+  ]);
 
   // ── Golden Set 검증 (전체 배치 완료 후 1회) ───────────────────────────────
   if (!result.summary_v2.company.toLowerCase().includes(companyName.toLowerCase())) {
