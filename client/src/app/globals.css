@@ -66,7 +66,7 @@ body {
 
 @keyframes scan-lr {
   0%, 100% { transform: translateX(0px); }
-  50%       { transform: translateX(108px); }
+  50%       { transform: translateX(148px); }
 }
 .anim-scan-lr { animation: scan-lr 2.5s ease-in-out infinite; }
 
@@ -75,3 +75,12 @@ body {
   to   { opacity: 1; transform: scale(1); }
 }
 .anim-fadein { animation: fadein 0.35s ease-out forwards; }
+
+/* 로딩 화면 bouncing dots — inline style bounce 미작동 방지용 명시 키프레임 */
+@keyframes dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30%            { transform: translateY(-10px); }
+}
+.dot-b1 { animation: dot-bounce 1.2s ease-in-out 0s   infinite; }
+.dot-b2 { animation: dot-bounce 1.2s ease-in-out 0.2s infinite; }
+.dot-b3 { animation: dot-bounce 1.2s ease-in-out 0.4s infinite; }

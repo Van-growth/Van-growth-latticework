@@ -64,44 +64,42 @@ function AnalysisLoadingScreen({ companyName }: { companyName: string }) {
   const [show, setShow] = useState(true);
 
   useEffect(() => {
+    let tidout: ReturnType<typeof setTimeout>;
     const id = setInterval(() => {
       setShow(false);
-      const t = setTimeout(() => { setIdx(i => (i + 1) % messages.length); setShow(true); }, 350);
-      return () => clearTimeout(t);
+      tidout = setTimeout(() => { setIdx(i => (i + 1) % messages.length); setShow(true); }, 400);
     }, 3000);
-    return () => clearInterval(id);
+    return () => { clearInterval(id); clearTimeout(tidout); };
   }, [messages.length]);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-20 px-8 min-h-[320px]">
-      {/* Scanning magnifier */}
-      <div className="relative w-40 h-10 mb-10 overflow-hidden flex items-center">
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-blue-100 rounded-full" />
-        <div className="anim-scan-lr">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="13" cy="13" r="9" stroke="#3B82F6" strokeWidth="2.5" />
-            <path d="M20 20L28 28" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-28 px-8 min-h-[420px]">
+      {/* Scanning magnifier — 64px icon on a track */}
+      <div className="relative mb-14" style={{ width: 212, height: 64, overflow: 'hidden' }}>
+        {/* track line */}
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-0.5 bg-blue-100 rounded-full" />
+        {/* moving magnifier */}
+        <div className="anim-scan-lr absolute top-0 left-0">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="26" cy="26" r="17" stroke="#3B82F6" strokeWidth="4.5" strokeLinecap="round" />
+            <line x1="39" y1="39" x2="55" y2="55" stroke="#3B82F6" strokeWidth="4.5" strokeLinecap="round" />
           </svg>
         </div>
       </div>
 
       {/* Rotating message */}
       <p
-        className="text-sm font-medium text-gray-600 text-center h-5 transition-opacity duration-300"
+        className="text-sm font-medium text-gray-500 text-center min-h-[20px] transition-opacity duration-400"
         style={{ opacity: show ? 1 : 0 }}
       >
         {messages[idx]}
       </p>
 
-      {/* Bouncing dots */}
-      <div className="flex gap-1.5 mt-6">
-        {[0, 1, 2].map(i => (
-          <span
-            key={i}
-            className="w-2 h-2 rounded-full bg-blue-400 inline-block"
-            style={{ animation: `bounce 1.4s ease-in-out ${i * 0.2}s infinite` }}
-          />
-        ))}
+      {/* Bouncing dots — CSS class 기반 (inline animation 미작동 방지) */}
+      <div className="flex gap-2.5 mt-8 items-end h-6">
+        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 dot-b1 inline-block" />
+        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 dot-b2 inline-block" />
+        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 dot-b3 inline-block" />
       </div>
     </div>
   );
