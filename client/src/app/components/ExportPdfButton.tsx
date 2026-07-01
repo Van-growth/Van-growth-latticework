@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { pdf } from '@react-pdf/renderer';
 import AnalysisPdf from './AnalysisPdf';
@@ -25,7 +25,7 @@ const STAGES = [
   { icon: '📄', label: 'PDF 변환' },
 ] as const;
 
-function LoadingOverlay({ completed }: { completed: boolean }) {
+function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel: () => void }) {
   const [msgIdx, setMsgIdx]     = useState(0);
   const [msgVisible, setMsgVisible] = useState(true);
   const [elapsed, setElapsed]   = useState(0);
@@ -141,6 +141,16 @@ function LoadingOverlay({ completed }: { completed: boolean }) {
           </div>
         </div>
 
+        {/* 취소 버튼 — 생성 완료 전에만 표시 */}
+        {!completed && (
+          <button
+            onClick={onCancel}
+            className="text-[11px] text-gray-400 hover:text-gray-600 underline-offset-2 hover:underline transition-colors"
+          >
+            취소
+          </button>
+        )}
+
       </div>
     </div>,
     document.body,
@@ -152,11 +162,19 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
   const [completed, setCompleted] = useState(false);
   const [error,     setError]     = useState(false);
   const [mounted,   setMounted]   = useState(false);
+  const cancelledRef = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
 
+  function handleCancel() {
+    cancelledRef.current = true;
+    setLoading(false);
+    setCompleted(false);
+  }
+
   async function handleClick() {
     if (loading) return;
+    cancelledRef.current = false;
     setLoading(true);
     setCompleted(false);
     setError(false);
@@ -166,9 +184,13 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
         : undefined;
       const blob = await pdf(<AnalysisPdf data={data} shareUrl={shareUrl} />).toBlob();
 
+      if (cancelledRef.current) return;
+
       // 100% 표시 후 0.6초 뒤 다운로드
       setCompleted(true);
       await new Promise(r => setTimeout(r, 600));
+
+      if (cancelledRef.current) return;
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -179,7 +201,7 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      setError(true);
+      if (!cancelledRef.current) setError(true);
     } finally {
       setLoading(false);
       setCompleted(false);
@@ -188,7 +210,7 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
 
   return (
     <>
-      {mounted && loading && <LoadingOverlay completed={completed} />}
+      {mounted && loading && <LoadingOverlay completed={completed} onCancel={handleCancel} />}
       <button
         onClick={handleClick}
         disabled={loading}
