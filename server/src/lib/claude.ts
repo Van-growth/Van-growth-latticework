@@ -554,7 +554,8 @@ value_flow·subject_position 본문에 중요 사실 출처는 [n] 형식으로 
 
   business_model_v2: `아래 스키마의 JSON 객체만 출력:
 {"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}],"key_bullets":["이 기업 수익 구조의 핵심 — 왜 돈을 버는가 20자이내","BM을 지탱하는 핵심 해자 20자이내","BM의 구조적 약점 또는 붕괴 리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-growth_motion_detail·moat.description 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
+growth_motion_detail·moat.description 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.
+operating_margin·growth_rate(revenue_streams 내)와 unit_economics의 gross_margin·operating_margin·net_margin·fcf_margin·nrr은 숫자 타입 필드 — 확인 불가 시 반드시 0 반환. "확인 필요"·"N/A" 등 텍스트나 -999 같은 센티널 값 절대 금지 (유효하지 않은 JSON이 됨). revenue_share는 확인 불가해도 0을 쓰지 말고 합리적 추정치를 반드시 채울 것.`,
 
   competitors_v2: `아래 스키마의 JSON 객체만 출력:
 {"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율%(추정 가능)","strengths":["강점 1줄 최대3개 — 전략·기술·시장지배력 중심"],"weaknesses":["약점 1줄 최대2개 — 구조적 약점 중심"],"vs_subject":"분석대상 대비 포지셔닝 차이 1줄 — '~보다 ~에서 강하나 ~에서 취약' 형식"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower","key_bullets":["이 기업의 경쟁 포지션 — 누구보다 강하고 어디서 약한가 20자이내","경쟁사 대비 가장 뚜렷한 전략적 차별점 20자이내","가장 위협적인 경쟁 리스크 — 어디서 뒤집힐 수 있나 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
@@ -586,6 +587,59 @@ outlook 규칙: 재무 데이터 기반으로 작성. 근거 없는 낙관 금�
 - url은 실제 검색에서 확인된 URL만. 없으면 null.
 - L3 항목은 반드시 isEstimate:true.`,
 };
+
+// ── Quality Gate: 섹션별 "콘텐츠 있음" 판정 필드 ────────────────────────────────
+// 예전에는 전 섹션 공용 필드 체인(oneLiner ?? narrative ?? ... ?? growth_motion_detail
+// ?? strategy_coherence)으로 판정해서, 스키마에 없는 필드로 체인이 떨어지면
+// (예: business_model_v2 → growth_motion_detail) 다른 필드(revenue_streams 등)에
+// 실제 데이터가 있어도 섹션 전체가 폐기됐다 (business_model_v2 실측 폐기율 22%).
+// 섹션별로 실제 존재하는 필드만 명시하고, 배열 필드 중 하나라도 채워져 있으면
+// (대표 텍스트 필드가 placeholder여도) 섹션을 유지한다.
+const SECTION_CONTENT_SIGNALS: Record<string, { text?: string[]; arrays?: string[] }> = {
+  summary_v2:          { text: ['oneLiner'],                                    arrays: ['products', 'key_metrics', 'key_bullets'] },
+  industry_history_v2: { text: ['why_durable'],                                 arrays: ['timeline', 'chasm_points', 'key_bullets'] },
+  tech_evolution_v2:   { text: ['current_stage', 'next_inflection'],            arrays: ['stages', 'key_bullets'] },
+  value_chain_v2:      { text: ['value_flow'],                                  arrays: ['layers', 'key_bullets'] },
+  business_model_v2:   { text: ['growth_motion_detail'],                        arrays: ['revenue_streams', 'segments', 'moat', 'key_bullets'] },
+  competitors_v2:      {                                                        arrays: ['direct', 'indirect', 'substitutes', 'key_bullets'] },
+  strategy_v2:          { text: ['strategy_coherence', 'ten_year_durability'],  arrays: ['key_bullets', 'corporate.ma_partnerships', 'business.product_roadmap'] },
+  financials_v2:         { text: ['narrative'],                                 arrays: ['income_statement', 'balance_sheet', 'key_risks', 'key_bullets'] },
+};
+
+function isPlaceholderText(v: unknown): boolean {
+  return typeof v === 'string' && ['', '확인 필요', 'N/A', 'unknown'].includes(v.trim());
+}
+
+function getByPath(obj: any, path: string): unknown {
+  return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+
+// Rule 1 (-999 placeholder)도 예전엔 전체 섹션을 폐기했다 — 동일한 whole-object-nuke
+// 결함. -999는 다른 필드 다 채워진 상태에서 숫자 필드 하나(예: business_model_v2의
+// operating_margin)에만 나타나는 경우가 흔해, 그 필드만 제거하고 나머지는 유지한다.
+function sanitizePlaceholderNumbers(value: any, sectionKey: string, path = ''): any {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      value[i] = sanitizePlaceholderNumbers(value[i], sectionKey, `${path}[${i}]`);
+    }
+    return value;
+  }
+  if (value !== null && typeof value === 'object') {
+    for (const k of Object.keys(value)) {
+      value[k] = sanitizePlaceholderNumbers(value[k], sectionKey, path ? `${path}.${k}` : k);
+    }
+    return value;
+  }
+  if (typeof value === 'number' && value === -999) {
+    console.warn(`[quality-gate] ${sectionKey}.${path} -999 감지 → 필드 null 처리`);
+    return null;
+  }
+  if (typeof value === 'string' && value.includes('-999')) {
+    console.warn(`[quality-gate] ${sectionKey}.${path} "-999" 문자열 감지 → 필드 빈값 처리`);
+    return '';
+  }
+  return value;
+}
 
 // ── Research gathering (2-phase split) ───────────────────────────────────────
 
@@ -672,19 +726,27 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
     const result = extractJson<T>(raw, sectionKey);
     // ── Quality Gate (Rules 1–3) ──────────────────────────────────────────
     if (result !== null) {
-      // Rule 1: -999 placeholder 감지 → 섹션 null 처리
-      if (JSON.stringify(result).includes('-999')) {
-        console.warn(`[quality-gate] ${sectionKey} -999 감지 → null`);
-        return null;
-      }
-      // Rule 2: 핵심 텍스트 필드가 placeholder이면 섹션 null 처리
+      // Rule 1: -999 placeholder 감지 → 필드 단위 제거 (섹션 전체 폐기 금지)
+      sanitizePlaceholderNumbers(result, sectionKey);
+      // Rule 2: 섹션에 실제 콘텐츠가 하나도 없으면 null 처리 (필드 단위 판정).
+      // 대표 텍스트 필드가 placeholder여도 배열 필드에 콘텐츠가 있으면 섹션은 유지 —
+      // 배열·텍스트 신호가 모두 비어있을 때만 섹션 전체를 폐기한다.
       const r = result as any;
-      const mainText: string | null =
-        r.oneLiner ?? r.narrative ?? r.industry_name ?? r.tech_name ??
-        r.value_flow ?? r.growth_motion_detail ?? r.strategy_coherence ?? null;
-      if (mainText !== null && ['', '확인 필요', 'N/A', 'unknown'].includes(mainText.trim())) {
-        console.warn(`[quality-gate] ${sectionKey} 핵심 텍스트 placeholder → null`);
-        return null;
+      const signals = SECTION_CONTENT_SIGNALS[sectionKey];
+      if (signals) {
+        const hasArrayContent = (signals.arrays ?? []).some(path => {
+          const v = getByPath(r, path);
+          return Array.isArray(v) && v.length > 0;
+        });
+        const hasTextContent = (signals.text ?? []).some(f => !isPlaceholderText(r[f]));
+        if (!hasArrayContent && !hasTextContent) {
+          console.warn(`[quality-gate] ${sectionKey} 콘텐츠 전무 (배열·텍스트 모두 비어있음) → null`);
+          return null;
+        }
+        // 필드 단위 정리: placeholder 텍스트 필드만 빈 문자열로 정규화, 나머지는 그대로 유지
+        for (const f of signals.text ?? []) {
+          if (isPlaceholderText(r[f])) r[f] = '';
+        }
       }
       // Rule 3: sources 배열 비어있음 — 경고만 (전체 중단 금지)
       if (Array.isArray(r.sources) && r.sources.length === 0) {
