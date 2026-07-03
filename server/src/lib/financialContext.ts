@@ -1,7 +1,7 @@
 // Orchestrates DART+KIS / EDGAR+FMP data fetch and formats as Claude prompt context
 
 import { fetchDartData, DartData }                from './dart';
-import { fetchEdgarData, EdgarData, lookupCikByName } from './edgar';
+import { fetchEdgarData, EdgarData, EdgarRawSeries, lookupCikByName } from './edgar';
 import { fetchKisQuote, KisQuote }               from './kis';
 import { fetchFmpData, FmpData, buildFmpContext } from './fmp';
 import { supabase }                              from './supabase';
@@ -99,6 +99,19 @@ function fmpUsd(n: number | undefined | null): string | undefined {
     : `${sign}${(abs / 1_000_000).toFixed(0)}M USD`;
 }
 
+// EDGAR·FMP 둘 다 값이 없을 때, "조회 실패"인지 "이 기업 구조상 원래 존재하지 않는 항목"인지
+// 구분해서 Claude에게 명시 — 안 그러면 Claude가 항상 "확인 필요"로만 반환해 파싱 실패처럼 보임.
+// 대표 사례: Berkshire Hathaway(지주회사) — 보험/철도/투자 등 세그먼트 구조라 SEC XBRL에
+// 연결 OperatingIncomeLoss를 아예 태깅하지 않음(전 연도 null) — 이건 데이터 누락이 아니라
+// 그 기업 재무제표 자체의 구조.
+function structurallyAbsentNote(label: string, rawSeries: EdgarRawSeries | undefined, key: keyof EdgarRawSeries): string | null {
+  const arr = rawSeries?.[key];
+  if (!Array.isArray(arr) || arr.length === 0 || !arr.every(v => v == null)) return null;
+  return `· ${label.padEnd(14)} 해당없음 — 이 기업은 SEC 재무제표에 이 항목을 전 연도에 걸쳐 ` +
+    `별도 태깅하지 않음(지주회사/보험/복합 사업구조 등으로 구조적 미보고 가능성 높음). ` +
+    `데이터 조회 실패가 아니므로 요약 KPI 등에서 "확인 필요" 대신 "해당없음"으로 표기하세요.`;
+}
+
 function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
   const ef = e.financials;
   const fi = fmp?.income?.[0];
@@ -124,7 +137,8 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     const r: (string | null)[] = [
       row('Revenue',        ef.revenue,          fi?.revenue),
       row('Gross Profit',   ef.grossProfit,       fi?.grossProfit),
-      row('Operating Inc.', ef.operatingIncome,   fi?.operatingIncome),
+      row('Operating Inc.', ef.operatingIncome,   fi?.operatingIncome)
+        ?? structurallyAbsentNote('Operating Inc.', e.rawSeries, 'operatingIncome'),
       row('Net Income',     ef.netIncome,         fi?.netIncome),
       row('EBITDA',         ef.ebitda,            fi?.ebitda),
     ];
@@ -151,10 +165,21 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
   }
 
   if (e.rawSeries && e.rawSeries.fiscalYears.length > 1) {
-    lines.push('\n[다년도 매출 추이]');
+    // 매출만 다년도로 주면 Claude가 영업이익/순이익의 과거 연도는 추세로 추측해 "(추정)"을
+    // 붙이게 됨 — 실제 EDGAR 수치인데 추정으로 오분류되는 원인. 세 지표 모두 연도별로 명시.
+    const oiAbsent = e.rawSeries.operatingIncome.every(v => v == null);
+    const niAbsent = e.rawSeries.netIncome.every(v => v == null);
+    const naLabel = (fieldAbsent: boolean) => fieldAbsent ? '해당없음' : '확인 필요';
+    lines.push('\n[다년도 손익 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]');
     e.rawSeries.fiscalYears.forEach((fy, i) => {
-      const v = e.rawSeries!.revenue[i];
-      lines.push(`· ${fy}: ${v != null ? fmpUsd(v) : '—'}`);
+      const rev = e.rawSeries!.revenue[i];
+      const oi  = e.rawSeries!.operatingIncome[i];
+      const ni  = e.rawSeries!.netIncome[i];
+      lines.push(
+        `· ${fy}: Revenue ${rev != null ? fmpUsd(rev) : '확인 필요'}` +
+        `, Operating Inc. ${oi != null ? fmpUsd(oi) : naLabel(oiAbsent)}` +
+        `, Net Income ${ni != null ? fmpUsd(ni) : naLabel(niAbsent)}`
+      );
     });
   }
 

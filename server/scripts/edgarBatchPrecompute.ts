@@ -63,10 +63,16 @@ function extractAnnual(
     .map(([year, { val }]) => ({ year, val }));
 }
 
+// server/src/lib/edgar.ts의 pickConceptSeries와 동일 로직 (이 스크립트는 별도 실행 컨텍스트라
+// 임포트 대신 복제돼 있음) — "처음 매칭되는 concept" 대신 최신 연도/데이터 개수 기준으로 선택.
+// 2026-07-04: Apple이 ASC 606 전환기 옛 concept('Revenues', 2018 단일년)을 그대로 채택하고
+// 실제 다년치가 있는 새 concept(RevenueFromContractWithCustomerExcludingAssessedTax)을
+// 확인하지 않는 버그 발견 후 수정.
 function pickConcept(
   usGaap: Record<string, any>,
   ...names: string[]
 ): Array<{ year: string; val: number }> {
+  let best: Array<{ year: string; val: number }> = [];
   for (const name of names) {
     const concept = usGaap[name];
     if (!concept) continue;
@@ -75,9 +81,13 @@ function pickConcept(
       concept.units?.['USD/shares'] ??
       concept.units?.shares;
     const result = extractAnnual(units);
-    if (result.length > 0) return result;
+    if (result.length === 0) continue;
+    if (best.length === 0 || result[0].year > best[0].year ||
+        (result[0].year === best[0].year && result.length > best.length)) {
+      best = result;
+    }
   }
-  return [];
+  return best;
 }
 
 function fmtUsd(val: number | null): string {
@@ -87,6 +97,16 @@ function fmtUsd(val: number | null): string {
   return abs >= 1_000_000_000
     ? `${sign}${(abs / 1_000_000_000).toFixed(1)}B USD`
     : `${sign}${(abs / 1_000_000).toFixed(0)}M USD`;
+}
+
+// 최신 연도 값 하나만 null인 것과, 전 연도에 걸쳐 그 concept 자체가 없는 것(예: Berkshire
+// Hathaway처럼 지주회사/보험 등 복합 사업구조라 SEC에 연결 OperatingIncomeLoss를 아예
+// 태깅하지 않는 경우)을 구분. 후자는 데이터 조회 실패가 아니라 그 기업 재무제표의 구조이므로
+// "확인 필요"(=파싱/조회 실패로 보임) 대신 "해당없음"으로 명시해 Claude가 오인하지 않게 한다.
+function fmtUsdField(val: number | null, series: (number | null)[]): string {
+  if (val != null) return fmtUsd(val);
+  if (series.length > 0 && series.every(v => v == null)) return '해당없음(구조적 미보고)';
+  return '확인 필요';
 }
 
 async function processCompany(
@@ -167,8 +187,13 @@ async function processCompany(
     ``,
     `[${fiscalYears[0]} 손익계산서]`,
     `· Revenue          ${fmtUsd(revenue[0])}  (EDGAR)`,
-    `· Operating Income ${fmtUsd(operatingIncome[0])}  (EDGAR)`,
+    `· Operating Income ${fmtUsdField(operatingIncome[0], operatingIncome)}  (EDGAR)`,
     `· Net Income       ${fmtUsd(netIncome[0])}  (EDGAR)`,
+    ...(operatingIncome.every(v => v == null)
+      ? [`  (참고: 이 기업은 SEC 재무제표에 영업이익을 전 연도 별도 태깅하지 않음 — ` +
+         `지주회사/보험 등 복합 사업구조로 구조적 미보고 가능성. 데이터 조회 실패 아님 — ` +
+         `요약 KPI 등에서 "확인 필요" 대신 "해당없음"으로 표기할 것)`]
+      : []),
     ``,
     `[재무상태표]`,
     `· Total Assets     ${fmtUsd(assets[0])}  (EDGAR)`,

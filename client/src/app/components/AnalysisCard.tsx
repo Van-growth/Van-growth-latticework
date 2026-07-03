@@ -118,6 +118,11 @@ function DataValue({ text, className = '' }: { text: string | null | undefined; 
   if (str === '확인 필요' || str === '공개 없음') {
     return <span className={`text-gray-400 italic ${className}`}>{str}</span>;
   }
+  // "해당없음" — 조회 실패("확인 필요")가 아니라 그 기업 구조상 존재하지 않는 지표
+  // (예: 지주회사·보험사의 영업이익 미보고). 기울임 없이 구분 표시.
+  if (str === '해당없음') {
+    return <span className={`text-gray-400 ${className}`} title="이 기업 구조상 해당 지표가 보고되지 않음">{str}</span>;
+  }
   if (str.includes('(추정)')) {
     const idx = str.indexOf('(추정)');
     return (
@@ -148,7 +153,7 @@ function FinancialValue({ text, dataSource }: { text: string | null | undefined;
   const tagIsDart  = !tagIsEdgar && tag.includes('DART');
   // 데이터가 없는 셀("확인 필요" 등 placeholder)에는 탭 레벨 dataSource로 폴백하지 않음 —
   // 값이 없는데 공식 출처 배지가 붙으면 실제로 확인된 값처럼 오인됨
-  const isNoData = cleaned === '확인 필요' || cleaned === '공개 없음' || isPlaceholder(cleaned);
+  const isNoData = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || isPlaceholder(cleaned);
   // If value has no explicit tag, fall back to the tab-level dataSource
   const isEdgar = tagIsEdgar || (!match && !isNoData && dataSource === 'edgar');
   const isDart  = tagIsDart  || (!match && !isNoData && dataSource === 'dart');
@@ -167,7 +172,7 @@ function FinancialValue({ text, dataSource }: { text: string | null | undefined;
 
 function MetricCard({ value, label, trend }: { value: string; label: string; trend?: 'up' | 'down' | 'flat' }) {
   const cleaned = cleanMetricValue(value);
-  const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || isPlaceholder(cleaned);
+  const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || isPlaceholder(cleaned);
   const displayValue = isPlaceholder(cleaned) ? '—' : cleaned;
   const trendEl = trend === 'up'
     ? <span className="text-green-500 text-sm font-bold ml-1 leading-none shrink-0">▲</span>
@@ -1817,7 +1822,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
     { label: 'D/E Ratio',     value: f.munger_buffett_metrics.debt_to_equity },
     { label: 'Interest Coverage', value: f.munger_buffett_metrics.interest_coverage },
     { label: 'Reinvestment Rate', value: f.munger_buffett_metrics.reinvestment_rate },
-  ].filter(m => m.value && m.value !== '추정 불가' && m.value !== '확인 필요' && !isPlaceholder(m.value));
+  ].filter(m => m.value && m.value !== '추정 불가' && m.value !== '확인 필요' && m.value !== '해당없음' && !isPlaceholder(m.value));
 
   const cfDots: Record<string, string> = {
     'Operating CF':  'bg-blue-400',

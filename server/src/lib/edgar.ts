@@ -181,10 +181,18 @@ export function extractAnnualSeries(units: XbrlUnit[] | undefined): XbrlAnnualPo
     .map(([year, { val }]) => ({ year, val }));
 }
 
+// 후보 concept 이름들(예: 'Revenues' → 'RevenueFromContractWithCustomerExcludingAssessedTax')은
+// 우선순위가 아니라 회계기준 전환에 따른 동의어 목록 — 예전엔 "처음 매칭되는 concept" 선택이라,
+// ASC 606 전환기(2018년경) 기업 상당수가 옛 concept('Revenues')에 단 1개년(전환 직전)만
+// 태깅된 걸 그대로 채택하고, 실제로 다년치가 있는 새 concept은 아예 확인하지 않는 버그가 있었음
+// (Apple 실측: Revenues=[2018]만 11건, RevenueFromContractWithCustomerExcludingAssessedTax=
+// 2019~2025 37건 — 코드가 전자를 고르고 있었음). 최신 연도 → 데이터 개수 순으로 가장 나은
+// concept을 선택하도록 변경.
 export function pickConceptSeries(
   usGaap: Record<string, any>,
   ...names: string[]
 ): XbrlAnnualPoint[] {
+  let best: XbrlAnnualPoint[] = [];
   for (const name of names) {
     const concept = usGaap[name];
     if (!concept) continue;
@@ -193,9 +201,13 @@ export function pickConceptSeries(
       concept.units?.['USD/shares'] ??
       concept.units?.shares;
     const result = extractAnnualSeries(units);
-    if (result.length > 0) return result;
+    if (result.length === 0) continue;
+    if (best.length === 0 || result[0].year > best[0].year ||
+        (result[0].year === best[0].year && result.length > best.length)) {
+      best = result;
+    }
   }
-  return [];
+  return best;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -276,16 +288,23 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
     const daData   = pickConceptSeries(gaap, 'DepreciationDepletionAndAmortization', 'DepreciationAndAmortization');
     const epsData  = pickConceptSeries(gaap, 'EarningsPerShareBasic');
 
-    // 최신 연도 단일값 — 기존 narrative(financials) 호환용
+    // 최신 연도 단일값 — 기존 narrative(financials) 호환용.
+    // 손익계산서 항목(gp/oi/ni/da)은 revenue와 같은 회계연도인지 검증 후에만 사용 — concept마다
+    // 태깅이 끊긴 시점이 다를 수 있어(예: Berkshire Hathaway는 'OperatingIncomeLoss'를 2012년
+    // 이후로 아예 태깅 안 함), 검증 없이 "최신"을 취하면 13년 전 수치가 "올해" 라벨을 달고
+    // 나가는 사고가 남(2026-07-04 발견 — 5.4% 영업이익률이 실제론 2012년 수치였음).
     const latest = (d: XbrlAnnualPoint[]) => d[0] ?? null;
-    const rev = latest(revData), gp = latest(gpData), oi = latest(oiData), ni = latest(niData);
+    const rev = latest(revData);
+    const anchorYear = rev?.year;
+    const matchYear = (d: XbrlAnnualPoint[]) => (d[0] && d[0].year === anchorYear) ? d[0] : null;
+    const gp = matchYear(gpData), oi = matchYear(oiData), ni = matchYear(niData), da = matchYear(daData);
     const as_ = latest(aData), li = latest(lData), eq = latest(eqData), ca = latest(cashData);
-    const ocf = latest(opCFData), icf = latest(invCFData), fcf = latest(finCFData), da = latest(daData);
+    const ocf = latest(opCFData), icf = latest(invCFData), fcf = latest(finCFData);
 
     if (rev) { financials.revenue = fmtUsd(rev.val); financials.year = rev.year; }
-    if (gp)  { financials.grossProfit = fmtUsd(gp.val); financials.year ??= gp.year; }
-    if (oi)  { financials.operatingIncome = fmtUsd(oi.val); financials.year ??= oi.year; }
-    if (ni)  { financials.netIncome = fmtUsd(ni.val); financials.year ??= ni.year; }
+    if (gp)  financials.grossProfit = fmtUsd(gp.val);
+    if (oi)  financials.operatingIncome = fmtUsd(oi.val);
+    if (ni)  financials.netIncome = fmtUsd(ni.val);
     if (oi && da) financials.ebitda = fmtUsd(oi.val + da.val);
     if (as_) financials.totalAssets = fmtUsd(as_.val);
     if (li)  financials.totalLiabilities = fmtUsd(li.val);
