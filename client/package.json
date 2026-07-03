@@ -26,9 +26,12 @@
     "react-dom": "19.1.0",
     "react-markdown": "^10.1.0",
     "react-window": "^2.2.7",
+    "recharts": "^3.9.1",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  }
 }

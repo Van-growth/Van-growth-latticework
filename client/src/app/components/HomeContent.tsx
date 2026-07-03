@@ -6,6 +6,7 @@ import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { AnalysisDetail, AnalyzeResponse } from '@/types';
+import { getClientId } from '@/lib/clientId';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -54,7 +55,7 @@ const SCAN_MESSAGES = [
   '산업 구조 매핑 중...',
 ];
 
-function AnalysisLoadingScreen({ companyName }: { companyName: string }) {
+function AnalysisLoadingScreen({ companyName, isFirstLookup }: { companyName: string; isFirstLookup: boolean }) {
   const messages = useMemo(() => [
     ...SCAN_MESSAGES,
     `${companyName} 분석 마무리 중...`,
@@ -95,6 +96,12 @@ function AnalysisLoadingScreen({ companyName }: { companyName: string }) {
         {messages[idx]}
       </p>
 
+      {isFirstLookup && (
+        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-3 py-1 mt-3">
+          처음 조회하는 기업이라 조금 더 걸려요
+        </p>
+      )}
+
       {/* Bouncing dots — CSS class 기반 (inline animation 미작동 방지) */}
       <div className="flex gap-2.5 mt-8 items-end h-6">
         <span className="w-2.5 h-2.5 rounded-full bg-blue-400 dot-b1 inline-block" />
@@ -126,9 +133,26 @@ export default function HomeContent() {
   const [toast, setToast] = useState('');
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [reanalyzingTabs, setReanalyzingTabs] = useState<Set<string>>(new Set());
+  const [isFirstLookup, setIsFirstLookup] = useState(false);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{ message: string; nextAvailableAt: string | null } | null>(null);
+  const [usage, setUsage] = useState<{ isPremium: boolean; usedCount: number; limit: number | null } | null>(null);
 
   const loadedIdRef = useRef<string | null>(null);
   const streamingRef = useRef<AnalysisDetail | null>(null);
+
+  async function refreshUsage() {
+    const clientId = getClientId();
+    if (!clientId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/analyze/usage`, { headers: { 'X-Client-Id': clientId } });
+      const data = await res.json();
+      setUsage({ isPremium: data.isPremium, usedCount: data.usedCount, limit: data.limit });
+    } catch {
+      // 카운터 조회 실패는 조용히 무시 — 분석 자체를 막지 않음
+    }
+  }
+
+  useEffect(() => { refreshUsage(); }, []);
 
   useEffect(() => {
     if (result) {
@@ -186,12 +210,15 @@ export default function HomeContent() {
 
     setFetchingId(true);
     setError(null);
-    fetch(`${API_URL}/api/analyses/${urlId}`)
+    const clientId = getClientId();
+    fetch(`${API_URL}/api/analyses/${urlId}`, {
+      headers: clientId ? { 'X-Client-Id': clientId } : undefined,
+    })
       .then(r => r.json())
       .then((data: AnalysisDetail) => {
         setResult(data);
         setAnalysisData(data);
-        setCompletedBatches(new Set([1, 2, 3, 4, 5, 40]));
+        setCompletedBatches(new Set([1, 2, 3, 4, 5, 6, 40]));
         loadedIdRef.current = urlId;
       })
       .catch(() => setError('분석 결과를 불러오지 못했습니다.'))
@@ -242,13 +269,19 @@ export default function HomeContent() {
     setDisplayData(null);
     setProgress(null);
     setIsCached(false);
+    setIsFirstLookup(false);
+    setRateLimitInfo(null);
     setCompletedBatches(new Set([-1])); // sentinel: streaming started, no batch done yet → all tabs show skeleton
     streamingRef.current = null;
 
     try {
+      const clientId = getClientId();
       const res = await fetch(`${API_URL}/api/analyze/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(clientId ? { 'X-Client-Id': clientId } : {}),
+        },
         body: JSON.stringify({ companyName: name, forceRefresh }),
       });
 
@@ -284,7 +317,14 @@ export default function HomeContent() {
           try {
             const payload = JSON.parse(dataStr);
 
-            if (eventType === 'fin_preview') {
+            if (eventType === 'meta') {
+              setIsFirstLookup(!!payload.isFirstLookup);
+
+            } else if (eventType === 'rate_limited') {
+              setRateLimitInfo({ message: payload.message, nextAvailableAt: payload.nextAvailableAt ?? null });
+              refreshUsage();
+
+            } else if (eventType === 'fin_preview') {
               const previewData = payload as Partial<AnalysisDetail>;
               if (!streamingRef.current) {
                 streamingRef.current = Object.assign(emptyBase(name), previewData);
@@ -315,8 +355,9 @@ export default function HomeContent() {
               loadedIdRef.current = normalized.id;
               setResult(normalized);
               setAnalysisData(normalized);
-              setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
+              setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
               if (normalized.id) router.replace(`/?id=${normalized.id}`);
+              refreshUsage();
 
             } else if (eventType === 'error') {
               setError(payload.message || '분석 중 오류가 발생했습니다.');
@@ -402,6 +443,17 @@ export default function HomeContent() {
         </div>
       </form>
 
+      {/* 무료 분석 횟수 카운터 */}
+      {usage && (
+        <div className="flex justify-center mb-6">
+          <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-3 py-1">
+            {usage.isPremium
+              ? '프리미엄 · 무제한 분석'
+              : `최근 7일 무료 분석 ${usage.usedCount}/${usage.limit}회 사용`}
+          </span>
+        </div>
+      )}
+
       {/* Phase 2 progress bar — only shows after batch 1 completes */}
       {loading && progress && completedBatches.has(1) && (
         <div className="max-w-2xl mx-auto mb-6">
@@ -420,7 +472,21 @@ export default function HomeContent() {
 
       {/* Phase 1: full loading screen before summary arrives */}
       {phase1 && !error && (
-        <AnalysisLoadingScreen companyName={companyName.trim() || '기업'} />
+        <AnalysisLoadingScreen companyName={companyName.trim() || '기업'} isFirstLookup={isFirstLookup} />
+      )}
+
+      {/* Rate limit block — 무료 분석 횟수 소진 */}
+      {rateLimitInfo && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-amber-800">{rateLimitInfo.message}</p>
+          <button
+            type="button"
+            className="shrink-0 px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors whitespace-nowrap"
+            onClick={() => showToast('프리미엄 플랜 준비 중입니다')}
+          >
+            프리미엄으로 무제한 이용하기
+          </button>
+        </div>
       )}
 
       {fetchingId && !loading && (
@@ -500,7 +566,7 @@ export default function HomeContent() {
             </div>
           )}
 
-          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} />
+          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} isPremium={usage?.isPremium ?? false} />
         </div>
       )}
 

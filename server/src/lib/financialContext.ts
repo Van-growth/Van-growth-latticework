@@ -13,6 +13,9 @@ export interface FinancialContext {
   contextText: string;
   rawEdgar?:   any;
   rawDart?:    any;
+  // financial_cache(배치 프리컴퓨트) 히트 여부 — false면 EDGAR/DART 라이브 조회로,
+  // 첫 조회 기업일 가능성이 높아 프론트에서 "조금 더 걸려요" 안내에 사용
+  isCacheHit:  boolean;
 }
 
 // 한글 음절이 포함되면 한국 기업으로 판단
@@ -45,6 +48,15 @@ function buildDartContext(d: DartData, kis: KisQuote | null): string {
     if (d.financials.operatingProfit)  lines.push(`· 영업이익:   ${formatKrw(d.financials.operatingProfit)}`);
     if (d.financials.netIncome)        lines.push(`· 당기순이익: ${formatKrw(d.financials.netIncome)}`);
     lines.push('→ 재무 섹션에 이 수치를 우선 사용하고 "(DART 공시)" 출처를 명시하세요.');
+  }
+
+  const trend = d.rawSeries?.cfs ?? d.rawSeries?.ofs;
+  if (trend && trend.fiscalYears.length > 1) {
+    lines.push('\n[다년도 매출 추이]');
+    trend.fiscalYears.forEach((fy, i) => {
+      const v = trend.revenue[i];
+      lines.push(`· ${fy}: ${v != null ? formatKrw(String(v)) : '—'}`);
+    });
   }
 
   // KIS 시세 데이터
@@ -138,6 +150,14 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     lines.push('→ 재무 섹션에 이 수치들을 사용하고 각 출처((EDGAR) 또는 (FMP))를 명시하세요.');
   }
 
+  if (e.rawSeries && e.rawSeries.fiscalYears.length > 1) {
+    lines.push('\n[다년도 매출 추이]');
+    e.rawSeries.fiscalYears.forEach((fy, i) => {
+      const v = e.rawSeries!.revenue[i];
+      lines.push(`· ${fy}: ${v != null ? fmpUsd(v) : '—'}`);
+    });
+  }
+
   // FMP key metrics (valuation)
   if (fmp?.keyMetrics) {
     const km = fmp.keyMetrics;
@@ -184,7 +204,7 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
           .maybeSingle();
         if (cachedDart?.context_text) {
           console.log(`[financialCtx] "${companyName}" → financial_cache HIT DART (${corpRow.stock_code})`);
-          return { source: 'dart', contextText: cachedDart.context_text, rawDart: cachedDart.raw_dart ?? undefined };
+          return { source: 'dart', contextText: cachedDart.context_text, rawDart: cachedDart.raw_dart ?? undefined, isCacheHit: true };
         }
       }
 
@@ -192,7 +212,7 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
       const dart = await fetchDartData(companyName);
       if (dart) {
         const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
-        return { source: 'dart', contextText: buildDartContext(dart, kis) };
+        return { source: 'dart', contextText: buildDartContext(dart, kis), rawDart: dart.rawSeries, isCacheHit: false };
       }
       // DART 실패 시 EDGAR 시도
       const edgar = await fetchEdgarData(companyName);
@@ -200,7 +220,7 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
         const fmpData = edgar.ticker
           ? await fetchFmpData(companyName, edgar.ticker).catch(() => null)
           : null;
-        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData) };
+        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData), rawEdgar: edgar.rawSeries, isCacheHit: false };
       }
     } else {
       // financial_cache 선체크 (EDGAR 배치 프리컴퓨트 데이터)
@@ -218,7 +238,7 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
           .maybeSingle();
         if (cached?.context_text) {
           console.log(`[financialCtx] "${companyName}" → financial_cache HIT EDGAR (${lookupTicker})`);
-          return { source: 'edgar', contextText: cached.context_text, rawEdgar: cached.raw_edgar ?? undefined };
+          return { source: 'edgar', contextText: cached.context_text, rawEdgar: cached.raw_edgar ?? undefined, isCacheHit: true };
         }
       }
 
@@ -237,19 +257,19 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
           ? await fetchFmpData(companyName, e.ticker).catch(() => null)
           : null);
         console.log(`[financialCtx] "${companyName}" → source=edgar (EDGAR+FMP) rev=${e.financials.revenue ?? 'null'}`);
-        return { source: 'edgar', contextText: buildEdgarContext(e, fmpFinal) };
+        return { source: 'edgar', contextText: buildEdgarContext(e, fmpFinal), rawEdgar: e.rawSeries, isCacheHit: false };
       }
       if (f) {
         // EDGAR 없이 FMP만 있는 경우
         console.log(`[financialCtx] "${companyName}" → source=edgar (FMP only)`);
-        return { source: 'edgar', contextText: buildFmpContext(f) };
+        return { source: 'edgar', contextText: buildFmpContext(f), isCacheHit: false };
       }
 
       // EDGAR/FMP 모두 실패 시 DART 시도
       const dart = await fetchDartData(companyName);
       if (dart) {
         const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
-        return { source: 'dart', contextText: buildDartContext(dart, kis) };
+        return { source: 'dart', contextText: buildDartContext(dart, kis), rawDart: dart.rawSeries, isCacheHit: false };
       }
     }
   } catch {
@@ -257,5 +277,5 @@ export async function fetchFinancialContext(companyName: string): Promise<Financ
   }
 
   console.log(`[financialCtx] "${companyName}" → source=web_search (all failed)`);
-  return { source: 'web_search', contextText: '' };
+  return { source: 'web_search', contextText: '', isCacheHit: false };
 }

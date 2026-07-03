@@ -22,7 +22,23 @@ interface SubmissionsData {
   filings: { recent: { form: string[]; filingDate: string[] } };
 }
 
-interface XbrlUnit { form: string; val: number; end: string }
+interface XbrlUnit { form: string; fp?: string; fy?: number; val: number; end: string }
+export interface XbrlAnnualPoint { year: string; val: number }
+
+export interface EdgarRawSeries {
+  ticker: string | null;
+  cik: string;
+  revenue: (number | null)[];
+  netIncome: (number | null)[];
+  operatingIncome: (number | null)[];
+  assets: (number | null)[];
+  liabilities: (number | null)[];
+  equity: (number | null)[];
+  eps: (number | null)[];
+  fiscalYears: string[];
+  filedAt: string;
+  source: 'EDGAR';
+}
 
 export interface EdgarData {
   cik: string;
@@ -44,6 +60,8 @@ export interface EdgarData {
     investingCF?: string;
     financingCF?: string;
   };
+  // 최근 10-K/20-F 최대 4개년 시계열 (fiscalYears[0]이 최신) — buildFinancialsV2FromRaw 등에서 사용
+  rawSeries?: EdgarRawSeries;
 }
 
 // ── cik_master 우선 조회 → EFTS 폴백 ─────────────────────────────────────────
@@ -142,31 +160,42 @@ function fmtUsd(val: number): string {
     : `${sign}${(abs / 1_000_000).toFixed(0)}M USD`;
 }
 
-async function getLatestXbrlValue(
-  cik: string,
-  concepts: string[],
-): Promise<{ value: string; year: string; raw: number } | null> {
-  const candidates: Array<{ val: number; end: string }> = [];
+// 10-K/20-F 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 4개년(최신순).
+export function extractAnnualSeries(units: XbrlUnit[] | undefined): XbrlAnnualPoint[] {
+  if (!units) return [];
 
-  await Promise.allSettled(
-    concepts.map(async (concept) => {
-      const res = await fetchJson<{ units?: { USD?: XbrlUnit[] } }>(
-        `https://data.sec.gov/api/xbrl/companyconcept/CIK${cik}/us-gaap/${concept}.json`,
-        12_000,
-      );
-      const units = res?.units?.USD;
-      if (!units) return;
-      const annual = units
-        .filter((u) => ['10-K', '20-F'].includes(u.form) && u.val !== 0)
-        .sort((a, b) => b.end.localeCompare(a.end));
-      if (annual[0]) candidates.push(annual[0]);
-    }),
-  );
+  const byYear = new Map<string, { val: number; end: string }>();
+  for (const u of units) {
+    if (!['10-K', '20-F'].includes(u.form)) continue;
+    if (u.fp && u.fp !== 'FY') continue;
+    if (u.val == null) continue;
+    const fy = u.fy ? String(u.fy) : u.end?.slice(0, 4);
+    if (!fy) continue;
+    const cur = byYear.get(fy);
+    if (!cur || u.end > cur.end) byYear.set(fy, { val: u.val, end: u.end });
+  }
 
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => b.end.localeCompare(a.end));
-  const v = candidates[0];
-  return { value: fmtUsd(v.val), year: v.end.slice(0, 4), raw: v.val };
+  return Array.from(byYear.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, 4)
+    .map(([year, { val }]) => ({ year, val }));
+}
+
+export function pickConceptSeries(
+  usGaap: Record<string, any>,
+  ...names: string[]
+): XbrlAnnualPoint[] {
+  for (const name of names) {
+    const concept = usGaap[name];
+    if (!concept) continue;
+    const units: XbrlUnit[] | undefined =
+      concept.units?.USD ??
+      concept.units?.['USD/shares'] ??
+      concept.units?.shares;
+    const result = extractAnnualSeries(units);
+    if (result.length > 0) return result;
+  }
+  return [];
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -202,12 +231,16 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
   }
 
   const { cik, name: entityName, ticker } = found;
-  console.log(`[edgar] fetching submissions for CIK ${cik} (${entityName})`);
+  console.log(`[edgar] fetching submissions + companyfacts for CIK ${cik} (${entityName})`);
 
-  // 최근 공시
-  const subRes = await fetchJson<SubmissionsData>(
-    `https://data.sec.gov/submissions/CIK${cik}.json`,
-  );
+  // 최근 공시 + XBRL 전체 팩트(다년도 포함) 병렬 조회
+  const [subRes, factsRes] = await Promise.all([
+    fetchJson<SubmissionsData>(`https://data.sec.gov/submissions/CIK${cik}.json`),
+    fetchJson<{ facts?: { 'us-gaap'?: Record<string, any> } }>(
+      `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
+    ),
+  ]);
+
   if (!subRes) {
     console.log(`[edgar] submissions fetch FAILED for CIK ${cik}`);
     return null;
@@ -224,76 +257,69 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
     }
   }
 
-  // XBRL 재무 — 모든 항목 병렬 조회
-  const [
-    revenueRes, grossProfitRes, opIncomeRes, netIncomeRes,
-    assetsRes, liabRes, equityRes, cashRes,
-    opCFRes, invCFRes, finCFRes, daRes,
-  ] = await Promise.allSettled([
-    getLatestXbrlValue(cik, [
-      'Revenues',
-      'RevenueFromContractWithCustomerExcludingAssessedTax',
-      'SalesRevenueNet',
-    ]),
-    getLatestXbrlValue(cik, ['GrossProfit']),
-    getLatestXbrlValue(cik, ['OperatingIncomeLoss']),
-    getLatestXbrlValue(cik, ['NetIncomeLoss', 'ProfitLoss']),
-    getLatestXbrlValue(cik, ['Assets']),
-    getLatestXbrlValue(cik, ['Liabilities']),
-    getLatestXbrlValue(cik, [
-      'StockholdersEquity',
-      'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
-    ]),
-    getLatestXbrlValue(cik, [
-      'CashAndCashEquivalentsAtCarryingValue',
-      'CashCashEquivalentsAndShortTermInvestments',
-    ]),
-    getLatestXbrlValue(cik, ['NetCashProvidedByUsedInOperatingActivities']),
-    getLatestXbrlValue(cik, ['NetCashProvidedByUsedInInvestingActivities']),
-    getLatestXbrlValue(cik, ['NetCashProvidedByUsedInFinancingActivities']),
-    getLatestXbrlValue(cik, [
-      'DepreciationDepletionAndAmortization',
-      'DepreciationAndAmortization',
-    ]),
-  ]);
+  const gaap = factsRes?.facts?.['us-gaap'];
+  const financials: EdgarData['financials'] = {};
+  let rawSeries: EdgarRawSeries | undefined;
 
-  const get = <T>(r: PromiseSettledResult<T>) =>
-    r.status === 'fulfilled' ? r.value : null;
+  if (gaap) {
+    const revData  = pickConceptSeries(gaap, 'Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet');
+    const gpData   = pickConceptSeries(gaap, 'GrossProfit');
+    const oiData   = pickConceptSeries(gaap, 'OperatingIncomeLoss');
+    const niData   = pickConceptSeries(gaap, 'NetIncomeLoss', 'ProfitLoss');
+    const aData    = pickConceptSeries(gaap, 'Assets');
+    const lData    = pickConceptSeries(gaap, 'Liabilities');
+    const eqData   = pickConceptSeries(gaap, 'StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest');
+    const cashData = pickConceptSeries(gaap, 'CashAndCashEquivalentsAtCarryingValue', 'CashCashEquivalentsAndShortTermInvestments');
+    const opCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInOperatingActivities');
+    const invCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInInvestingActivities');
+    const finCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInFinancingActivities');
+    const daData   = pickConceptSeries(gaap, 'DepreciationDepletionAndAmortization', 'DepreciationAndAmortization');
+    const epsData  = pickConceptSeries(gaap, 'EarningsPerShareBasic');
 
-  const revenue       = get(revenueRes);
-  const grossProfit   = get(grossProfitRes);
-  const opIncome      = get(opIncomeRes);
-  const netIncome     = get(netIncomeRes);
-  const assets        = get(assetsRes);
-  const liab          = get(liabRes);
-  const equity        = get(equityRes);
-  const cash          = get(cashRes);
-  const opCF          = get(opCFRes);
-  const invCF         = get(invCFRes);
-  const finCF         = get(finCFRes);
-  const da            = get(daRes);
+    // 최신 연도 단일값 — 기존 narrative(financials) 호환용
+    const latest = (d: XbrlAnnualPoint[]) => d[0] ?? null;
+    const rev = latest(revData), gp = latest(gpData), oi = latest(oiData), ni = latest(niData);
+    const as_ = latest(aData), li = latest(lData), eq = latest(eqData), ca = latest(cashData);
+    const ocf = latest(opCFData), icf = latest(invCFData), fcf = latest(finCFData), da = latest(daData);
 
-  // EBITDA: OperatingIncome + D&A 계산
-  let ebitda: string | undefined;
-  if (opIncome?.raw != null && da?.raw != null) {
-    ebitda = fmtUsd(opIncome.raw + da.raw);
+    if (rev) { financials.revenue = fmtUsd(rev.val); financials.year = rev.year; }
+    if (gp)  { financials.grossProfit = fmtUsd(gp.val); financials.year ??= gp.year; }
+    if (oi)  { financials.operatingIncome = fmtUsd(oi.val); financials.year ??= oi.year; }
+    if (ni)  { financials.netIncome = fmtUsd(ni.val); financials.year ??= ni.year; }
+    if (oi && da) financials.ebitda = fmtUsd(oi.val + da.val);
+    if (as_) financials.totalAssets = fmtUsd(as_.val);
+    if (li)  financials.totalLiabilities = fmtUsd(li.val);
+    if (eq)  financials.totalEquity = fmtUsd(eq.val);
+    if (ca)  financials.cash = fmtUsd(ca.val);
+    if (ocf) financials.operatingCF = fmtUsd(ocf.val);
+    if (icf) financials.investingCF = fmtUsd(icf.val);
+    if (fcf) financials.financingCF = fmtUsd(fcf.val);
+
+    // 다년도 시계열 (최대 4개년, 매출 기준 회계연도 정렬 — 없으면 순이익 기준)
+    const fiscalYears = revData.length > 0 ? revData.map(d => d.year) : niData.map(d => d.year);
+    if (fiscalYears.length > 0) {
+      const align = (series: XbrlAnnualPoint[]) => {
+        const m = new Map(series.map(d => [d.year, d.val]));
+        return fiscalYears.map(y => m.get(y) ?? null);
+      };
+      rawSeries = {
+        ticker,
+        cik: `CIK${cik}`,
+        revenue: align(revData),
+        netIncome: align(niData),
+        operatingIncome: align(oiData),
+        assets: align(aData),
+        liabilities: align(lData),
+        equity: align(eqData),
+        eps: align(epsData),
+        fiscalYears,
+        filedAt: new Date().toISOString(),
+        source: 'EDGAR',
+      };
+    }
   }
 
-  const financials: EdgarData['financials'] = {};
-  if (revenue)      { financials.revenue = revenue.value;             financials.year = revenue.year; }
-  if (grossProfit)  { financials.grossProfit = grossProfit.value;     financials.year ??= grossProfit.year; }
-  if (opIncome)     { financials.operatingIncome = opIncome.value;    financials.year ??= opIncome.year; }
-  if (netIncome)    { financials.netIncome = netIncome.value;         financials.year ??= netIncome.year; }
-  if (ebitda)         financials.ebitda = ebitda;
-  if (assets)         financials.totalAssets = assets.value;
-  if (liab)           financials.totalLiabilities = liab.value;
-  if (equity)         financials.totalEquity = equity.value;
-  if (cash)           financials.cash = cash.value;
-  if (opCF)           financials.operatingCF = opCF.value;
-  if (invCF)          financials.investingCF = invCF.value;
-  if (finCF)          financials.financingCF = finCF.value;
+  console.log(`[edgar] XBRL result for "${companyName}" (CIK ${cik}): rev=${financials.revenue ?? 'null'} opInc=${financials.operatingIncome ?? 'null'} netInc=${financials.netIncome ?? 'null'} year=${financials.year ?? 'null'} years=${rawSeries?.fiscalYears.length ?? 0}`);
 
-  console.log(`[edgar] XBRL result for "${companyName}" (CIK ${cik}): rev=${revenue?.value ?? 'null'} opInc=${opIncome?.value ?? 'null'} netInc=${netIncome?.value ?? 'null'} year=${financials.year ?? 'null'}`);
-
-  return { cik, companyName: entityName, ticker, filings, financials };
+  return { cik, companyName: entityName, ticker, filings, financials, rawSeries };
 }

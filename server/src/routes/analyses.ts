@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomBytes } from 'crypto';
 import { supabase } from '../lib/supabase';
 import { refreshFinancials } from '../lib/claude';
+import { isPremiumUser } from '../lib/premium';
 
 const router = Router();
 
@@ -35,6 +36,8 @@ router.get('/', async (_req: Request, res: Response) => {
 // GET /api/analyses/:id  — full detail
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
+  const isPremium = isPremiumUser(clientId);
 
   try {
     const [analysisRes, playersRes] = await Promise.all([
@@ -91,6 +94,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       strategy_v2:         row.strategy_v2         ?? null,
       financials_v2:       row.financials_v2        ?? null,
       founder_v2:          row.founder_v2           ?? null,
+      growth_scenario_v2:  isPremium ? (row.growth_scenario_v2 ?? null) : null,
     });
   } catch (err) {
     console.error('[GET /api/analyses/:id]', err);

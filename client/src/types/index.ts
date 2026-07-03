@@ -399,6 +399,26 @@ export interface FounderV2 {
   sources?: Source[];
 }
 
+// ── Growth Scenario (몬테카를로, 프리미엄 전용) ─────────────────────────────────
+
+export interface GrowthScenarioV2 {
+  // 상장사 자체 시계열(high) 시 존재, 섹터 벤치마크(low) 폴백 시 null
+  series: { year: number; revenue: number }[] | null;
+  stats: { mean: number; stdDev: number; dataPoints: number } | { mean: number; stdDev: number; sampleSize: number };
+  simulation: {
+    p10: number[];
+    p50: number[];
+    p90: number[];
+    histogram: number[];
+    finalYearDistribution: number[];
+  };
+  currency: 'KRW' | 'USD';
+  source: 'EDGAR' | 'DART' | 'SECTOR_BENCHMARK';
+  sectorTag?: string;
+  confidenceLevel: 'high' | 'low';
+  narrative?: string | null;
+}
+
 // ── Common ────────────────────────────────────────────────────────────────────
 
 export interface AnalysisSummary {
@@ -438,6 +458,7 @@ export interface AnalysisDetail {
   strategy_v2?: StrategyV2;
   financials_v2?: FinancialsV2;
   founder_v2?: FounderV2;
+  growth_scenario_v2?: GrowthScenarioV2 | null;
   // Meta
   sources: AnalysisSources;
   dataSource?: DataSource;

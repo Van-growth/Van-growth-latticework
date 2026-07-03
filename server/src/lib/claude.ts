@@ -963,6 +963,62 @@ export async function reanalyzeSingleSection(
   return callSection(context, sectionKey);
 }
 
+// ── Growth scenario narrative (몬테카를로 시뮬레이션 결과 한줄 해석) ──────────
+
+export interface GrowthScenarioForNarrative {
+  simulation: { p10: number[]; p50: number[]; p90: number[] };
+  confidenceLevel: 'high' | 'low';
+  currency: 'KRW' | 'USD';
+  sectorTag?: string;
+}
+
+const GROWTH_SCENARIO_NARRATIVE_SYSTEM = `당신은 BD·세일즈·전략 담당자를 위한 기업 분석가입니다.
+아래 몬테카를로 매출 성장 시뮬레이션 결과를 바탕으로 1~2문장의 핵심 해석을 작성하세요.
+
+규칙:
+- "기업가치", "밸류에이션", "투자 수익률", "주가" 등 투자자 언어 절대 금지.
+- 파트너십·거래·영업 의사결정 관점에서 서술 (예: "이 기업과 거래 시 예상되는 매출 성장 범위는...").
+- 신뢰도가 낮은(low) 경우 "동종업계 벤치마크 기반 추정치"라는 뉘앙스를 문장에 반드시 포함할 것 —
+  이 기업 자체의 공식 재무 데이터가 아니라는 점을 숨기지 말 것.
+- 마크다운·따옴표·불릿 없이 순수 텍스트 1~2문장만 출력.`;
+
+function formatScenarioForPrompt(currency: 'KRW' | 'USD', simulation: GrowthScenarioForNarrative['simulation']): string {
+  const fmt = (v: number) =>
+    currency === 'KRW' ? `${(v / 100_000_000).toFixed(0)}억원` : `${(v / 1_000_000).toFixed(0)}M USD`;
+  return simulation.p50
+    .map((_, y) => `Year+${y + 1}: 보수적 ${fmt(simulation.p10[y])} / 예상 ${fmt(simulation.p50[y])} / 낙관 ${fmt(simulation.p90[y])}`)
+    .join('\n');
+}
+
+export async function generateGrowthScenarioNarrative(
+  companyName: string,
+  scenario: GrowthScenarioForNarrative,
+): Promise<string | null> {
+  const { simulation, confidenceLevel, currency, sectorTag } = scenario;
+
+  const userPrompt = `기업명: ${companyName}
+신뢰도: ${confidenceLevel === 'high' ? '자체 공식 재무 시계열 기반' : `동종업계(${sectorTag ?? '섹터'}) 벤치마크 기반 추정`}
+${formatScenarioForPrompt(currency, simulation)}`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 300,
+      system: GROWTH_SCENARIO_NARRATIVE_SYSTEM,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('')
+      .trim();
+    return text || null;
+  } catch (err) {
+    console.error('[claude] growth_scenario narrative FAIL', err);
+    return null;
+  }
+}
+
 export async function selectDailyCompany(): Promise<string> {
   const systemPrompt = `당신은 기업 분석 전문가입니다. 오늘 분석하기에 흥미로운 글로벌 또는 한국 기업 하나를 선정하세요.
 최신 뉴스, 트렌드, 업계 이슈를 고려하여 선정하고, 기업명만 응답하세요. 설명 없이 기업명만.`;

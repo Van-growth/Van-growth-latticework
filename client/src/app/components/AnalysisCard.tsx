@@ -6,8 +6,12 @@ import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
+  TrendingUp, Lock,
 } from 'lucide-react';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
+import {
+  ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar,
+} from 'recharts';
 import {
   AnalysisDetail,
   Metric,
@@ -29,6 +33,7 @@ import {
   FinancialsV2,
   FinancialsV2Row,
   FounderV2,
+  GrowthScenarioV2,
 } from '@/types';
 
 // ── Country flag map ─────────────────────────────────────────────────────────
@@ -2391,6 +2396,138 @@ function FounderSkeleton() {
   );
 }
 
+// ── Growth Scenario (몬테카를로, 프리미엄 전용) ─────────────────────────────────
+
+function fmtGrowthRevenue(v: number, currency: 'KRW' | 'USD'): string {
+  const abs = Math.abs(v);
+  if (currency === 'KRW') {
+    if (abs >= 1_000_000_000_000) return `${(v / 1_000_000_000_000).toFixed(1)}조원`;
+    if (abs >= 100_000_000)       return `${(v / 100_000_000).toFixed(0)}억원`;
+    return `${Math.round(v).toLocaleString()}원`;
+  }
+  const b = abs / 1_000_000_000;
+  return b >= 1 ? `${(v / 1_000_000_000).toFixed(1)}B USD` : `${(v / 1_000_000).toFixed(0)}M USD`;
+}
+
+const SCENARIO_LABEL = { p10: '보수적 시나리오', p50: '예상 시나리오', p90: '낙관적 시나리오' } as const;
+
+function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
+  const years = g.simulation.p50.length;
+  const stats = g.stats;
+  // 구버전 캐시(growth_scenario_v2에 confidenceLevel 필드가 없던 시절 저장분) 호환 —
+  // 필드가 없으면 stats 모양(sampleSize 유무)으로 유추
+  const isHigh = g.confidenceLevel ? g.confidenceLevel === 'high' : !('sampleSize' in stats);
+  const sampleLabel = 'sampleSize' in stats
+    ? `${g.sectorTag ?? '섹터'} 동종업계 벤치마크 ${stats.sampleSize}개사`
+    : `자체 공식 재무 시계열 ${stats.dataPoints + 1}개년`;
+
+  const lineData = Array.from({ length: years }, (_, i) => ({
+    year: `Year+${i + 1}`,
+    p10: g.simulation.p10[i],
+    p50: g.simulation.p50[i],
+    p90: g.simulation.p90[i],
+  }));
+  const histData = g.simulation.histogram.map((count, i) => ({ bin: i, count }));
+
+  return (
+    <div className="space-y-6">
+      {/* 핵심 요약 블록 — 신뢰도 배지 + 해석 문장 */}
+      <div className="bg-black text-white rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isHigh ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+            {isHigh ? '🟢 공식' : '🟡 참고'}
+          </span>
+          <span className="text-[11px] text-gray-400">{sampleLabel} 기반</span>
+        </div>
+        <p className="text-sm leading-relaxed">
+          {g.narrative ?? '몬테카를로 시뮬레이션(1만회) 기반 매출 성장 시나리오입니다.'}
+        </p>
+      </div>
+
+      {!isHigh && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          이 기업의 공식 재무 데이터가 부족해 동종업계 벤치마크 기반 추정치를 사용했어요. 실제 편차는 더 클 수 있습니다.
+        </p>
+      )}
+
+      {/* 라인 + 신뢰구간 밴드 차트 */}
+      <div>
+        <h4 className="text-sm font-semibold text-gray-700 mb-3">연도별 매출 시나리오</h4>
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={lineData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="year" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis domain={['auto', 'auto']} tickFormatter={(v: number) => fmtGrowthRevenue(v, g.currency)} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={70} />
+              <Tooltip formatter={(value) => fmtGrowthRevenue(Number(value), g.currency)} />
+              <Line type="monotone" dataKey="p90" stroke="#93c5fd" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3, fill: '#93c5fd' }} name={SCENARIO_LABEL.p90} />
+              <Line type="monotone" dataKey="p50" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4, fill: '#2563eb' }} name={SCENARIO_LABEL.p50} />
+              <Line type="monotone" dataKey="p10" stroke="#93c5fd" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3, fill: '#93c5fd' }} name={SCENARIO_LABEL.p10} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex items-center gap-4 mt-2 text-[11px] text-gray-400">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />{SCENARIO_LABEL.p50}</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-200 inline-block" />{SCENARIO_LABEL.p10} ~ {SCENARIO_LABEL.p90} 범위</span>
+        </div>
+      </div>
+
+      <div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-gray-400 text-xs border-b border-gray-200">
+              <th className="text-left py-2">연차</th>
+              <th className="text-right py-2">{SCENARIO_LABEL.p10}</th>
+              <th className="text-right py-2">{SCENARIO_LABEL.p50}</th>
+              <th className="text-right py-2">{SCENARIO_LABEL.p90}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lineData.map((row, i) => (
+              <tr key={i} className="border-b border-gray-100">
+                <td className="py-2 text-gray-600">{row.year}</td>
+                <td className="py-2 text-right text-gray-500">{fmtGrowthRevenue(g.simulation.p10[i], g.currency)}</td>
+                <td className="py-2 text-right font-medium text-gray-900">{fmtGrowthRevenue(g.simulation.p50[i], g.currency)}</td>
+                <td className="py-2 text-right text-gray-500">{fmtGrowthRevenue(g.simulation.p90[i], g.currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-gray-700 mb-3">최종 연도 매출 분포</h4>
+        <div className="h-24">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={histData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+              <Bar dataKey="count" fill="#93c5fd" radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-gray-400">
+        {isHigh ? '🟢 공식' : '🟡 참고'} — {sampleLabel} 기반 통계적 시뮬레이션이며, 실제 미래 실적을 보장하지 않습니다.
+      </p>
+    </div>
+  );
+}
+
+function GrowthScenarioLocked() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+      <Lock size={28} className="text-gray-300" />
+      <p className="text-sm text-gray-500">성장 시나리오는 프리미엄 전용 기능이에요</p>
+      <button
+        type="button"
+        className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+      >
+        프리미엄으로 업그레이드
+      </button>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -2403,6 +2540,7 @@ const TABS = [
   { key: 'strategy',         label: '전략',         icon: Target,     tooltip: '앞으로의 성장 전략을 확인할 수 있어요' },
   { key: 'financials',       label: '재무',         icon: BarChart2,  tooltip: '매출, 이익, 현금흐름 등 재무 데이터를 확인할 수 있어요' },
   { key: 'founder',          label: '창업자',       icon: User,       tooltip: '창업자 배경과 이력을 확인할 수 있어요' },
+  { key: 'growth_scenario',  label: '성장 시나리오', icon: TrendingUp, tooltip: '몬테카를로 시뮬레이션 기반 매출 성장 시나리오를 확인할 수 있어요 (프리미엄)' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -2417,12 +2555,14 @@ const TAB_BATCH: Record<TabKey, number> = {
   strategy:         3,
   financials:       40,
   founder:          5,
+  growth_scenario:  6,
 };
 
-function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze }: {
+function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
+  isPremium?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>('summary');
   const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
@@ -2522,6 +2662,11 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze }: {
             >
               <Icon size={12} />
               {t.label}
+              {t.key === 'growth_scenario' && !isPremium && (
+                <span className="text-[9px] font-bold text-amber-500 bg-amber-50 border border-amber-200 rounded px-1 py-[1px] ml-0.5 leading-none">
+                  PRO
+                </span>
+              )}
               {isWaiting && (
                 <span className="flex gap-[2px] items-center ml-0.5" aria-hidden>
                   {[0,1,2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
@@ -2606,6 +2751,13 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze }: {
           data.founder_v2
             ? <FounderV2Tab f={data.founder_v2} />
             : <>{reanalyzeBtn('founder')}<p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>
+        )}
+        {tab === 'growth_scenario' && (
+          !isPremium ? <GrowthScenarioLocked /> :
+          !batchDone(TAB_BATCH.growth_scenario) ? <CardsSkeleton count={3} /> :
+          data.growth_scenario_v2
+            ? <GrowthScenarioV2Tab g={data.growth_scenario_v2} />
+            : <p className="text-sm text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>
         )}
       </div>
     </div>

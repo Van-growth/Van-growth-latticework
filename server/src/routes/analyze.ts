@@ -1,9 +1,77 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
-import { analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, reanalyzeSingleSection } from '../lib/claude';
+import {
+  analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, reanalyzeSingleSection,
+  generateGrowthScenarioNarrative,
+} from '../lib/claude';
 import { fetchFinancialContext } from '../lib/financialContext';
+import {
+  extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
+} from '../services/monteCarloService';
+import { isPremiumUser } from '../lib/premium';
+import { checkAnalysisUsage, recordAnalysisUsage } from '../lib/analysisUsage';
 
 const router = Router();
+
+// ── 3차: 몬테카를로 성장 시나리오 (revenue_history 확보 시에만) ─────────────────
+
+// 1순위: 상장사(EDGAR/DART) 자체 매출 시계열 — 신뢰도 high
+function computeOwnGrowthScenario(rawEdgar: any, rawDart: any): Record<string, any> | null {
+  const source: 'EDGAR' | 'DART' | null = rawDart ? 'DART' : rawEdgar ? 'EDGAR' : null;
+  if (!source) return null;
+
+  const series = extractRevenueTimeSeries(rawDart ?? rawEdgar, source);
+  if (!series) return null;
+  const stats = calculateGrowthStats(series);
+  if (!stats) return null;
+
+  const baseRevenue = series[series.length - 1].revenue;
+  const simulation  = runRevenueSimulation({ baseRevenue, mean: stats.mean, stdDev: stats.stdDev });
+
+  return { series, stats, simulation, currency: source === 'DART' ? 'KRW' : 'USD', source, confidenceLevel: 'high' as const };
+}
+
+// 2순위: 상장 정보/자체 시계열이 없는 기업 — sectorTag + baseRevenue(둘 다 필요) 기반
+// 섹터 벤치마크 성장률로 시뮬레이션. 신뢰도 low. UI에서 업종 선택을 아직 안 붙였으므로
+// 현재는 요청 body의 sectorTag/baseRevenue 파라미터로만 트리거된다.
+async function computeSectorBenchmarkScenario(
+  sectorTag: string | undefined,
+  manualBaseRevenue: number | undefined,
+): Promise<Record<string, any> | null> {
+  if (!sectorTag || !manualBaseRevenue || manualBaseRevenue <= 0) return null;
+
+  const benchmark = await getSectorBenchmarkStats(sectorTag);
+  if (!benchmark) return null;
+
+  const simulation = runRevenueSimulation({ baseRevenue: manualBaseRevenue, mean: benchmark.mean, stdDev: benchmark.stdDev });
+
+  return {
+    series: null,
+    stats: benchmark,
+    simulation,
+    currency: 'USD',
+    source: 'SECTOR_BENCHMARK' as const,
+    sectorTag,
+    confidenceLevel: 'low' as const,
+  };
+}
+
+// 라우트 분기: 자체 시계열 우선, 없으면 섹터 벤치마크로 폴백. 둘 다 없으면 null(탭 데이터 없음).
+// 시뮬레이션 결과가 나오면 Claude로 한줄 해석(narrative)을 붙인다 — 실패해도 시뮬레이션 자체는 반환.
+async function computeGrowthScenario(
+  companyName: string,
+  rawEdgar: any,
+  rawDart: any,
+  sectorTag?: string,
+  manualBaseRevenue?: number,
+): Promise<Record<string, any> | null> {
+  const own = computeOwnGrowthScenario(rawEdgar, rawDart);
+  const scenario = own ?? await computeSectorBenchmarkScenario(sectorTag, manualBaseRevenue);
+  if (!scenario) return null;
+
+  const narrative = await generateGrowthScenarioNarrative(companyName, scenario as any);
+  return { ...scenario, narrative };
+}
 
 // ── financial_cache → FinancialsV2 변환 (배치 프리컴퓨트 raw 데이터 → 표시용 구조체) ──
 
@@ -132,8 +200,10 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
 function buildDonePayload(
   data: any,
   companyName: string,
-  meta: { cached: boolean; analysisId: string | null; createdAt: string; dataSource: string },
+  meta: { cached: boolean; analysisId: string | null; createdAt: string; dataSource: string; growthScenario?: Record<string, any> | null; isPremium: boolean },
 ) {
+  // 성장 시나리오는 계산/저장은 항상 수행하되, 응답 페이로드는 프리미엄 유저에게만 포함
+  const growthScenarioOut = meta.isPremium ? (meta.growthScenario ?? data.growth_scenario_v2 ?? null) : null;
   return {
     analysisId:   meta.analysisId,
     companyName,
@@ -159,6 +229,7 @@ function buildDonePayload(
     strategy_v2:         data.strategy_v2          ?? null,
     financials_v2:       data.financials_v2        ?? null,
     founder_v2:          data.founder_v2           ?? null,
+    growth_scenario_v2:  growthScenarioOut,
     dataSource:          meta.dataSource,
   };
 }
@@ -270,10 +341,31 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /api/analyze/usage — 무료 분석 횟수 조회 (분석 실행 없이 카운터 표시용) ──
+
+router.get('/usage', async (req: Request, res: Response) => {
+  const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
+  if (isPremiumUser(clientId)) {
+    res.json({ isPremium: true, usedCount: 0, limit: null, nextAvailableAt: null });
+    return;
+  }
+  const usage = await checkAnalysisUsage(clientId);
+  res.json({ isPremium: false, usedCount: usage.usedCount, limit: 2, nextAvailableAt: usage.nextAvailableAt ?? null });
+});
+
 // ── Streaming POST /api/analyze/stream ───────────────────────────────────────
 
 router.post('/stream', async (req: Request, res: Response) => {
-  const { companyName, forceRefresh } = req.body as { companyName?: string; forceRefresh?: boolean };
+  const { companyName, forceRefresh, sectorTag, baseRevenue } = req.body as {
+    companyName?: string;
+    forceRefresh?: boolean;
+    // 상장 정보/자체 매출 시계열이 없는 기업의 몬테카를로 폴백용 (섹터 벤치마크).
+    // 업종 선택 UI가 아직 없어 우선 요청 파라미터로 받는다 — 둘 다 있어야 사용됨.
+    sectorTag?: string;
+    baseRevenue?: number;
+  };
+  const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
+  const isPremium = isPremiumUser(clientId);
 
   if (!companyName?.trim()) {
     res.status(400).json({ error: '기업명을 입력해주세요.' });
@@ -292,6 +384,25 @@ router.post('/stream', async (req: Request, res: Response) => {
     if (!res.writableEnded) {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     }
+  };
+
+  // 신규 분석/강제 재분석 시에만 카운트 (캐시 그대로 보여주는 경우는 카운트 제외).
+  // 차단되면 'rate_limited' 이벤트를 보내고 스트림을 종료한다.
+  const checkAndRecordUsage = async (): Promise<boolean> => {
+    if (isPremium) return true;
+    const usage = await checkAnalysisUsage(clientId);
+    if (!usage.allowed) {
+      const nextDate = usage.nextAvailableAt ? usage.nextAvailableAt.slice(0, 10) : '';
+      send('rate_limited', {
+        message: `최근 7일간 무료 분석 2회를 모두 사용했어요. 다음 사용 가능 시점: ${nextDate}. 프리미엄으로 무제한 이용하기`,
+        usedCount: usage.usedCount,
+        nextAvailableAt: usage.nextAvailableAt,
+      });
+      res.end();
+      return false;
+    }
+    await recordAnalysisUsage(clientId, name);
+    return true;
   };
 
   try {
@@ -333,7 +444,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     if (!forceRefresh) {
       const { data: cached } = await supabase
         .from('analyses')
-        .select('id, created_at, summary_v2, industry_history_v2, tech_evolution_v2, value_chain_v2, business_model_v2, competitors_v2, strategy_v2, financials_v2, founder_v2, sources, data_source')
+        .select('id, created_at, summary_v2, industry_history_v2, tech_evolution_v2, value_chain_v2, business_model_v2, competitors_v2, strategy_v2, financials_v2, founder_v2, growth_scenario_v2, sources, data_source')
         .eq('company_id', company.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -389,7 +500,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           send('done', buildDonePayload(
             { ...cached, financials_v2: effectiveFinancials },
             name,
-            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource },
+            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium },
           ));
           return res.end();
         }
@@ -412,7 +523,10 @@ router.post('/stream', async (req: Request, res: Response) => {
         if (b4) sendCached(4, { financials_v2: cached.financials_v2, sources: cached.sources ?? {} });
         if (b5) sendCached(5, { founder_v2: cached.founder_v2 });
 
-        const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name);
+        if (!(await checkAndRecordUsage())) return;
+
+        const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name);
+        send('meta', { isFirstLookup: !isCacheHit });
         const useCachedFin = !skipBatches.has(4) ? cachedFinancials : undefined;
 
         // fin_preview: send financials immediately from raw cache if batch 4 hasn't loaded yet
@@ -448,18 +562,34 @@ router.post('/stream', async (req: Request, res: Response) => {
 
         if (analysis.sources) await saveSources(cached.id, name, analysis.sources);
 
+        // 3차: 2차(batch2-5) 완료 후 revenue_history 확보 시에만 몬테카를로 트리거
+        // 계산/DB 저장은 항상 수행 — 프리미엄 여부와 무관하게 데이터는 준비해둔다.
+        const growthScenario = cached.growth_scenario_v2 ?? await computeGrowthScenario(name, rawEdgar, rawDart, sectorTag, baseRevenue);
+        if (growthScenario && !cached.growth_scenario_v2) {
+          await supabase.from('analyses').update({ growth_scenario_v2: growthScenario }).eq('id', cached.id);
+        }
+        // SSE 전송은 프리미엄 유저에게만 — 무료 유저는 이 이벤트 자체를 받지 않는다.
+        if (growthScenario && isPremium) {
+          send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: completedCount, total: 5, analysisId: cached.id });
+        }
+
         send('done', buildDonePayload(analysis, name, {
           cached: false,
           analysisId: cached.id,
           createdAt:  cached.created_at,
           dataSource: dataSource ?? cached.data_source ?? 'web_search',
+          growthScenario,
+          isPremium,
         }));
         return res.end();
       }
     }
 
     // 4. No cache — full analysis with per-batch DB saves
-    const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name);
+    if (!(await checkAndRecordUsage())) return;
+
+    const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name);
+    send('meta', { isFirstLookup: !isCacheHit });
 
     // fin_preview: show financials immediately from raw/cached data if available
     {
@@ -530,11 +660,24 @@ router.post('/stream', async (req: Request, res: Response) => {
 
     if (savedId && analysis.sources) await saveSources(savedId, name, analysis.sources);
 
+    // 3차: 2차(batch2-5) 완료 후 revenue_history 확보 시에만 몬테카를로 트리거
+    // 계산/DB 저장은 항상 수행 — 프리미엄 여부와 무관하게 데이터는 준비해둔다.
+    const growthScenario = await computeGrowthScenario(name, rawEdgar, rawDart, sectorTag, baseRevenue);
+    if (growthScenario && savedId) {
+      await supabase.from('analyses').update({ growth_scenario_v2: growthScenario }).eq('id', savedId);
+    }
+    // SSE 전송은 프리미엄 유저에게만 — 무료 유저는 이 이벤트 자체를 받지 않는다.
+    if (growthScenario && savedId && isPremium) {
+      send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: batchCount, total: 5, analysisId: savedId });
+    }
+
     send('done', buildDonePayload(analysis, name, {
       cached:     false,
       analysisId: savedId,
       createdAt:  savedAt ?? new Date().toISOString(),
       dataSource,
+      growthScenario,
+      isPremium,
     }));
     res.end();
 

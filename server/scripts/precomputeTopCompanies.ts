@@ -11,8 +11,8 @@ const DELAY_MS    = 5_000;   // Claude API 과부하 방지 딜레이 (새 분�
 const FETCH_TIMEOUT_MS = 120_000; // 분석 1회 최대 대기
 
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-if (!supabaseUrl || !supabaseKey) throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // RLS 우회 필요 — anon key로는 쓰기 작업이 막힘
+if (!supabaseUrl || !supabaseKey) throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 function sleep(ms: number): Promise<void> {
