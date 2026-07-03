@@ -393,19 +393,21 @@ router.post('/stream', async (req: Request, res: Response) => {
   };
 
   // 신규 분석/강제 재분석 시에만 카운트 (캐시 그대로 보여주는 경우는 카운트 제외).
+  // 프리미엄 유저도 기록은 남긴다(추후 사용량 분석/과금 근거용) — 제한 체크만 스킵.
   // 차단되면 'rate_limited' 이벤트를 보내고 스트림을 종료한다.
   const checkAndRecordUsage = async (): Promise<boolean> => {
-    if (isPremium) return true;
-    const usage = await checkAnalysisUsage(usageUserId);
-    if (!usage.allowed) {
-      const nextDate = usage.nextAvailableAt ? usage.nextAvailableAt.slice(0, 10) : '';
-      send('rate_limited', {
-        message: `최근 7일간 무료 분석 2회를 모두 사용했어요. 다음 사용 가능 시점: ${nextDate}. 프리미엄으로 무제한 이용하기`,
-        usedCount: usage.usedCount,
-        nextAvailableAt: usage.nextAvailableAt,
-      });
-      res.end();
-      return false;
+    if (!isPremium) {
+      const usage = await checkAnalysisUsage(usageUserId);
+      if (!usage.allowed) {
+        const nextDate = usage.nextAvailableAt ? usage.nextAvailableAt.slice(0, 10) : '';
+        send('rate_limited', {
+          message: `최근 7일간 무료 분석 2회를 모두 사용했어요. 다음 사용 가능 시점: ${nextDate}. 프리미엄으로 무제한 이용하기`,
+          usedCount: usage.usedCount,
+          nextAvailableAt: usage.nextAvailableAt,
+        });
+        res.end();
+        return false;
+      }
     }
     await recordAnalysisUsage(usageUserId, name);
     return true;
