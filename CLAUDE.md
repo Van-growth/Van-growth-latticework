@@ -490,6 +490,16 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
    client의 중복 키 제거로 정리
 4. next.config.ts에 보안 헤더 전무 → CSP(prod 한정)/X-Frame-Options/
    X-Content-Type-Options/HSTS/Referrer-Policy/Permissions-Policy 추가
+5. (2026-07-04, 긴급) 위 4번 CSP의 `script-src 'self'`가 Next.js App Router의
+   hydration용 inline script를 차단해 프로덕션 화면이 완전히 안 뜨는 장애 발생
+   ("Executing inline script violates CSP" 콘솔 에러 다수 + 부작용으로 "Connection
+   closed" 에러) → `script-src`에 `'unsafe-inline'` 추가해 즉시 복구.
+   **이건 임시 완화 조치** — script-src에 unsafe-inline이 남아있는 한 XSS 방어
+   효과가 사실상 없음. 추후 middleware.ts에서 요청마다 nonce를 생성해 CSP
+   헤더와 실제 script 태그에 동일 nonce를 적용하는 방식으로 전환 필요.
+   교훈: CSP처럼 프레임워크 내부 동작과 상호작용하는 헤더는 로컬 dev 서버
+   테스트만으로 안전을 확신할 수 없음 — 프로덕션 빌드(`next build && next start`
+   또는 실제 배포)로 반드시 재검증할 것.
 
 ### 새 프로젝트/기능 착수 시 체크리스트
 - [ ] 신규 테이블 생성 시 RLS 활성화 여부 확인
