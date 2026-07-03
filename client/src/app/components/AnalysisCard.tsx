@@ -146,9 +146,12 @@ function FinancialValue({ text, dataSource }: { text: string | null | undefined;
   const tag = (match?.[0] ?? '').replace(/[()]/g, '').trim().toUpperCase();
   const tagIsEdgar = tag.includes('EDGAR');
   const tagIsDart  = !tagIsEdgar && tag.includes('DART');
+  // 데이터가 없는 셀("확인 필요" 등 placeholder)에는 탭 레벨 dataSource로 폴백하지 않음 —
+  // 값이 없는데 공식 출처 배지가 붙으면 실제로 확인된 값처럼 오인됨
+  const isNoData = cleaned === '확인 필요' || cleaned === '공개 없음' || isPlaceholder(cleaned);
   // If value has no explicit tag, fall back to the tab-level dataSource
-  const isEdgar = tagIsEdgar || (!match && dataSource === 'edgar');
-  const isDart  = tagIsDart  || (!match && dataSource === 'dart');
+  const isEdgar = tagIsEdgar || (!match && !isNoData && dataSource === 'edgar');
+  const isDart  = tagIsDart  || (!match && !isNoData && dataSource === 'dart');
   return (
     <span className="inline-flex items-center gap-0.5">
       <DataValue text={cleaned} />
