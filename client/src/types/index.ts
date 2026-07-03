@@ -428,6 +428,12 @@ export interface AnalysisSummary {
   createdAt: string;
 }
 
+export interface CompanySuggestion {
+  analysisId: string;
+  name: string;
+  lastAnalyzedAt: string;
+}
+
 export type DataSource = 'dart' | 'edgar' | 'web_search';
 
 export interface AnalysisDetail {

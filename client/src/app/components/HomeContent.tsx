@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, FormEvent } from 'react';
+import { useState, useEffect, useRef, useMemo, FormEvent, KeyboardEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import { useAnalysis } from '@/app/context/AnalysisContext';
-import { AnalysisDetail, AnalyzeResponse } from '@/types';
+import { AnalysisDetail, AnalyzeResponse, CompanySuggestion } from '@/types';
 import { getClientId } from '@/lib/clientId';
 
 const API_URL = (() => {
@@ -119,6 +119,10 @@ export default function HomeContent() {
   const { setAnalysisData, setCompletedBatches, completedBatches } = useAnalysis();
 
   const [companyName, setCompanyName] = useState('');
+  const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const suppressAutocompleteRef = useRef(false);
   const [result, setResult] = useState<AnalysisDetail | null>(null);
   const [displayData, setDisplayData] = useState<AnalysisDetail | null>(null);
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
@@ -386,6 +390,61 @@ export default function HomeContent() {
     await startAnalysis(companyName.trim(), true);
   }
 
+  // 이미 분석된 기업 자동완성 — 300ms 디바운스, 2글자 미만은 요청 자체를 안 보냄
+  useEffect(() => {
+    if (suppressAutocompleteRef.current) {
+      suppressAutocompleteRef.current = false;
+      return;
+    }
+    const q = companyName.trim();
+    if (q.length < 2) {
+      setSuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/companies/autocomplete?q=${encodeURIComponent(q)}`);
+        if (!res.ok) return;
+        const { results } = await res.json() as { results: CompanySuggestion[] };
+        setSuggestions(results);
+        setShowDropdown(results.length > 0);
+        setActiveSuggestion(-1);
+      } catch {
+        // 자동완성은 best-effort — 실패해도 "분석하기" 수동 진행은 그대로 가능
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [companyName]);
+
+  // 제안 클릭/Enter 선택 — 캐시된 분석을 id로 직접 로드 (history 진입과 동일 경로).
+  // /api/analyze/stream을 타지 않으므로 신규 Claude 호출도, 무료 횟수 카운트도 발생하지 않음.
+  function handleSelectSuggestion(s: CompanySuggestion) {
+    suppressAutocompleteRef.current = true;
+    setCompanyName(s.name);
+    setShowDropdown(false);
+    setSuggestions([]);
+    setActiveSuggestion(-1);
+    router.push(`/?id=${s.analysisId}`);
+  }
+
+  function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!showDropdown || suggestions.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestion(i => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestion(i => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter' && activeSuggestion >= 0) {
+      e.preventDefault();
+      handleSelectSuggestion(suggestions[activeSuggestion]);
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false);
+      setActiveSuggestion(-1);
+    }
+  }
+
   // Phase 1: batch 1 (summary) not yet done → show loading screen
   // Phase 2: batch 1 done → show card (summary real, others skeleton)
   const phase1 = loading && completedBatches.has(-1) && !completedBatches.has(1);
@@ -425,14 +484,39 @@ export default function HomeContent() {
       {/* Search form */}
       <form onSubmit={handleSubmit} className="mb-8">
         <div className="flex gap-3 max-w-2xl mx-auto">
-          <input
-            type="text"
-            value={companyName}
-            onChange={e => setCompanyName(e.target.value)}
-            placeholder="기업명 입력 (예: 삼성전자, Apple, NVIDIA)"
-            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900 placeholder-gray-400"
-            disabled={loading}
-          />
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={companyName}
+              onChange={e => setCompanyName(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onBlur={() => setShowDropdown(false)}
+              placeholder="기업명 입력 (예: 삼성전자, Apple, NVIDIA)"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900 placeholder-gray-400"
+              disabled={loading}
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={showDropdown}
+              aria-autocomplete="list"
+              aria-controls="company-suggestions"
+            />
+            {showDropdown && suggestions.length > 0 && !loading && (
+              <ul id="company-suggestions" role="listbox" className="absolute left-0 right-0 z-20 mt-1.5 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden py-1">
+                {suggestions.map((s, i) => (
+                  <li key={s.analysisId}>
+                    <button
+                      type="button"
+                      onMouseDown={e => { e.preventDefault(); handleSelectSuggestion(s); }}
+                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors ${i === activeSuggestion ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <span className="text-sm text-gray-900 truncate">{s.name}</span>
+                      <span className="text-xs text-gray-400 shrink-0">{new Date(s.lastAnalyzedAt).toLocaleDateString('ko-KR')} 분석됨</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <button
             type="submit"
             disabled={loading || !companyName.trim()}

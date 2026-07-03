@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import analyzeRouter from './routes/analyze';
 import analysesRouter from './routes/analyses';
+import companiesRouter from './routes/companies';
 import shareRouter from './routes/share';
 import cronRouter from './routes/cron';
 
@@ -30,6 +31,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/analyze', analyzeRouter);
 app.use('/api/analyses', analysesRouter);
+app.use('/api/companies', companiesRouter);
 app.use('/api/share', shareRouter);
 app.use('/api/cron', cronRouter);
 

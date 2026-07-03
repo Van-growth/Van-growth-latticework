@@ -453,6 +453,10 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - [x] growth_scenario_v2 서버사이드 프리미엄 필터링 (:id/share.ts/실시간 스트림 응답 조립 단계에서 필터)
 - [x] Supabase 보안 점검 — service_role 전환 + 전 테이블 RLS 활성화 + /api/chat 라우트 제거 + 보안 헤더 추가
 - [x] ⑬ 프리미엄 - 성장 시나리오 시뮬레이션 (몬테카를로, 상장사+섹터벤치마크 하이브리드)
+- [x] ⑮ 기업명 자동완성 (중복 분석 방지) — `GET /api/companies/autocomplete?q=` (2글자 미만 빈 배열,
+  최근 분석일순 최대 8개, 이미 분석 이력 있는 기업만), 검색창 300ms 디바운스 드롭다운 +
+  키보드 위/아래·Enter·Esc, 선택 시 `/api/analyze/stream` 대신 `GET /api/analyses/:id`로 직접
+  로드(history 탭과 동일 경로) — 신규 Claude 호출도 무료 횟수 카운트도 발생하지 않음
 
 ## Security Principles (SSOT)
 
