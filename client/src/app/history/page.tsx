@@ -25,12 +25,16 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/analyses`)
+    const clientId = getClientId();
+    setLoading(true);
+    fetch(`${API_URL}/api/analyses`, {
+      headers: buildAuthHeaders(clientId, session?.access_token),
+    })
       .then(r => r.json())
       .then((data: AnalysisSummary[]) => setList(data))
       .catch(() => setError('분석 목록을 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [session]);
 
   async function handleSelect(id: string) {
     // Fetch detail and update context so panel reflects the selected analysis

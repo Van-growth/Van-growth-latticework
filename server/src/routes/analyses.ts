@@ -9,23 +9,65 @@ const router = Router();
 
 type CompanyRef = { name: string } | null;
 
-// GET /api/analyses  — list all analyses (newest first)
-router.get('/', async (_req: Request, res: Response) => {
+// GET /api/analyses — 이 유저(로그인 시 auth user id, 아니면 client_id)가 실제로
+// 분석 요청한 기업만 반환. analyses/companies에는 소유자 컬럼이 없어(원래 전 유저
+// 공용 캐시 설계) analysis_usage를 "내 히스토리" 소스로 사용한다.
+// 식별자가 아예 없으면 fail-closed — 절대 전체 유저 데이터를 반환하지 않는다.
+router.get('/', async (req: Request, res: Response) => {
+  const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
+  const authUser = await resolveAuthUser(req);
+  const userId = authUser?.id ?? clientId;
+
+  if (!userId) {
+    res.json([]);
+    return;
+  }
+
   try {
+    const { data: usageRows, error: usageErr } = await supabase
+      .from('analysis_usage')
+      .select('analysis_target, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (usageErr) throw usageErr;
+
+    // 회사명 중복 제거 — 이미 내림차순이라 첫 등장이 이 유저의 가장 최근 요청.
+    const seen = new Set<string>();
+    const orderedNames: string[] = [];
+    for (const row of usageRows ?? []) {
+      if (seen.has(row.analysis_target)) continue;
+      seen.add(row.analysis_target);
+      orderedNames.push(row.analysis_target);
+    }
+    if (orderedNames.length === 0) {
+      res.json([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('analyses')
-      .select('id, summary, created_at, companies(name)')
-      .order('created_at', { ascending: false })
-      .limit(50);
-
+      .select('id, summary, created_at, companies!inner(name)')
+      .in('companies.name', orderedNames)
+      .order('created_at', { ascending: false });
     if (error) throw error;
 
-    const items = (data ?? []).map(row => ({
-      id: row.id,
-      companyName: (row.companies as unknown as CompanyRef)?.name ?? '',
-      summary: row.summary,
-      createdAt: row.created_at,
-    }));
+    // 같은 회사가 여러 번 재분석됐을 수 있음 — 회사당 최신 analyses 행만 사용
+    // (data는 이미 created_at desc이므로 첫 등장이 최신).
+    const byCompany = new Map<string, { id: string; summary: string; created_at: string }>();
+    for (const row of data ?? []) {
+      const name = (row.companies as unknown as CompanyRef)?.name;
+      if (!name || byCompany.has(name)) continue;
+      byCompany.set(name, { id: row.id, summary: row.summary, created_at: row.created_at });
+    }
+
+    const items = orderedNames
+      .map(name => {
+        const match = byCompany.get(name);
+        return match ? { id: match.id, companyName: name, summary: match.summary, createdAt: match.created_at } : null;
+      })
+      .filter((x): x is { id: string; companyName: string; summary: string; createdAt: string } => x !== null)
+      .slice(0, 50);
 
     res.json(items);
   } catch (err) {
