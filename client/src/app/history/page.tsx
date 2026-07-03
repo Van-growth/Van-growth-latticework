@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Header from '@/app/components/Header';
 import { AnalysisSummary, AnalysisDetail } from '@/types';
 import { useAnalysis } from '@/app/context/AnalysisContext';
+import { useAuth } from '@/app/context/AuthContext';
+import { getClientId } from '@/lib/clientId';
+import { buildAuthHeaders } from '@/lib/authHeaders';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -15,6 +19,7 @@ const API_URL = (() => {
 export default function HistoryPage() {
   const router = useRouter();
   const { setAnalysisData } = useAnalysis();
+  const { session } = useAuth();
   const [list, setList] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +35,10 @@ export default function HistoryPage() {
   async function handleSelect(id: string) {
     // Fetch detail and update context so panel reflects the selected analysis
     try {
-      const res = await fetch(`${API_URL}/api/analyses/${id}`);
+      const clientId = getClientId();
+      const res = await fetch(`${API_URL}/api/analyses/${id}`, {
+        headers: buildAuthHeaders(clientId, session?.access_token),
+      });
       const data = await res.json();
       setAnalysisData(data as AnalysisDetail);
     } catch {
@@ -41,15 +49,7 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="font-bold text-gray-900 text-lg">Latticework</Link>
-          <div className="flex gap-4 text-sm">
-            <Link href="/" className="text-gray-500 hover:text-gray-800">분석</Link>
-            <Link href="/history" className="text-blue-600 font-medium">히스토리</Link>
-          </div>
-        </div>
-      </nav>
+      <Header />
 
       <div className="max-w-4xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">분석 히스토리</h1>

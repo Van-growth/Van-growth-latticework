@@ -88,8 +88,12 @@ cd client && npm install && npm run dev
 FINANCE/MEDIA_CONTENT/HARDWARE_SEMICONDUCTOR/ENERGY/LOGISTICS_TRANSPORT/CONSUMER_GOODS/
 REAL_ESTATE_CONSTRUCTION/OTHER)
 
-**analysis_usage**: `id`, `user_id`(임시 클라이언트 식별자), `analysis_target`, `created_at` —
-무료 분석 횟수 제한(rolling 7일 2회) 추적용
+**analysis_usage**: `id`, `user_id`(로그인 시 auth.users.id, 비로그인 시 클라이언트 임시 식별자),
+`analysis_target`, `created_at` — 무료 분석 횟수 제한(rolling 7일 2회) 추적용
+
+**profiles** (2026-07-03, 구글 로그인 도입): `id`(PK, auth.users(id) 참조), `email`,
+`is_premium_override`(BOOLEAN, 기본 false — Stripe 연동 전 로그인 유저 개별 프리미엄 우회용),
+`created_at`. auth.users에 신규 행(최초 구글 로그인) 생성 시 트리거로 자동 1행 생성.
 
 ## Data SSOT 기준
 
@@ -214,13 +218,18 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   "새로 분석하기" 강제 재분석) 2회. 이미 분석된 기업의 단순 재조회(캐시 그대로 보여주기)는 카운트 제외
 - 제한 도달 시 "다음 사용 가능 시점" 안내 + 프리미엄 업그레이드 CTA
 - 프리미엄 유저는 횟수 제한 없음 (기록은 남기되 체크 스킵)
-- 로그인(구글 OAuth) 미구현 상태라 `user_id` 대신 클라이언트 임시 식별자
-  (localStorage UUID, `analysis_usage.user_id`)로 우선 구현 — 로그인 도입 후 실제
-  auth user_id 기준으로 전환 예정
+- **로그인 방식은 구글 OAuth 단일 지원** (2026-07-03 도입, Supabase Auth
+  `signInWithOAuth({ provider: 'google' })`) — 카카오 등 추가 provider 없음.
+  로그인은 선택 사항, 비로그인도 계속 체험 가능 (온보딩 설문은 별도 미착수 항목).
+  `analysis_usage.user_id`는 로그인 시 `auth.users.id` 우선 사용, 비로그인 시 기존
+  클라이언트 임시 식별자(localStorage UUID)로 폴백 — `server/src/lib/authUser.ts`가
+  `Authorization: Bearer <access_token>`을 `supabase.auth.getUser()`로 검증
 - **성장 시나리오(몬테카를로 매출 시뮬레이션) 탭은 횟수 제한과 별개로 기능 자체가
   프리미엄 전용** — 무료 유저는 항상 잠금 + 업그레이드 CTA, 콘텐츠 게이팅과 무관
-- `isPremium`은 현재 Stripe 미연동으로 항상 `false` (전 유저 동일 제한 적용).
-  `PREMIUM_OVERRIDE_CLIENT_IDS` 환경변수로 내부 테스트 계정만 우회 가능
+- `isPremium` 판정(`server/src/lib/premium.ts`, async)은 Stripe 연동 전까지 두 우회
+  경로의 OR로 결정: (1) `PREMIUM_OVERRIDE_CLIENT_IDS` 환경변수 — 비로그인 내부
+  테스트 클라이언트ID, (2) `profiles.is_premium_override` — 로그인 유저 개별 플래그
+  (DB에서 수동 설정, 로그인 안 하면 이 경로 자체가 평가 안 됨)
 
 ### UI/UX 원칙
 - 라이트 테마 고정
@@ -396,9 +405,8 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### 🔴 1순위 (베타 전 필수)
 - [ ] 탭 전환 100ms 이하 (실측 미완)
-- [ ] 구글 로그인 + 온보딩 설문 (직무/지역/목적/회사규모) — 로그인은 구글 OAuth만 지원
-  (카카오 미지원, 미국 시장 우선 전략과 정합). 도입 시 `analysis_usage.user_id`를
-  클라이언트 임시 식별자 → 실제 auth user_id로 전환
+- [ ] 온보딩 설문 (직무/지역/목적/회사규모) — 구글 로그인 자체는 완료(아래 ✅ 참고),
+  로그인 후 프로필 설문만 미착수
 
 ### 🟡 2순위 (데이터/기능)
 - [ ] EDGAR 태그 매핑 강화 + FMP 폴백
@@ -457,6 +465,17 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   최근 분석일순 최대 8개, 이미 분석 이력 있는 기업만), 검색창 300ms 디바운스 드롭다운 +
   키보드 위/아래·Enter·Esc, 선택 시 `/api/analyze/stream` 대신 `GET /api/analyses/:id`로 직접
   로드(history 탭과 동일 경로) — 신규 Claude 호출도 무료 횟수 카운트도 발생하지 않음
+- [x] 구글 로그인 (Supabase Auth, 2026-07-03) — 로그인 방식은 구글 OAuth 단일 지원.
+  클라이언트: `@supabase/supabase-js` anon 키로 `signInWithOAuth`/세션 관리만 수행
+  (데이터 조회는 여전히 서버 경유만, RLS가 anon 키로는 전 테이블 차단). `AuthContext`
+  전역 세션 훅 + 공용 `Header` 컴포넌트(로그인 버튼/아바타·이메일·로그아웃).
+  서버: `Authorization: Bearer <access_token>`을 `resolveAuthUser()`가
+  `supabase.auth.getUser()`로 검증. `analysis_usage.user_id`는 로그인 시 auth user id
+  우선, 비로그인 시 기존 client_id 폴백. `profiles.is_premium_override` 컬럼 +
+  auto-insert 트리거 추가, `isPremiumUser`가 override 클라이언트ID OR 이 플래그로 판정.
+  CSP도 갱신(connect-src에 Supabase URL, img-src에 구글 아바타 도메인 lh3.googleusercontent.com).
+  실제 구글 계정으로 로그인 완료 후 analysis_usage 기록 확인은 사용자가 직접 테스트 필요
+  (자동화 불가 — Google 실계정 인증 단계).
 
 ## Security Principles (SSOT)
 
@@ -622,6 +641,6 @@ Claude API 응답에서 아래 이상값 감지 시 해당 섹션만 "—" 처�
 | v1.0.0 | 초기 출시 — 순차 배치, 24시간 캐시, 기본 분석 |
 | v2.0.0 | 2026-06-29 — EDGAR/DART 배치 적재(9,583개), 배치 병렬화(75s→35s), founder 독립 batch5, financial_cache 우선순위 + 출처 뱃지, TTL 무기한, Quality Gate, Prompt Caching, 로딩 애니메이션, 탭 상태 아이콘, nudge 배너, 탭별 재분석 버튼, Render Cron Job 매월 1일 자동화 |
 | v2.0.1 | 2026-07-03 — 섹터 매핑(sector_mapping, KSIC/SIC→12개 태그), financial_cache/라이브 조회 4개년 시계열, 몬테카를로 성장 시나리오 엔진, 배치 1차(요약+재무)/2차(백그라운드)/3차(몬테카를로) 스플릿, 무료 분석 횟수 제한(rolling 7일 2회, 임시 식별자), 성장 시나리오 탭 프리미엄 게이팅 |
-| v2.1.0 | 구글 로그인 + 온보딩 설문 |
+| v2.1.0 | 구글 로그인(완료, 2026-07-03) + 온보딩 설문(미착수) |
 | v2.2.0 | 영문화 (언어 토글 EN/KR) |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

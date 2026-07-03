@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
 // NEXT_PUBLIC_* 값은 빌드 타임에 번들에 박히므로, 런타임(client)에서 없으면 던지는
 // 걸로는 늦다 — connect-src가 조용히 'self'만 남아 배포된 뒤에야 전체 API 호출이
@@ -11,6 +12,15 @@ if (process.env.NODE_ENV === 'production' && !apiUrl) {
     'NEXT_PUBLIC_API_URL이 비어있습니다 — 프로덕션 빌드에 필수. ' +
     'Render 클라이언트 서비스의 빌드타임 환경변수로 설정되어 있는지 확인할 것 ' +
     '(connect-src CSP가 API 서버 호출을 전부 차단하게 됨).'
+  );
+}
+// supabase-js가 세션 조회/갱신(getSession, onAuthStateChange)을 위해 Supabase 프로젝트
+// URL로 직접 fetch를 보낸다 — 없으면 구글 로그인 자체가 connect-src에 막혀 조용히 실패.
+if (process.env.NODE_ENV === 'production' && !supabaseUrl) {
+  throw new Error(
+    'NEXT_PUBLIC_SUPABASE_URL이 비어있습니다 — 프로덕션 빌드에 필수. ' +
+    'Render 클라이언트 서비스의 빌드타임 환경변수로 설정되어 있는지 확인할 것 ' +
+    '(connect-src CSP가 Supabase Auth 호출을 전부 차단하게 됨).'
   );
 }
 
@@ -26,13 +36,16 @@ if (process.env.NODE_ENV === 'production' && !apiUrl) {
 // script-src 'wasm-unsafe-eval' — PDF 내보내기(@react-pdf/renderer → yoga-layout)가
 // 브라우저에서 WebAssembly.instantiate로 flexbox 레이아웃 엔진을 로드함. 'unsafe-eval'
 // 전체가 아니라 WASM 컴파일만 허용하는 좁은 범위의 값을 사용 (2026-07-04 발견).
+//
+// img-src에 lh3.googleusercontent.com — 구글 로그인 프로필 사진.
+// connect-src에 supabaseUrl — supabase-js의 세션 조회/갱신 fetch (구글 로그인, 2026-07-03).
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: https://fchart.stock.naver.com https://finviz.com`,
+  `img-src 'self' data: https://fchart.stock.naver.com https://finviz.com https://lh3.googleusercontent.com`,
   "font-src 'self'",
-  `connect-src 'self' ${apiUrl}`.trim(),
+  `connect-src 'self' ${apiUrl} ${supabaseUrl}`.trim(),
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

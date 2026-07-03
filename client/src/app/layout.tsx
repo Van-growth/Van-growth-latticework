@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AnalysisProvider } from "./context/AnalysisContext";
+import { AuthProvider } from "./context/AuthContext";
 import AppShell from "./components/AppShell";
 
 const geistMono = Geist_Mono({
@@ -22,11 +23,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistMono.variable} antialiased`}>
-        <AnalysisProvider>
-          <AppShell>
-            {children}
-          </AppShell>
-        </AnalysisProvider>
+        <AuthProvider>
+          <AnalysisProvider>
+            <AppShell>
+              {children}
+            </AppShell>
+          </AnalysisProvider>
+        </AuthProvider>
       </body>
     </html>
   );

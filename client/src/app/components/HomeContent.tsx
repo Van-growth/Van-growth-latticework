@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import { useAnalysis } from '@/app/context/AnalysisContext';
+import { useAuth } from '@/app/context/AuthContext';
 import { AnalysisDetail, AnalyzeResponse, CompanySuggestion } from '@/types';
 import { getClientId } from '@/lib/clientId';
+import { buildAuthHeaders } from '@/lib/authHeaders';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -117,6 +119,7 @@ export default function HomeContent() {
   const searchParams = useSearchParams();
   const urlId = searchParams.get('id');
   const { setAnalysisData, setCompletedBatches, completedBatches } = useAnalysis();
+  const { session } = useAuth();
 
   const [companyName, setCompanyName] = useState('');
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
@@ -146,9 +149,11 @@ export default function HomeContent() {
 
   async function refreshUsage() {
     const clientId = getClientId();
-    if (!clientId) return;
+    if (!clientId && !session) return;
     try {
-      const res = await fetch(`${API_URL}/api/analyze/usage`, { headers: { 'X-Client-Id': clientId } });
+      const res = await fetch(`${API_URL}/api/analyze/usage`, {
+        headers: buildAuthHeaders(clientId, session?.access_token),
+      });
       const data = await res.json();
       setUsage({ isPremium: data.isPremium, usedCount: data.usedCount, limit: data.limit });
     } catch {
@@ -156,7 +161,8 @@ export default function HomeContent() {
     }
   }
 
-  useEffect(() => { refreshUsage(); }, []);
+  // 로그인/로그아웃으로 premium 판정이 바뀌면 카운터도 다시 조회
+  useEffect(() => { refreshUsage(); }, [session]);
 
   useEffect(() => {
     if (result) {
@@ -216,7 +222,7 @@ export default function HomeContent() {
     setError(null);
     const clientId = getClientId();
     fetch(`${API_URL}/api/analyses/${urlId}`, {
-      headers: clientId ? { 'X-Client-Id': clientId } : undefined,
+      headers: buildAuthHeaders(clientId, session?.access_token),
     })
       .then(r => r.json())
       .then((data: AnalysisDetail) => {
@@ -227,7 +233,7 @@ export default function HomeContent() {
       })
       .catch(() => setError('분석 결과를 불러오지 못했습니다.'))
       .finally(() => setFetchingId(false));
-  }, [urlId, setAnalysisData]);
+  }, [urlId, setAnalysisData, session]);
 
   const REANALYZE_FIELD: Record<string, keyof AnalysisDetail> = {
     summary:        'summary_v2',
@@ -284,7 +290,7 @@ export default function HomeContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(clientId ? { 'X-Client-Id': clientId } : {}),
+          ...buildAuthHeaders(clientId, session?.access_token),
         },
         body: JSON.stringify({ companyName: name, forceRefresh }),
       });

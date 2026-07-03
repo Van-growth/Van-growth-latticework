@@ -10,6 +10,7 @@ import {
 } from '../services/monteCarloService';
 import { isPremiumUser } from '../lib/premium';
 import { checkAnalysisUsage, recordAnalysisUsage } from '../lib/analysisUsage';
+import { resolveAuthUser } from '../lib/authUser';
 
 const router = Router();
 
@@ -345,11 +346,13 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.get('/usage', async (req: Request, res: Response) => {
   const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
-  if (isPremiumUser(clientId)) {
+  const authUser = await resolveAuthUser(req);
+  if (await isPremiumUser({ clientId, authUserId: authUser?.id ?? null })) {
     res.json({ isPremium: true, usedCount: 0, limit: null, nextAvailableAt: null });
     return;
   }
-  const usage = await checkAnalysisUsage(clientId);
+  // 로그인 상태면 auth user id 기준으로, 아니면 기존 클라이언트 임시 식별자 기준으로 카운트.
+  const usage = await checkAnalysisUsage(authUser?.id ?? clientId);
   res.json({ isPremium: false, usedCount: usage.usedCount, limit: 2, nextAvailableAt: usage.nextAvailableAt ?? null });
 });
 
@@ -365,7 +368,10 @@ router.post('/stream', async (req: Request, res: Response) => {
     baseRevenue?: number;
   };
   const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
-  const isPremium = isPremiumUser(clientId);
+  const authUser = await resolveAuthUser(req);
+  const isPremium = await isPremiumUser({ clientId, authUserId: authUser?.id ?? null });
+  // 로그인 상태면 auth user id 기준으로, 아니면 기존 클라이언트 임시 식별자 기준으로 카운트.
+  const usageUserId = authUser?.id ?? clientId;
 
   if (!companyName?.trim()) {
     res.status(400).json({ error: '기업명을 입력해주세요.' });
@@ -390,7 +396,7 @@ router.post('/stream', async (req: Request, res: Response) => {
   // 차단되면 'rate_limited' 이벤트를 보내고 스트림을 종료한다.
   const checkAndRecordUsage = async (): Promise<boolean> => {
     if (isPremium) return true;
-    const usage = await checkAnalysisUsage(clientId);
+    const usage = await checkAnalysisUsage(usageUserId);
     if (!usage.allowed) {
       const nextDate = usage.nextAvailableAt ? usage.nextAvailableAt.slice(0, 10) : '';
       send('rate_limited', {
@@ -401,7 +407,7 @@ router.post('/stream', async (req: Request, res: Response) => {
       res.end();
       return false;
     }
-    await recordAnalysisUsage(clientId, name);
+    await recordAnalysisUsage(usageUserId, name);
     return true;
   };
 

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import { isPremiumUser } from '../lib/premium';
+import { resolveAuthUser } from '../lib/authUser';
 
 const router = Router();
 
@@ -10,9 +11,10 @@ type CompanyRef = { name: string } | null;
 router.get('/:token', async (req: Request, res: Response) => {
   const { token } = req.params;
   // 공유 페이지는 익명 방문자용 — 원 작성자의 프리미엄 여부와 무관하게 방문자 본인 상태로 판단.
-  // X-Client-Id 미전송 시(대부분) isPremiumUser(null) → 항상 false, 성장 시나리오는 잠금 유지.
+  // X-Client-Id/Authorization 미전송 시(대부분) isPremiumUser → 항상 false, 성장 시나리오는 잠금 유지.
   const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
-  const isPremium = isPremiumUser(clientId);
+  const authUser = await resolveAuthUser(req);
+  const isPremium = await isPremiumUser({ clientId, authUserId: authUser?.id ?? null });
 
   try {
     const { data: row, error } = await supabase

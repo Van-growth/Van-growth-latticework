@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { supabase } from '../lib/supabase';
 import { refreshFinancials } from '../lib/claude';
 import { isPremiumUser } from '../lib/premium';
+import { resolveAuthUser } from '../lib/authUser';
 
 const router = Router();
 
@@ -37,7 +38,8 @@ router.get('/', async (_req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
-  const isPremium = isPremiumUser(clientId);
+  const authUser = await resolveAuthUser(req);
+  const isPremium = await isPremiumUser({ clientId, authUserId: authUser?.id ?? null });
 
   try {
     const [analysisRes, playersRes] = await Promise.all([
