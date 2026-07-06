@@ -1,5 +1,21 @@
 ﻿# Latticework — CLAUDE.md
 
+## Vision & Mission
+
+### Vision
+AI 시대, 살아남는 사람은 정보를 빠르게 구조화하는 사람이다.
+기업 분석, 재무 분석, 밸류체인, 산업과 기술의 역사 — 지금까지는 며칠이 걸렸다.
+1min은 그 리서치를 단 1분으로 줄인다. 핵심만.
+
+### Mission
+더 정확한 정보가 더 나은 결정을 만든다.
+1min은 누구에게나 그 정보를 1분 안에 전달한다.
+More right info, better decisions. In just 1 minute, for everyone.
+
+- 포지셔닝: 1분 기업분석
+- 핵심 워크플로우: 기업 리서치(Latticework) + 재무데이터(DART/EDGAR) + Claude HTML 리포트 생성
+- 아웃풋: 이메일 전송 또는 PDF 다운로드
+
 ## Project overview
 기업 분석 플랫폼. 기업명 입력 시 Claude Sonnet + Web Search로 심층 분석 후 결과를 Supabase에 저장·표시.
 
@@ -160,13 +176,21 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 복잡한 기능 추가보다 핵심 기능 완성도
 - "5명이 매일 쓰는 게 목표"
 
-### 핵심 타겟 유저
+### 핵심 타겟 유저 (주 타겟 — 제품/GTM 방향 결정 기준)
 - 세일즈 담당자: 미팅 전 고객사 빠른 파악
 - BD 담당자: 파트너/협력사 리서치
 - 전략 담당자: 경쟁사 분석 / 밸류체인 / M&A 대상 탐색
 
 공통 use case: 미팅/협상/의사결정 전 빠르게 기업 파악
 타겟 시장: 미국 우선 (세일즈 담당자만 미국 ~1,500만 명)
+
+#### 부가 유저층 (참고용 — 타겟팅 우선순위 변경 아님)
+- 취준생: 면접 전날 지원 기업 파악
+- 투자자: 종목 기초 리서치
+
+주의: 위 부가 유저층 때문에 콘텐츠 원칙(투자자 전용 언어 금지,
+밸류에이션/수익률/PER 단독 언급 금지)을 완화하지 않음.
+제품 설계/기능 우선순위는 세일즈·BD·전략 담당자 기준으로 계속 결정.
 
 ### 개발 우선순위 원칙
 베타 오픈 전 반드시 해결 순서:
@@ -288,6 +312,12 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 온보딩: 구글 로그인 + 설문 (직무/지역/목적/회사규모)
 - 행동 로그: Posthog
 - 라이브 채팅: Crisp
+
+### 제품 원칙 (Vision 문서 기준)
+- 속도와 정확도가 전부 — 예쁜 것보다 믿을 수 있는 데이터
+- 아웃풋 포맷은 유저가 결정 — 우리는 좋은 인풋을 준다
+- 온보딩 데이터 수집 — 직무/목적/조사대상 3~4개 질문으로 DB 쌓기
+- MVP는 단순하게 — 기능 추가보다 5명이 매일 쓰는 게 목표
 
 ## 기능 정의
 
@@ -476,6 +506,11 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   CSP도 갱신(connect-src에 Supabase URL, img-src에 구글 아바타 도메인 lh3.googleusercontent.com).
   실제 구글 계정으로 로그인 완료 후 analysis_usage 기록 확인은 사용자가 직접 테스트 필요
   (자동화 불가 — Google 실계정 인증 단계).
+- [x] CSP img-src에 `charts2-node.finviz.com` 추가 (finviz 차트 이미지 리다이렉트
+  타겟 차단 수정) + `gatherResearch` 웹서치 라운드 초과 시 예외 대신 부분 결과
+  폴백 처리 (`runWithWebSearch`에 `label` 파라미터로 로그 태깅 추가,
+  `gatherResearch1`/`2`에 방어적 try/catch 추가) — 2026-07-06 삼성전기 분석 전체
+  실패 사고 수정, 상세는 Security Principles 실전 발견 이력 10번 참고.
 
 ## Security Principles (SSOT)
 
@@ -643,6 +678,42 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
    (3) "이 필드가 있으면 쓴다" 이상으로, 서로 다른 필드가 정말 같은 기간을
    가리키는지 앵커(이번 경우 회계연도)로 검증하지 않으면, 숫자 자체는 진짜인데
    기간이 틀려서 훨씬 알아채기 어려운 오답이 나온다.
+10. (2026-07-06) "삼성전기" 분석 시 Render 로그에 `Error: Max conversation rounds
+    exceeded` (스택: runWithWebSearch → analyzeCompany → routes/analyze.ts) 발생,
+    분석 전체 실패 신고 — 동시에 CSP 콘솔 위반 3건(이미지·폰트 차단)도 함께 발견.
+    - **원인**: `runWithWebSearch`(웹서치 라운드 루프)가 `maxRounds` 소진 시
+      `throw new Error(...)`로 종료했는데, 이를 호출하는 `gatherResearch1`/
+      `gatherResearch2`가 `analyzeCompany` 안에서 **`runBatch`의 try/catch
+      바깥에서 직접 `await`**되고 있었음(batch2~5와 달리 배치 격리가 없는 코드
+      경로). 로그에 라벨을 붙여 확인한 결과 범인은 `financials_v2`나 개별 섹션
+      배치(`competitors_v2`/`strategy_v2`/`industry_history_v2` 등)가 아니라
+      **`gatherResearch2`(maxRounds=2로 타이트하게 설정된 공유 리서치 단계)** —
+      이 섹션들은 애초에 자체 웹서치를 하지 않고 `gatherResearch1`/`2`가 모아온
+      공유 컨텍스트만 소비하는 구조라 라운드 초과 자체가 불가능한 경로였음.
+      `financial_cache HIT DART`(캐시 히트)와는 무관 — 그건 `fetchFinancialContext`
+      경로이고, 리서치 라운드 소진은 완전히 별개의 웹서치 경로.
+    - **수정**: `runWithWebSearch`에 `label` 파라미터 추가해 라운드별 로그에
+      `[gatherResearch][라벨]` 태깅, `maxRounds` 소진 시 예외 대신 그때까지 모은
+      부분 텍스트로 폴백(Quality Gate 원칙 참고). `gatherResearch1`/`gatherResearch2`
+      자체에도 try/catch를 추가해 라운드 초과 이외의 에러(네트워크 등)까지 이중 격리.
+    - CSP 건은 코드 대조로 확인: `img-src`에 `charts2-node.finviz.com`이 빠져있었음
+      (`finviz.com/chart.ashx`가 실제 이미지를 이 CDN 서브도메인으로 리다이렉트해서
+      서빙 — `finviz.com`만 허용해선 리다이렉트 타겟이 막힘). 반면 신고에 포함된
+      `font-src`용 `frontend-cdn.perplexity.ai`는 코드베이스 전체를 검색해도 참조하는
+      곳이 전혀 없었음(폰트는 전부 `/fonts/` 로컬 파일) — 근거 없이 CSP를 열어주는
+      대신 사용자에게 확인 후 추가하지 않기로 결정.
+    - 검증: 로컬에서 `삼성전기`로 재현 — `[gatherResearch][gatherResearch2]
+      maxRounds(2) 소진 — 부분 결과로 폴백` 경고 로그 확인, 이후 batch1~5 전부
+      정상 완료(`[POST /api/analyze/stream] Error` 없음). `next build`로 CSP
+      문자열 문법 확인.
+    교훈: (1) 배치 단위 격리(`runBatch` try/catch)가 있다고 해서 그 배치가 의존하는
+    "배치 이전 단계"(공유 리서치 등)까지 격리되는 건 아니다 — 격리 경계를 그릴 때
+    "이 함수가 어디서 await되는가"까지 확인할 것, 실패 격리는 호출부 기준이 아니라
+    실제 await 지점 기준으로 판단해야 함. (2) 여러 병렬 작업 중 "어느 게 원인인지"를
+    사용자 직관(섹션 이름)에만 의존해 짐작하지 말고, 로그에 태그를 붙여 실제 실행
+    구조(이 경우 섹션 배치는 웹서치를 안 한다는 사실)를 먼저 확인할 것. (3) CSP
+    도메인 추가 요청이라도 코드 근거가 없으면 그대로 반영하지 말고 확인할 것 —
+    출처 불명 서드파티 도메인을 CSP에 넣는 것 자체가 불필요한 공격 표면 확장.
 
 ### 새 프로젝트/기능 착수 시 체크리스트
 - [ ] 신규 테이블 생성 시 RLS 활성화 여부 확인
@@ -703,6 +774,11 @@ Claude API 응답에서 아래 이상값 감지 시 해당 섹션만 "—" 처�
 필드 + 배열 필드)가 동시에 비어있을 때만 (2026-07-03 business_model_v2 22% 폐기
 버그, 실전 발견 이력 6번 참고 — `server/src/lib/claude.ts`의
 `SECTION_CONTENT_SIGNALS`).
+
+웹서치 리서치 단계(`gatherResearch1`/`gatherResearch2` 등 `runWithWebSearch` 호출)가
+maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 부분 결과로 폴백 처리 —
+배치 단위 격리(runBatch try/catch) 밖에서 직접 await되는 리서치 단계가 예외를 던지면
+격리 없이 analyzeCompany 전체가 죽는다 (2026-07-06 삼성전기 사고, 실전 발견 이력 10번 참고).
 
 골든셋 검증 기준 (분석 완료 후 체크):
 - summary에 기업명이 포함되어 있는가?

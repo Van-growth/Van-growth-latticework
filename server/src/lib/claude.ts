@@ -416,8 +416,10 @@ async function runWithWebSearch(
   model: string,
   maxRounds = 10,
   maxTokens = 16000,
+  label = 'research',
 ): Promise<string> {
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userMessage }];
+  let lastTexts = '';
 
   for (let round = 0; round < maxRounds; round++) {
     const response = await anthropic.messages.create({
@@ -432,6 +434,9 @@ async function runWithWebSearch(
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map(b => b.text)
       .join('\n\n');
+    if (texts) lastTexts = texts;
+
+    console.log(`[gatherResearch][${label}] round ${round + 1}/${maxRounds} stop_reason=${response.stop_reason}`);
 
     if (response.stop_reason === 'end_turn') return texts;
 
@@ -452,10 +457,10 @@ async function runWithWebSearch(
         if (b.name === 'fetch_url') {
           const { url } = b.input as { url: string };
           if (isBlockedUrl(url)) {
-            console.log(`[fetch_url] BLOCKED ${url}`);
+            console.log(`[fetch_url][${label}] BLOCKED ${url}`);
             return { type: 'tool_result' as const, tool_use_id: b.id, content: `Blocked: ${url} — SEC full filing skipped. Use web_search for financial summaries (Yahoo Finance, Macrotrends, StockAnalysis) instead.` };
           }
-          console.log(`[fetch_url] ${url}`);
+          console.log(`[fetch_url][${label}] ${url}`);
           const content = await fetchUrlContent(url);
           return { type: 'tool_result' as const, tool_use_id: b.id, content };
         }
@@ -466,7 +471,13 @@ async function runWithWebSearch(
     messages.push({ role: 'user', content: toolResults });
   }
 
-  throw new Error('Max conversation rounds exceeded');
+  // maxRounds 소진 — 예외를 던지면 analyzeCompany 전체가 죽는다 (2026-07-06 삼성전기
+  // 사고: gatherResearch1/2가 이 함수를 직접 await하며 runBatch의 try/catch 밖에 있어
+  // 여기서 throw하면 배치 격리 없이 전체 분석이 중단됨). Quality Gate 원칙과 동일하게
+  // 그 시점까지 모은 부분 결과로 폴백 — 호출부(gatherResearch1/2)에도 방어적으로
+  // try/catch를 둬 다른 종류의 에러(네트워크 등)까지 이중으로 격리한다.
+  console.warn(`[gatherResearch][${label}] maxRounds(${maxRounds}) 소진 — 부분 결과로 폴백`);
+  return lastTexts || `[${label}] 리서치 라운드 초과로 데이터를 완전히 수집하지 못함 — 확보된 정보만으로 진행.`;
 }
 
 function extractJson<T>(raw: string, label = 'response'): T | null {
@@ -669,13 +680,21 @@ async function gatherResearch1(companyName: string): Promise<string> {
 
 추정값은 "(추정)" 명시.`;
 
-  return runWithWebSearch(
-    systemPrompt,
-    `기업명: ${companyName}\n\n2회 검색으로 기업 기본 정보를 빠르게 수집해주세요.`,
-    'claude-sonnet-4-6',
-    2,
-    4000,
-  );
+  // analyzeCompany에서 runBatch 밖에서 직접 await하는 호출이라, 여기서 예외가 새면
+  // 배치 격리 없이 전체 분석이 죽는다 (2026-07-06 삼성전기 사고) — 반드시 자체 방어.
+  try {
+    return await runWithWebSearch(
+      systemPrompt,
+      `기업명: ${companyName}\n\n2회 검색으로 기업 기본 정보를 빠르게 수집해주세요.`,
+      'claude-sonnet-4-6',
+      2,
+      4000,
+      'gatherResearch1',
+    );
+  } catch (err) {
+    console.error(`[gatherResearch][gatherResearch1] FAIL — 빈 컨텍스트로 폴백`, err);
+    return '';
+  }
 }
 
 // Phase 2: 경쟁사·재무 상세·산업 심층 (2 rounds) → batch2-4에 사용
@@ -700,13 +719,20 @@ async function gatherResearch2(companyName: string): Promise<string> {
 
 추정값은 "(추정)" 명시. 출처 병기 필수.`;
 
-  return runWithWebSearch(
-    systemPrompt,
-    `기업명: ${companyName}\n\n2회 검색으로 경쟁사·재무·산업 상세 정보를 수집해주세요.`,
-    'claude-sonnet-4-6',
-    2,
-    4000,
-  );
+  // gatherResearch1과 동일한 이유로 자체 방어 필요 (runBatch 밖에서 직접 await됨).
+  try {
+    return await runWithWebSearch(
+      systemPrompt,
+      `기업명: ${companyName}\n\n2회 검색으로 경쟁사·재무·산업 상세 정보를 수집해주세요.`,
+      'claude-sonnet-4-6',
+      2,
+      4000,
+      'gatherResearch2',
+    );
+  } catch (err) {
+    console.error(`[gatherResearch][gatherResearch2] FAIL — 빈 컨텍스트로 폴백`, err);
+    return '';
+  }
 }
 
 // ── Section call (no web search, uses shared context) ─────────────────────────
@@ -785,6 +811,7 @@ career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventu
       'claude-sonnet-4-6',
       3,
       6000,
+      'founder_v2',
     );
     const result = extractJson<FounderV2>(raw, 'founder_v2');
     console.log(`[claude] founder_v2 OK  ${Date.now() - t0}ms`);
@@ -818,6 +845,7 @@ async function gatherFinancialResearch(companyName: string): Promise<string> {
     'claude-sonnet-4-6',
     6,
     4000,
+    'gatherFinancialResearch',
   );
 }
 
@@ -1094,6 +1122,8 @@ export async function selectDailyCompany(): Promise<string> {
     `오늘(${new Date().toISOString().slice(0, 10)}) 분석할 만한 흥미로운 기업을 추천해주세요. 기업명만 답하세요.`,
     'claude-sonnet-4-6',
     6,
+    16000,
+    'selectDailyCompany',
   );
 
   return name.trim().split('\n')[0].trim();
