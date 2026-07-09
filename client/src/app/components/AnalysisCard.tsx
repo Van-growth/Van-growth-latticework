@@ -415,53 +415,6 @@ const VC_POSITION_CFG: Record<string, { label: string; cls: string }> = {
 
 const BAR_COLORS = ['bg-blue-400', 'bg-indigo-400', 'bg-purple-400', 'bg-violet-400', 'bg-emerald-400'];
 
-// ── Static stock chart ────────────────────────────────────────────────────────
-
-function StockChart({ ticker }: { ticker: string | null }) {
-  if (!ticker) return null;
-  const parts = ticker.split(':');
-  const exchange = (parts[0] ?? '').toUpperCase();
-  const symbol = parts[1] ?? ticker;
-  const isKorean = ['KRX', 'KOSDAQ', 'KOSPI'].includes(exchange);
-  const isUS = ['NASDAQ', 'NYSE', 'AMEX'].includes(exchange);
-
-  if (isKorean) {
-    return (
-      <a href={`https://finance.naver.com/item/main.nhn?code=${symbol}`} target="_blank" rel="noopener noreferrer"
-        className="block w-full rounded-xl border border-gray-100 overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`https://fchart.stock.naver.com/sise.nhn?symbol=${symbol}&timeframe=day&count=250&requestType=0`}
-          alt={`${symbol} 주가 차트`}
-          style={{ width: '100%', height: 'auto', display: 'block' }}
-          loading="lazy"
-          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-        />
-      </a>
-    );
-  }
-  if (isUS) {
-    return (
-      <a href={`https://finviz.com/quote.ashx?t=${symbol}`} target="_blank" rel="noopener noreferrer"
-        className="block w-full rounded-xl border border-gray-100 overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`https://finviz.com/chart.ashx?t=${symbol}&ty=c&ta=1&p=d`}
-          alt={`${symbol} 주가 차트`}
-          style={{ width: '100%', height: 'auto', display: 'block' }}
-          loading="lazy"
-          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-        />
-      </a>
-    );
-  }
-  return (
-    <div className="text-xs text-gray-400 text-center py-3 bg-gray-50 rounded-xl border border-gray-100">
-      시세 정보 없음
-    </div>
-  );
-}
-
 // ── V2 Tab: 요약 ──────────────────────────────────────────────────────────────
 
 function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Source[] | undefined; onTabChange?: (tab: string) => void }) {
@@ -488,9 +441,6 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
           </span>
         </div>
       ) : null}
-
-      {/* Static stock chart */}
-      <StockChart ticker={s.ticker} />
 
       {/* Key metrics — 3-col grid, no truncation */}
       {filteredMetrics.length > 0 && (

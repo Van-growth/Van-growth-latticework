@@ -38,15 +38,12 @@ if (process.env.NODE_ENV === 'production' && !supabaseUrl) {
 // 전체가 아니라 WASM 컴파일만 허용하는 좁은 범위의 값을 사용 (2026-07-04 발견).
 //
 // img-src에 lh3.googleusercontent.com — 구글 로그인 프로필 사진.
-// img-src에 charts2-node.finviz.com — finviz.com/chart.ashx가 실제 이미지를 이 CDN
-// 서브도메인으로 리다이렉트해서 서빙함. finviz.com만 허용하면 리다이렉트 타겟이 막혀
-// 차트 이미지가 CSP 위반으로 로드되지 않았음 (2026-07-06 발견).
 // connect-src에 supabaseUrl — supabase-js의 세션 조회/갱신 fetch (구글 로그인, 2026-07-03).
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: https://fchart.stock.naver.com https://finviz.com https://charts2-node.finviz.com https://lh3.googleusercontent.com`,
+  `img-src 'self' data: https://lh3.googleusercontent.com`,
   "font-src 'self'",
   `connect-src 'self' ${apiUrl} ${supabaseUrl}`.trim(),
   "frame-ancestors 'none'",
