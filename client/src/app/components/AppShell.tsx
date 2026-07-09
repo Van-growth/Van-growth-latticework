@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import OnboardingModal from './profile/OnboardingModal';
 
 // AI 비서 패널 임시 제거 — 온보딩(직무/목적) 완성 후 맥락 기반으로 재설계 예정
 // import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -22,6 +23,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <OnboardingModal />
       {children}
     </div>
   );

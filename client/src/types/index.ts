@@ -1,3 +1,5 @@
+import type { OrgSizeCode, IndustryCode, JobRoleCode, JobLevelCode, PurposeCode } from '@/lib/i18n/profileLabels';
+
 // ── Legacy types (kept for backward-compat with old analyses) ─────────────────
 
 export interface ValueChainPlayer {
@@ -172,6 +174,14 @@ export interface SummaryV2 {
     trend: 'concentrating' | 'diversifying' | 'stable';
   };
   key_markets: { country: string; revenue_share: number }[];
+  trigger_events?: {
+    date: string;
+    type: '투자유치' | '유상증자' | '대규모딜';
+    amount: string;
+    counterparty: string;
+    description: string;
+    source_index: number;
+  }[];
   key_bullets: string[];
   bull_case: string;
   bear_case: string;
@@ -426,6 +436,17 @@ export interface AnalysisSummary {
   companyName: string;
   summary: string;
   createdAt: string;
+}
+
+export interface UserProfile {
+  company_name: string | null;
+  org_size: OrgSizeCode | null;
+  industry: IndustryCode | null;
+  job_role: JobRoleCode | null;
+  job_level: JobLevelCode | null;
+  purpose: PurposeCode[] | null;
+  purpose_other: string | null;
+  onboarding_completed_at: string | null;
 }
 
 export interface CompanySuggestion {

@@ -48,6 +48,12 @@ export default function Header() {
                 </div>
               )}
               <span className="text-xs text-gray-500 hidden sm:inline max-w-[160px] truncate">{user.email}</span>
+              <Link
+                href="/settings"
+                className={`text-xs ${pathname === '/settings' ? 'text-blue-600 font-medium' : 'text-gray-400 hover:text-gray-700'} transition-colors`}
+              >
+                설정
+              </Link>
               <button
                 onClick={() => signOut()}
                 className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors"
