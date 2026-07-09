@@ -23,6 +23,7 @@
     "eslint-config-next": "15.5.15",
     "lucide-react": "^1.14.0",
     "next": "15.5.15",
+    "posthog-js": "^1.399.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-markdown": "^10.1.0",

@@ -4,6 +4,7 @@ import "./globals.css";
 import { AnalysisProvider } from "./context/AnalysisContext";
 import { AuthProvider } from "./context/AuthContext";
 import AppShell from "./components/AppShell";
+import Analytics from "./components/Analytics";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -23,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistMono.variable} antialiased`}>
+        <Analytics />
         <AuthProvider>
           <AnalysisProvider>
             <AppShell>

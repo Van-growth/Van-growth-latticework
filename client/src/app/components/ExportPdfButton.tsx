@@ -6,6 +6,7 @@ import { pdf } from '@react-pdf/renderer';
 import AnalysisPdf from './AnalysisPdf';
 import type { AnalysisDetail } from '@/types';
 import { Download, FileText } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics';
 
 const MESSAGES = [
   '밤새 조사하셨을 내용을 몇 분 만에 처리하고 있어요 🌙',
@@ -174,6 +175,7 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
 
   async function handleClick() {
     if (loading) return;
+    trackEvent('pdf_export_attempted', { companyName: data.companyName });
     cancelledRef.current = false;
     setLoading(true);
     setCompleted(false);

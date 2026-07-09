@@ -9,6 +9,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { AnalysisDetail, AnalyzeResponse, CompanySuggestion } from '@/types';
 import { getClientId } from '@/lib/clientId';
 import { buildAuthHeaders } from '@/lib/authHeaders';
+import { trackEvent } from '@/lib/analytics';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -273,6 +274,7 @@ export default function HomeContent() {
   }
 
   async function startAnalysis(name: string, forceRefresh: boolean) {
+    trackEvent('search_executed', { companyName: name, forceRefresh });
     setLoading(true);
     setError(null);
     setResult(null);
@@ -368,6 +370,7 @@ export default function HomeContent() {
               setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
               if (normalized.id) router.replace(`/?id=${normalized.id}`);
               refreshUsage();
+              trackEvent('report_generated', { companyName: normalized.companyName, cached: payload.cached === true });
 
             } else if (eventType === 'error') {
               setError(payload.message || '분석 중 오류가 발생했습니다.');

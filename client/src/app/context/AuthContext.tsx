@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
+import { identifyUser, resetAnalytics } from '@/lib/analytics';
 
 interface AuthContextType {
   user: User | null;
@@ -36,6 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const user = session?.user;
+    if (user) identifyUser(user.id, user.email);
+    else resetAnalytics();
+  }, [session?.user]);
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
