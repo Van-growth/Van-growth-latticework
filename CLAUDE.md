@@ -111,20 +111,15 @@ apply_migration(
 )
 ```
 
-**새 마이그레이션 작성 시 체크리스트**
-- [ ] **Supabase SQL Editor(대시보드)에서 직접 실행 금지** — 반드시 로컬 `supabase/migrations/*.sql`
-  파일을 먼저 작성한 뒤, 그 파일 내용으로 prod/dev 둘 다 적용할 것. 이유: 2026-07 dev 프로젝트
-  마이그레이션 이관 작업 중 `20260703_sector_benchmark_cache_rls`라는, 로컬에 대응 `.sql` 파일이
-  아예 없는 마이그레이션이 prod에 적용돼 있는 걸 발견함 — SQL Editor(또는 MCP 호출 시 파일 없이
-  즉석 SQL)로 직접 실행하고 파일로 남기지 않은 사례로 보임. 다행히 prod의 `supabase_migrations.
-  schema_migrations` 트래킹 테이블에 실행된 SQL 원문이 남아있어 복구할 수 있었지만, 그 테이블이
-  없거나 접근 안 되는 상황이었다면 dev 프로젝트가 영구적으로 prod와 다른 스키마를 갖게 될
-  뻔했음. 로컬 파일이 "무엇이 적용됐는지"의 유일하게 신뢰할 수 있는 기록이 되게 할 것.
+**새 마이그레이션 작성 시 체크리스트** (SQL Editor 직접 실행 금지 등 일반 원칙은 전역 `~/.claude/CLAUDE.md` 참고)
 - [ ] SQL이 `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` 등으로 멱등성 보장하는지 확인
 - [ ] prod(`rtpcmbxijcxhzvortwxf`)에 `apply_migration` 적용
 - [ ] dev(`ininmbvzzdqplnfdnisf`)에 적용 — **빠뜨리기 가장 쉬운 단계, 반드시 확인**
 - [ ] 두 프로젝트 모두 `list_migrations(project_id=...)`로 적용 확인
 - [ ] RLS가 필요한 신규 테이블이면 두 프로젝트 모두에서 RLS 활성화 여부 확인 (Security Principles 원칙 2 참고 — 신규 테이블은 기본적으로 RLS 꺼진 상태로 생성됨)
+
+(참고: 2026-07 dev 마이그레이션 이관 중 로컬 `.sql` 파일이 없는 `20260703_sector_benchmark_cache_rls`가
+prod에 적용돼 있던 걸 발견 — SQL Editor 직접 실행 금지 규칙이 이 사고를 계기로 전역 원칙으로 승격됨)
 
 - PostToolUse hook(`scripts/migration-hook.mjs`)이 파일 감지 후 적용 정보를 출력함 — dev 프로젝트 ID도 반영됨(`ininmbvzzdqplnfdnisf`)
 
@@ -374,9 +369,7 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 ### 보안
 - RLS 전 테이블 적용 완료 (2026-07-03, 로그인 구현을 기다리지 않고 선적용 — 상세는 Security Principles 섹션 참고)
 - 백엔드는 SUPABASE_SERVICE_ROLE_KEY로 접속 (anon key 아님 — RLS를 우회해야 하므로)
-- 환경변수: .env에만 관리, 코드 하드코딩 금지
 - 필수 API 키: ANTHROPIC_API_KEY, DART_API_KEY, FMP_API_KEY, KIS_APP_KEY, KIS_APP_SECRET
-- 시크릿 키는 서버(.env) 한 곳에만 — 클라이언트(client/.env.local)에 중복 저장 금지
 
 ### GTM 방향
 - 1차 타겟: 미국 시장 (영어 버전 우선)
@@ -605,12 +598,7 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
 → 백엔드가 anon key로 접속 중이면 RLS를 켜는 순간 서비스 장애 가능
   (service_role 전환이 선행되어야 함).
 
-### 원칙 3: 클라이언트에 시크릿 키 중복 저장 금지
-서버용 API 키(Anthropic 등)를 클라이언트(Next.js) .env에도 별도로 두면,
-사용하지 않는 API 라우트가 인증 없이 노출될 경우 크레딧 소진 공격에 취약해진다.
-→ 시크릿 키는 서버 한 곳에만 보관, 클라이언트는 서버를 경유해서만 접근.
-
-### 원칙 4: UI에서 제거된 기능도 라우트/코드는 별도로 점검
+### 원칙 3: UI에서 제거된 기능도 라우트/코드는 별도로 점검
 "화면에서 뺐다"와 "배포에서 뺐다"는 다르다.
 비활성화된 기능의 API 라우트가 코드베이스에 남아있으면 여전히 공격 표면이다.
 
@@ -827,24 +815,15 @@ $450→$504,000 매출 변화가 "+111,900% 성장"으로 잡혀 313개사 평�
 앞으로 새로운 통계 집계 기능(평균/표준편차/분포 계산) 추가 시
 이 네 단계를 기본으로 적용.
 
-## 코드 작성 원칙 (ponytail 7단계)
-새 코드를 짜기 전에 반드시 이 순서로 검토:
-1. 이거 굳이 만들어야 하나? (안 만드는 게 최선)
-2. 코드베이스에 이미 있나? → 재사용
-3. 표준 라이브러리가 해주나? → 사용
-4. 언어/플랫폼 기본 기능인가? → 사용
-5. 이미 깔린 라이브러리로 되나? → 사용
-6. 한 줄로 되나? → 한 줄로
-7. 그제서야: 동작하는 최소한의 코드
-
-절대 게으르면 안 되는 것 (코드 줄여도 이건 절대 생략 금지):
+## 코드 작성 시 생략 금지 항목 (1min 특화 — ponytail 7단계는 전역 `~/.claude/CLAUDE.md` 참고)
+코드 줄여도 이건 절대 생략 금지:
 - 입력값 검증 (CIK 없는 기업, 빈 응답 등)
 - 데이터 손실 막는 에러 처리 (실패 시 null 저장, 프로세스 중단 금지)
 - API rate limit 초과 시 재시도 로직
 - 환경변수 누락 시 명시적 에러
 
-## Quality Gate 원칙
-Claude API 응답에서 아래 이상값 감지 시 해당 섹션만 "—" 처리, 전체 중단 금지:
+## Quality Gate 원칙 (1min 구현 기준 — 이상값 감지 시 부분 처리 원칙 자체는 전역 CLAUDE.md 참고)
+이상값 판정 기준:
 - 숫자 필드에 -999, -999% 등 placeholder 값
 - 빈 문자열 또는 null이어야 할 자리에 "확인 필요" 텍스트
 - 재무 수치가 전년 대비 10배 이상 변동 시 (추정) 뱃지 필수
