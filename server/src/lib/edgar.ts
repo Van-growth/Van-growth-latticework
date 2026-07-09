@@ -60,7 +60,7 @@ export interface EdgarData {
     investingCF?: string;
     financingCF?: string;
   };
-  // 최근 10-K/20-F 최대 4개년 시계열 (fiscalYears[0]이 최신) — buildFinancialsV2FromRaw 등에서 사용
+  // 최근 10-K/20-F 최대 5개년 시계열 (fiscalYears[0]이 최신) — buildFinancialsV2FromRaw 등에서 사용
   rawSeries?: EdgarRawSeries;
 }
 
@@ -160,7 +160,7 @@ function fmtUsd(val: number): string {
     : `${sign}${(abs / 1_000_000).toFixed(0)}M USD`;
 }
 
-// 10-K/20-F 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 4개년(최신순).
+// 10-K/20-F 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 5개년(최신순).
 export function extractAnnualSeries(units: XbrlUnit[] | undefined): XbrlAnnualPoint[] {
   if (!units) return [];
 
@@ -177,7 +177,7 @@ export function extractAnnualSeries(units: XbrlUnit[] | undefined): XbrlAnnualPo
 
   return Array.from(byYear.entries())
     .sort((a, b) => b[0].localeCompare(a[0]))
-    .slice(0, 4)
+    .slice(0, 5)
     .map(([year, { val }]) => ({ year, val }));
 }
 
@@ -314,7 +314,7 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
     if (icf) financials.investingCF = fmtUsd(icf.val);
     if (fcf) financials.financingCF = fmtUsd(fcf.val);
 
-    // 다년도 시계열 (최대 4개년, 매출 기준 회계연도 정렬 — 없으면 순이익 기준)
+    // 다년도 시계열 (최대 5개년, 매출 기준 회계연도 정렬 — 없으면 순이익 기준)
     const fiscalYears = revData.length > 0 ? revData.map(d => d.year) : niData.map(d => d.year);
     if (fiscalYears.length > 0) {
       const align = (series: XbrlAnnualPoint[]) => {

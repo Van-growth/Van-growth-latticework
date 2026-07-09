@@ -40,7 +40,7 @@ async function fetchEdgar(url: string, attempt = 0): Promise<any | null> {
   }
 }
 
-// 10-K 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 4개년.
+// 10-K 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 5개년.
 function extractAnnual(
   units: Array<{ form: string; fp?: string; fy?: number; end: string; val: number }> | undefined,
 ): Array<{ year: string; val: number }> {
@@ -59,7 +59,7 @@ function extractAnnual(
 
   return Array.from(byYear.entries())
     .sort((a, b) => b[0].localeCompare(a[0]))
-    .slice(0, 4)
+    .slice(0, 5)
     .map(([year, { val }]) => ({ year, val }));
 }
 

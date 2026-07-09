@@ -34,6 +34,22 @@ function formatKrw(raw: string | undefined): string | undefined {
   return `${n}원`;
 }
 
+// analyze.ts/AnalysisCard.tsx의 IS_COLS(2021~2025)와 동일한 목표 연도 범위. edgar.ts/dart.ts가
+// 최대 5개년을 요청해도 그 회사 자체에 해당 연도 재무제표가 없으면(설립/상장 이전, 그 해 미공시 등)
+// 원천 응답에서 해당 연도가 통째로 빠짐 — 이 빈 연도를 Claude에게 명시하지 않으면 "조회 실패"로
+// 오인해 "확인 필요"로 반환함(2026-07-09 Apple/라이콤 FY2021 공백 사고).
+const TARGET_FISCAL_YEARS = ['2021', '2022', '2023', '2024', '2025'];
+
+function missingYearsNote(presentYears: string[]): string | null {
+  const missing = TARGET_FISCAL_YEARS.filter(y => !presentYears.includes(y));
+  if (missing.length === 0) return null;
+  return '\n[원천 데이터에 없는 연도]\n' + missing.map(y =>
+    `· ${y}: 데이터 없음 — 원천 공시에 해당 연도 재무제표 자체가 존재하지 않음(설립/상장 이전이거나 ` +
+    `그 해 공시가 없음). 조회 실패가 아니므로 이 연도의 매출/영업이익/순이익 등은 "확인 필요" 대신 ` +
+    `"해당없음"으로 표기하세요.`
+  ).join('\n');
+}
+
 // ── DART + KIS 컨텍스트 ───────────────────────────────────────────────────────
 
 function buildDartContext(d: DartData, kis: KisQuote | null): string {
@@ -51,12 +67,16 @@ function buildDartContext(d: DartData, kis: KisQuote | null): string {
   }
 
   const trend = d.rawSeries?.cfs ?? d.rawSeries?.ofs;
-  if (trend && trend.fiscalYears.length > 1) {
-    lines.push('\n[다년도 매출 추이]');
-    trend.fiscalYears.forEach((fy, i) => {
-      const v = trend.revenue[i];
-      lines.push(`· ${fy}: ${v != null ? formatKrw(String(v)) : '—'}`);
-    });
+  if (trend) {
+    if (trend.fiscalYears.length > 1) {
+      lines.push('\n[다년도 매출 추이]');
+      trend.fiscalYears.forEach((fy, i) => {
+        const v = trend.revenue[i];
+        lines.push(`· ${fy}: ${v != null ? formatKrw(String(v)) : '—'}`);
+      });
+    }
+    const missingNote = missingYearsNote(trend.fiscalYears);
+    if (missingNote) lines.push(missingNote);
   }
 
   // KIS 시세 데이터
@@ -164,23 +184,27 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     lines.push('→ 재무 섹션에 이 수치들을 사용하고 각 출처((EDGAR) 또는 (FMP))를 명시하세요.');
   }
 
-  if (e.rawSeries && e.rawSeries.fiscalYears.length > 1) {
-    // 매출만 다년도로 주면 Claude가 영업이익/순이익의 과거 연도는 추세로 추측해 "(추정)"을
-    // 붙이게 됨 — 실제 EDGAR 수치인데 추정으로 오분류되는 원인. 세 지표 모두 연도별로 명시.
-    const oiAbsent = e.rawSeries.operatingIncome.every(v => v == null);
-    const niAbsent = e.rawSeries.netIncome.every(v => v == null);
-    const naLabel = (fieldAbsent: boolean) => fieldAbsent ? '해당없음' : '확인 필요';
-    lines.push('\n[다년도 손익 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]');
-    e.rawSeries.fiscalYears.forEach((fy, i) => {
-      const rev = e.rawSeries!.revenue[i];
-      const oi  = e.rawSeries!.operatingIncome[i];
-      const ni  = e.rawSeries!.netIncome[i];
-      lines.push(
-        `· ${fy}: Revenue ${rev != null ? fmpUsd(rev) : '확인 필요'}` +
-        `, Operating Inc. ${oi != null ? fmpUsd(oi) : naLabel(oiAbsent)}` +
-        `, Net Income ${ni != null ? fmpUsd(ni) : naLabel(niAbsent)}`
-      );
-    });
+  if (e.rawSeries) {
+    if (e.rawSeries.fiscalYears.length > 1) {
+      // 매출만 다년도로 주면 Claude가 영업이익/순이익의 과거 연도는 추세로 추측해 "(추정)"을
+      // 붙이게 됨 — 실제 EDGAR 수치인데 추정으로 오분류되는 원인. 세 지표 모두 연도별로 명시.
+      const oiAbsent = e.rawSeries.operatingIncome.every(v => v == null);
+      const niAbsent = e.rawSeries.netIncome.every(v => v == null);
+      const naLabel = (fieldAbsent: boolean) => fieldAbsent ? '해당없음' : '확인 필요';
+      lines.push('\n[다년도 손익 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]');
+      e.rawSeries.fiscalYears.forEach((fy, i) => {
+        const rev = e.rawSeries!.revenue[i];
+        const oi  = e.rawSeries!.operatingIncome[i];
+        const ni  = e.rawSeries!.netIncome[i];
+        lines.push(
+          `· ${fy}: Revenue ${rev != null ? fmpUsd(rev) : '확인 필요'}` +
+          `, Operating Inc. ${oi != null ? fmpUsd(oi) : naLabel(oiAbsent)}` +
+          `, Net Income ${ni != null ? fmpUsd(ni) : naLabel(niAbsent)}`
+        );
+      });
+    }
+    const missingNote = missingYearsNote(e.rawSeries.fiscalYears);
+    if (missingNote) lines.push(missingNote);
   }
 
   // FMP key metrics (valuation)

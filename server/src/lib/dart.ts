@@ -47,7 +47,7 @@ export interface DartData {
   stockCode: string | null;
   disclosures: Array<{ report_nm: string; rcept_dt: string; flr_nm: string }>;
   financials: { year?: string; revenue?: string; operatingProfit?: string; netIncome?: string };
-  // 최근 사업보고서 최대 4개년 CFS(연결)/OFS(별도) 시계열 — buildFinancialsV2FromRaw 등에서 사용
+  // 최근 사업보고서 최대 5개년 CFS(연결)/OFS(별도) 시계열 — buildFinancialsV2FromRaw 등에서 사용
   rawSeries?: DartRawSeries;
 }
 
@@ -114,13 +114,13 @@ function buildSeries(yearMap: Map<string, YearSlice>, years: string[]): DartFinS
   };
 }
 
-// 최근 4개년 CFS(연결)/OFS(별도) 재무제표를 병렬 조회 (fs_div 없이 호출하면 CFS+OFS 동시 반환)
+// 최근 5개년 CFS(연결)/OFS(별도) 재무제표를 병렬 조회 (fs_div 없이 호출하면 CFS+OFS 동시 반환)
 async function fetchMultiYearSeries(
   corpCode: string,
   key: string,
 ): Promise<{ cfs: DartFinSeries | null; ofs: DartFinSeries | null }> {
   const currentYear = new Date().getFullYear();
-  const YEARS = [currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4].map(String);
+  const YEARS = [currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4, currentYear - 5].map(String);
 
   const cfsMap = new Map<string, YearSlice>();
   const ofsMap = new Map<string, YearSlice>();

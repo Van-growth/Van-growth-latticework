@@ -23,6 +23,7 @@ import {
   StructuredFinancials,
   DataSource,
   Source,
+  SourceLevel,
   SummaryV2,
   IndustryHistoryV2,
   TechEvolutionV2,
@@ -118,10 +119,11 @@ function DataValue({ text, className = '' }: { text: string | null | undefined; 
   if (str === '확인 필요' || str === '공개 없음') {
     return <span className={`text-gray-400 italic ${className}`}>{str}</span>;
   }
-  // "해당없음" — 조회 실패("확인 필요")가 아니라 그 기업 구조상 존재하지 않는 지표
-  // (예: 지주회사·보험사의 영업이익 미보고). 기울임 없이 구분 표시.
+  // "해당없음" — 조회 실패("확인 필요")가 아니라 애초에 존재하지 않는 데이터. 지표 자체가
+  // 구조상 미보고(예: 지주회사·보험사의 영업이익)이거나, 그 연도의 재무제표 자체가 원천 공시에
+  // 없는 경우(예: 설립/상장 이전 연도) 둘 다 포함. 기울임 없이 구분 표시.
   if (str === '해당없음') {
-    return <span className={`text-gray-400 ${className}`} title="이 기업 구조상 해당 지표가 보고되지 않음">{str}</span>;
+    return <span className={`text-gray-400 ${className}`} title="이 지표 또는 연도의 데이터가 원천 공시에 존재하지 않음">{str}</span>;
   }
   if (str.includes('(추정)')) {
     const idx = str.indexOf('(추정)');
@@ -161,8 +163,9 @@ function FinancialValue({ text, dataSource }: { text: string | null | undefined;
     <span className="inline-flex items-center gap-0.5">
       <DataValue text={cleaned} />
       {(isEdgar || isDart) && (
+        // EDGAR/DART 둘 다 공식 데이터(L1)라 색상은 동일 — isEdgar/isDart는 툴팁 텍스트에만 사용
         <span
-          className={`w-1.5 h-1.5 rounded-full shrink-0 cursor-help ${isEdgar ? 'bg-blue-500' : 'bg-emerald-500'}`}
+          className={`w-1.5 h-1.5 rounded-full shrink-0 cursor-help ${LEVEL_DOT.L1}`}
           title={isEdgar ? 'SEC EDGAR 공식 데이터' : 'DART 공식 데이터'}
         />
       )}
@@ -236,6 +239,14 @@ const LEVEL_BADGE: Record<string, { label: string; cls: string }> = {
   L3: { label: '⚪ 추정', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
 };
 
+// 출처 종류(EDGAR/DART/웹검색)가 아니라 신뢰도(L1/L2/L3) 기준으로 점 색상 결정 —
+// EDGAR/DART는 둘 다 L1이므로 항상 동일한 색으로 렌더링됨
+const LEVEL_DOT: Record<SourceLevel, string> = {
+  L1: 'bg-green-500',
+  L2: 'bg-amber-500',
+  L3: 'bg-gray-400',
+};
+
 function SourcesList({ sources }: { sources: Source[] | undefined }) {
   if (!sources?.length) return null;
   return (
@@ -277,17 +288,18 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
 
 // ── Data Source Badge ─────────────────────────────────────────────────────────
 
-const DATA_SOURCE_CONFIG: Record<DataSource, { label: string; cls: string; dot: string }> = {
-  dart:       { label: 'DART 연동됨',      cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  edgar:      { label: 'SEC EDGAR 연동됨', cls: 'bg-blue-50 text-blue-700',       dot: 'bg-blue-500' },
-  web_search: { label: '웹 검색 기반',      cls: 'bg-gray-100 text-gray-500',     dot: 'bg-gray-400' },
+// label은 출처 종류별 텍스트 구분용, level은 색상 결정용(EDGAR/DART 둘 다 공식 데이터라 L1로 동일)
+const DATA_SOURCE_CONFIG: Record<DataSource, { label: string; level: SourceLevel }> = {
+  dart:       { label: 'DART 연동됨',      level: 'L1' },
+  edgar:      { label: 'SEC EDGAR 연동됨', level: 'L1' },
+  web_search: { label: '웹 검색 기반',      level: 'L3' },
 };
 
 function DataSourceBadge({ source }: { source: DataSource }) {
   const cfg = DATA_SOURCE_CONFIG[source];
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${cfg.cls}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE[cfg.level].cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT[cfg.level]}`} />
       {cfg.label}
     </span>
   );
@@ -1837,16 +1849,16 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
       {/* 데이터 출처 뱃지 + Refresh 버튼 */}
       <div className="flex items-center justify-between">
         {dataSource === 'edgar' ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />🟢 SEC EDGAR 공식
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 SEC EDGAR 공식
           </span>
         ) : dataSource === 'dart' ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />🟢 DART 공식
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 DART 공식
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />⚪ 웹 검색 추정치
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L3.cls}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L3}`} />⚪ 웹 검색 추정치
           </span>
         )}
         <button
