@@ -104,6 +104,16 @@ function buildDartContext(d: DartData, kis: KisQuote | null): string {
       });
   }
 
+  if (d.triggerEvents?.length) {
+    lines.push('\n[최근 트리거 이벤트 후보 — 주요사항보고서(B001), 최근 12개월]');
+    lines.push('보고서명 자체가 사건 유형을 담고 있음(예: "유상증자결정"→투자유치/자금조달, ' +
+      '"타법인주식및출자증권취득결정"→M&A/지분취득). summary_v2의 trigger_events 스키마 참고해 구조화.');
+    d.triggerEvents.forEach((t) => {
+      const date = t.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+      lines.push(`· ${date}  ${t.reportName}`);
+    });
+  }
+
   return lines.join('\n');
 }
 
@@ -223,6 +233,15 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     lines.push('\n[최근 공시 목록]');
     e.filings.slice(0, 5).forEach((f) => {
       lines.push(`· ${f.filingDate}  ${f.form}`);
+    });
+  }
+
+  if (e.triggerEvents?.length) {
+    lines.push('\n[최근 트리거 이벤트 후보 — 8-K 원문 발췌, 최근 12개월]');
+    lines.push('아이템 코드: 1.01 중요계약체결 / 2.01 인수·매각완료 / 3.02 지분매각(자금조달). ' +
+      'summary_v2의 trigger_events 스키마 참고해 날짜·금액·상대방·유형을 원문에서 구조화.');
+    e.triggerEvents.forEach((t) => {
+      lines.push(`· [${t.date}, item ${t.itemCodes}] ${t.text}`);
     });
   }
 

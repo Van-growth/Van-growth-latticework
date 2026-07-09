@@ -1,4 +1,5 @@
 // SEC EDGAR API client
+import * as cheerio from 'cheerio';
 import { supabase } from './supabase';
 
 const EDGAR_HEADERS = { 'User-Agent': 'Latticework sg.van.p@gmail.com' };
@@ -17,9 +18,52 @@ async function fetchJson<T>(url: string, timeoutMs = 15_000): Promise<T | null> 
   }
 }
 
+// 8-K 본문(primaryDocument) fetch — claude.ts의 fetch_url은 "SEC Archives 원문 금지" 규칙이 있어
+// (10-K 등 대형 문서로 인한 지연/토큰 낭비 방지 목적) 여기서는 별도로, 서버가 트리거 이벤트
+// 후보로 이미 좁혀진 8-K 1~2개만 직접 fetch — 10-K보다 훨씬 짧아 토큰 부담이 적음.
+async function fetchEdgarDocumentText(cik: string, accessionNumber: string, primaryDocument: string): Promise<string | null> {
+  const cikNoLeadingZeros = String(Number(cik));
+  const accNoDashes = accessionNumber.replace(/-/g, '');
+  const url = `https://www.sec.gov/Archives/edgar/data/${cikNoLeadingZeros}/${accNoDashes}/${primaryDocument}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const res = await fetch(url, { headers: EDGAR_HEADERS, signal: controller.signal });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    $('script, style').remove();
+    const text = $('body').text().replace(/\s+/g, ' ').trim();
+    return text ? text.slice(0, 6000) : null; // 토큰 예산 보호 — 8-K 본문은 보통 이보다 훨씬 짧음
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 interface SubmissionsData {
   name: string;
-  filings: { recent: { form: string[]; filingDate: string[] } };
+  filings: {
+    recent: {
+      form: string[];
+      filingDate: string[];
+      reportDate: string[];
+      accessionNumber: string[];
+      primaryDocument: string[];
+      items: string[];
+    };
+  };
+}
+
+// 8-K 중 "트리거 이벤트"로 볼 아이템 코드 — 1.01 중요계약, 2.01 인수·매각 완료, 3.02 지분매각(자금조달)
+const TRIGGER_EVENT_8K_ITEMS = new Set(['1.01', '2.01', '3.02']);
+const TRIGGER_EVENT_LOOKBACK_DAYS = 365;
+
+export interface TriggerEventCandidate {
+  date: string;
+  itemCodes: string;
+  text: string;
 }
 
 interface XbrlUnit { form: string; fp?: string; fy?: number; val: number; end: string }
@@ -62,6 +106,8 @@ export interface EdgarData {
   };
   // 최근 10-K/20-F 최대 5개년 시계열 (fiscalYears[0]이 최신) — buildFinancialsV2FromRaw 등에서 사용
   rawSeries?: EdgarRawSeries;
+  // 최근 12개월 이내 8-K 중 트리거 이벤트 후보(투자유치/M&A/대규모계약) 원문 — summary_v2 프롬프트에서 구조화
+  triggerEvents?: TriggerEventCandidate[];
 }
 
 // ── cik_master 우선 조회 → EFTS 폴백 ─────────────────────────────────────────
@@ -269,6 +315,35 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
     }
   }
 
+  // 트리거 이벤트 후보 — 최근 12개월 8-K 중 투자유치/M&A/중요계약 아이템 코드만, 최대 2개 본문 fetch
+  let triggerEvents: TriggerEventCandidate[] | undefined;
+  {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - TRIGGER_EVENT_LOOKBACK_DAYS);
+    const candidates: Array<{ date: string; itemCodes: string; accessionNumber: string; primaryDocument: string }> = [];
+    for (let i = 0; i < Math.min(recent.form?.length ?? 0, 200); i++) {
+      if (recent.form[i] !== '8-K') continue;
+      const items = recent.items?.[i];
+      if (!items) continue;
+      const codes = items.split(',').map(c => c.trim());
+      if (!codes.some(c => TRIGGER_EVENT_8K_ITEMS.has(c))) continue;
+      const date = recent.reportDate?.[i] || recent.filingDate[i];
+      if (new Date(date) < cutoff) continue;
+      candidates.push({ date, itemCodes: items, accessionNumber: recent.accessionNumber[i], primaryDocument: recent.primaryDocument[i] });
+      if (candidates.length >= 3) break; // 최신순 정렬이므로 3개면 충분한 후보 풀
+    }
+    if (candidates.length > 0) {
+      const fetched = await Promise.all(
+        candidates.slice(0, 2).map(async c => { // 본문 fetch는 지연/토큰 예산상 최대 2개만
+          const text = await fetchEdgarDocumentText(cik, c.accessionNumber, c.primaryDocument);
+          return text ? { date: c.date, itemCodes: c.itemCodes, text } : null;
+        }),
+      );
+      const events = fetched.filter((e): e is TriggerEventCandidate => e !== null);
+      if (events.length > 0) triggerEvents = events;
+    }
+  }
+
   const gaap = factsRes?.facts?.['us-gaap'];
   const financials: EdgarData['financials'] = {};
   let rawSeries: EdgarRawSeries | undefined;
@@ -340,5 +415,5 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
 
   console.log(`[edgar] XBRL result for "${companyName}" (CIK ${cik}): rev=${financials.revenue ?? 'null'} opInc=${financials.operatingIncome ?? 'null'} netInc=${financials.netIncome ?? 'null'} year=${financials.year ?? 'null'} years=${rawSeries?.fiscalYears.length ?? 0}`);
 
-  return { cik, companyName: entityName, ticker, filings, financials, rawSeries };
+  return { cik, companyName: entityName, ticker, filings, financials, rawSeries, triggerEvents };
 }

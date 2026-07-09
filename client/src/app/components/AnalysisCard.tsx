@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, memo, useCallback, useMemo, useTransition } from 'react';
 import { useAnalysis } from '@/app/context/AnalysisContext';
+import { useAuth } from '@/app/context/AuthContext';
+import { trackEvent } from '@/lib/analytics';
 import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
@@ -569,6 +571,27 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
           <p className="text-sm text-gray-700 leading-relaxed">{s.bear_case}</p>
         </div>
       </div>
+
+      {/* 최근 트리거 이벤트 — 이벤트 없으면 섹션 자체 미노출 */}
+      {s.trigger_events && s.trigger_events.length > 0 && (
+        <SectionCard title="최근 트리거 이벤트" dotColor="bg-amber-400">
+          <div className="space-y-3">
+            {s.trigger_events.map((ev, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span className="shrink-0 text-[11px] font-medium text-gray-400 w-20 pt-0.5">{ev.date}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mb-0.5">
+                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-700">{ev.type}</span>
+                    {ev.amount && <span className="text-xs font-medium text-gray-700">{ev.amount}</span>}
+                    {ev.counterparty && <span className="text-xs text-gray-400">· {ev.counterparty}</span>}
+                  </div>
+                  <p className="text-sm text-gray-700 leading-snug"><CitedText text={ev.description} /></p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
       {onTabChange && (
         <div className="flex justify-end">
@@ -2325,6 +2348,17 @@ function CardsSkeleton({ count = 3 }: { count?: number }) {
   );
 }
 
+// 온디맨드 섹션 생성 중 표시 — 배치 스트리밍 스켈레톤(TimelineSkeleton 등)과 달리
+// "지금 이 요청으로 생성 중"임을 명시적으로 알림 (financials 새로고침과 동일한 패턴).
+function SectionGenerating({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
+      <RefreshCw size={20} className="animate-spin" />
+      <span className="text-sm">{label} 생성 중...</span>
+    </div>
+  );
+}
+
 function TableSkeleton({ rows = 5, cols = 6 }: { rows?: number; cols?: number }) {
   const tpl = `2fr ${Array(cols - 1).fill('1fr').join(' ')}`;
   return (
@@ -2528,12 +2562,17 @@ const TAB_BATCH: Record<TabKey, number> = {
   growth_scenario:  6,
 };
 
+// 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
+const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
+
 function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
   isPremium?: boolean;
 }) {
+  const { user } = useAuth();
+  const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
   const [tab, setTab] = useState<TabKey>('summary');
   const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -2560,6 +2599,21 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
       startTransition(() => setTab('summary'));
     }
   }, [completedBatches]);
+
+  // industry_history_v2/tech_evolution_v2는 초기 배치에서 생성하지 않고 온디맨드 전환됨 —
+  // 해당 탭을 열었는데 데이터가 없으면 기존 "탭별 재분석" 경로(onReanalyze)로 자동 생성 요청.
+  // onReanalyze가 없는 화면(히스토리/공유 링크)에서는 기존 수동 재분석 버튼 UI로 폴백.
+  const autoGenTriggered = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const maybeAutoGenerate = (key: string, hasData: boolean) => {
+      if (!onReanalyze || hasData) return;
+      if (autoGenTriggered.current.has(key) || isReanalyzing(key)) return;
+      autoGenTriggered.current.add(key);
+      onReanalyze(key);
+    };
+    if (tab === 'industry_history') maybeAutoGenerate('industry', !!data.industry_history_v2);
+    if (tab === 'tech_evolution')   maybeAutoGenerate('tech', !!data.tech_evolution_v2);
+  }, [tab, data.industry_history_v2, data.tech_evolution_v2, onReanalyze, reanalyzingTabs]);
 
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
@@ -2598,7 +2652,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <ExportPdfButton data={data} />
+            {isAdmin && <ExportPdfButton data={data} />}
             <DataSourceBadge source={data.dataSource ?? 'web_search'} />
           </div>
         </div>
@@ -2621,7 +2675,11 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
           return (
             <button
               key={t.key}
-              onClick={() => startTransition(() => setTab(t.key))}
+              onClick={() => {
+                trackEvent('tab_clicked', { tab: t.key });
+                if (t.key === 'financials') trackEvent('financials_tab_reached', { companyName: data.companyName });
+                startTransition(() => setTab(t.key));
+              }}
               onMouseEnter={() => setHoveredTooltip(t.tooltip)}
               onMouseLeave={() => setHoveredTooltip(null)}
               className={`shrink-0 flex items-center gap-1 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
@@ -2669,16 +2727,20 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
             : <SummaryTab data={data} />
         )}
         {tab === 'industry_history' && (
-          (isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <TimelineSkeleton /> :
+          !batchDone(TAB_BATCH.industry_history) ? <TimelineSkeleton /> :
           data.industry_history_v2
             ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
-            : <>{reanalyzeBtn('industry')}<IndustryHistoryTab data={data} /></>
+            : isReanalyzing('industry')
+              ? <SectionGenerating label="산업 역사" />
+              : <>{reanalyzeBtn('industry')}<IndustryHistoryTab data={data} /></>
         )}
         {tab === 'tech_evolution' && (
-          (isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <CardsSkeleton count={4} /> :
+          !batchDone(TAB_BATCH.tech_evolution) ? <CardsSkeleton count={4} /> :
           data.tech_evolution_v2
             ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
-            : <>{reanalyzeBtn('tech')}<TechEvolutionTab data={data} /></>
+            : isReanalyzing('tech')
+              ? <SectionGenerating label="기술 변화" />
+              : <>{reanalyzeBtn('tech')}<TechEvolutionTab data={data} /></>
         )}
         {tab === 'value_chain' && (
           (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :

@@ -41,6 +41,11 @@ export interface DartRawSeries {
   source: 'DART';
 }
 
+export interface DartTriggerEvent {
+  date: string;
+  reportName: string;
+}
+
 export interface DartData {
   corpCode: string;
   corpName: string;
@@ -49,6 +54,9 @@ export interface DartData {
   financials: { year?: string; revenue?: string; operatingProfit?: string; netIncome?: string };
   // 최근 사업보고서 최대 5개년 CFS(연결)/OFS(별도) 시계열 — buildFinancialsV2FromRaw 등에서 사용
   rawSeries?: DartRawSeries;
+  // 최근 12개월 이내 주요사항보고서(B001) — 유상증자/M&A 등 트리거 이벤트 후보. report_nm 자체가
+  // "유상증자결정"·"타법인주식및출자증권취득결정" 등 사건 유형을 담고 있어 본문 조회 없이도 신호로 사용 가능.
+  triggerEvents?: DartTriggerEvent[];
 }
 
 // 계정명 별칭 — 기업마다 표기 다양
@@ -168,6 +176,18 @@ async function fetchDisclosures(corpCode: string, key: string): Promise<DartData
   return disclosures;
 }
 
+// 주요사항보고서(B001) — 유상증자/M&A/자산양수도 등 트리거 이벤트가 여기서 공시됨.
+// fetchDisclosures의 정기공시(A001/A002/F001)와는 별도 조회 — 최근 목록에 밀려나지 않도록 분리.
+async function fetchTriggerEvents(corpCode: string, key: string): Promise<DartTriggerEvent[]> {
+  const bgn_de = `${new Date().getFullYear() - 1}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`;
+  const url =
+    `${BASE}/list.json?crtfc_key=${encodeURIComponent(key)}` +
+    `&corp_code=${corpCode}&bgn_de=${bgn_de}&pblntf_ty=B001&page_count=5`;
+  const res = await fetchJson<{ status: string; list?: DartDisclosureRow[] }>(url);
+  if (res?.status !== '000' || !res.list) return [];
+  return res.list.slice(0, 5).map((d) => ({ date: d.rcept_dt, reportName: d.report_nm }));
+}
+
 // ── corp_master 우선 조회 → API 폴백 ─────────────────────────────────────────
 
 async function lookupCorpCode(
@@ -235,15 +255,17 @@ export async function fetchDartData(companyName: string): Promise<DartData | nul
 
   const { corpCode, corpName, stockCode } = corp;
 
-  // 최근 공시 목록 + 최근 4개년 재무 시계열 병렬 조회
-  const [disclosuresResult, seriesResult] = await Promise.allSettled([
+  // 최근 공시 목록 + 최근 4개년 재무 시계열 + 트리거 이벤트(주요사항보고서) 병렬 조회
+  const [disclosuresResult, seriesResult, triggerResult] = await Promise.allSettled([
     fetchDisclosures(corpCode, key),
     fetchMultiYearSeries(corpCode, key),
+    fetchTriggerEvents(corpCode, key),
   ]);
 
   const disclosures = disclosuresResult.status === 'fulfilled' ? disclosuresResult.value : [];
   const { cfs, ofs } =
     seriesResult.status === 'fulfilled' ? seriesResult.value : { cfs: null, ofs: null };
+  const triggerEvents = triggerResult.status === 'fulfilled' ? triggerResult.value : [];
 
   // 연결(CFS) 우선, 없으면 별도(OFS) — 최신연도 단일값은 기존 narrative(financials) 호환용
   const primary = cfs ?? ofs;
@@ -262,5 +284,5 @@ export async function fetchDartData(companyName: string): Promise<DartData | nul
       ? { ticker: stockCode, corp_code: corpCode, corp_name: corpName, cfs, ofs, currency: 'KRW', source: 'DART' }
       : undefined;
 
-  return { corpCode, corpName, stockCode, disclosures, financials, rawSeries };
+  return { corpCode, corpName, stockCode, disclosures, financials, rawSeries, triggerEvents: triggerEvents.length > 0 ? triggerEvents : undefined };
 }

@@ -62,6 +62,14 @@ export interface SummaryV2 {
     trend: 'concentrating' | 'diversifying' | 'stable';
   };
   key_markets: { country: string; revenue_share: number }[];
+  trigger_events?: {
+    date: string;
+    type: '투자유치' | '유상증자' | '대규모딜';
+    amount: string;
+    counterparty: string;
+    description: string;
+    source_index: number;
+  }[];
   key_bullets: string[];
   bull_case: string;
   bear_case: string;
@@ -288,8 +296,10 @@ export interface FounderV2 {
 
 export interface AnalysisData {
   summary_v2: SummaryV2;
-  industry_history_v2: IndustryHistoryV2;
-  tech_evolution_v2: TechEvolutionV2;
+  // 온디맨드 전환(2026-07) — 초기 배치에서 생성하지 않음. null이면 "아직 생성 안 됨"을 의미하며
+  // 프론트가 탭 클릭 시 /api/analyze/reanalyze로 그때 생성함.
+  industry_history_v2: IndustryHistoryV2 | null;
+  tech_evolution_v2: TechEvolutionV2 | null;
   value_chain_v2: ValueChainV2;
   business_model_v2: BusinessModelV2;
   competitors_v2: CompetitorsV2;
@@ -543,11 +553,12 @@ const SECTION_SYSTEM = `당신은 전문 기업 분석가입니다. 제공된 �
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `아래 스키마의 JSON 객체만 출력:
-{"company":"기업명","ticker":"TradingView 형식 티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"customer_concentration":{"customers":[{"name":"고객사명","revenue_share":공시 확인된 숫자}],"top_n":숫자,"top_n_share":숫자,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"key_bullets":["이 기업이 이 시장에서 독특한 이유 — 포지셔닝 핵심 20자이내","이 기업의 핵심 성장 드라이버 20자이내","이 기업의 가장 큰 실행 리스크 20자이내"],"bull_case":"성장 모멘텀: 시장 확장·파트너십 기회·경쟁 우위 관점 2줄이내","bear_case":"핵심 리스크: 실행 리스크·경쟁 위협·규제/시장 변수 관점 2줄이내","oneLiner":"이 기업의 현재 상황을 전략·실무 담당자가 바로 이해할 수 있는 1~2문장 핵심 해석","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"company":"기업명","ticker":"TradingView 형식 티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"customer_concentration":{"customers":[{"name":"고객사명","revenue_share":공시 확인된 숫자}],"top_n":숫자,"top_n_share":숫자,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"trigger_events":[{"date":"YYYY-MM-DD 또는 YYYY-MM","type":"투자유치|유상증자|대규모딜","amount":"금액 — 확인 안되면 빈 문자열","counterparty":"상대방(투자사/파트너사명) — 확인 안되면 빈 문자열","description":"1줄 설명, [n] 출처 표기 포함","source_index":숫자}],"key_bullets":["이 기업이 이 시장에서 독특한 이유 — 포지셔닝 핵심 20자이내","이 기업의 핵심 성장 드라이버 20자이내","이 기업의 가장 큰 실행 리스크 20자이내"],"bull_case":"성장 모멘텀: 시장 확장·파트너십 기회·경쟁 우위 관점 2줄이내","bear_case":"핵심 리스크: 실행 리스크·경쟁 위협·규제/시장 변수 관점 2줄이내","oneLiner":"이 기업의 현재 상황을 전략·실무 담당자가 바로 이해할 수 있는 1~2문장 핵심 해석","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 top_customers: IR·공시에서 확인된 것만. 추정이면 빈 배열. key_markets.revenue_share: 공시 수치 없으면 해당 국가 항목 자체를 제외.
 ticker 필드는 반드시 TradingView 형식으로 반환: 미국 NASDAQ 상장 → "NASDAQ:심볼" (예: NASDAQ:NVDA), 미국 NYSE 상장 → "NYSE:심볼" (예: NYSE:PLTR), 한국 코스피 → "KRX:종목코드" (예: KRX:005930), 한국 코스닥 → "KOSDAQ:종목코드" (예: KOSDAQ:388130), 비상장 또는 불확실하면 null.
 bull_case/bear_case: 전략·실무 담당자 관점으로 작성. 주가·밸류에이션·투자 수익률 언급 금지.
 customer_concentration: 고객별 매출 비중을 공시·IR에서 확인할 수 없으면 반드시 null로 반환. 0%나 추정 불가 수치 절대 금지. customers 배열도 공시 확인된 수치만 포함, 불확실하면 빈 배열 []. top_n_share: 상위 N개 고객 합산 비중 (공시 미확인 시 null 전체 반환). is_concentrated: top_n_share >= 30이면 true.
+trigger_events: 컨텍스트의 [최근 트리거 이벤트 후보] 섹션(EDGAR 8-K 원문 발췌 또는 DART 주요사항보고서)과 웹 리서치의 최근 투자유치·펀딩·파트너십 정보를 근거로만 작성 — 추측 절대 금지. 최근 12개월 이내 이벤트만, 최신순 최대 3개. 근거 있는 이벤트가 없으면 반드시 빈 배열 []. amount/counterparty는 원문에서 확인 안 되면 빈 문자열로 두되 date/type/description은 항상 채울 것.
 oneLiner 규칙: 숫자 나열 금지. "왜 이 숫자가 의미있는가"를 서사로 설명. 예시 스타일: "매출은 늘었는데 이익은 줄었다 — 글로벌 인프라에 돈을 쏟아붓는 투자 시즌".`,
 
   industry_history_v2: `아래 스키마의 JSON 객체만 출력:
@@ -669,7 +680,7 @@ async function gatherResearch1(companyName: string): Promise<string> {
 
 [검색 순서 — 2회 이내]
 1. web_search: "${companyName} overview products services revenue business model 2024 2025"
-2. web_search: "${companyName} news strategy recent 2025"
+2. web_search: "${companyName} news strategy funding investment partnership deal recent 2025"
 
 [수집 항목]
 1. 기업 개요 (사업영역, 주요 제품/서비스, 설립연도, 본사, 티커)
@@ -677,6 +688,7 @@ async function gatherResearch1(companyName: string): Promise<string> {
 3. 사업 모델 요약 (수익 구조, 핵심 고객)
 4. 최신 뉴스 / 주요 동향 (2025)
 5. 성장 모멘텀 / 핵심 리스크
+6. 최근 12개월 이내 투자유치·펀딩라운드·대규모 파트너십/계약 (날짜·금액·상대방·출처 — 없으면 생략)
 
 추정값은 "(추정)" 명시.`;
 
@@ -879,6 +891,11 @@ export async function analyzeCompany(
 ): Promise<AnalysisData> {
   const skip = opts?.skipBatches ?? new Set<number>();
   const result: AnalysisData = { ...DEFAULT_ANALYSIS_DATA, ...(opts?.initialData ?? {}) };
+  // industry_history_v2/tech_evolution_v2는 배치2/3에서 더 이상 생성하지 않음(온디맨드 전환) —
+  // 캐시(initialData)로 이미 채워진 게 아니라면 DEFAULT_ANALYSIS_DATA의 빈 placeholder 대신
+  // null을 명시해야 프론트가 "생성됨(빈 데이터)"이 아니라 "아직 생성 안 됨"으로 인식한다.
+  if (!opts?.initialData?.industry_history_v2) result.industry_history_v2 = null;
+  if (!opts?.initialData?.tech_evolution_v2)   result.tech_evolution_v2   = null;
 
   const BATCH_TIMEOUT = 75_000;
 
@@ -942,24 +959,20 @@ export async function analyzeCompany(
   await Promise.all([
     runBatch(2,
       () => [
-        callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2'),
         callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
         callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
       ],
-      ([h, bm, c]) => ({
-        industry_history_v2: h  ?? DEFAULT_ANALYSIS_DATA.industry_history_v2,
+      ([bm, c]) => ({
         business_model_v2:   bm ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
         competitors_v2:      c  ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
       }),
     ),
     runBatch(3,
       () => [
-        callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2'),
         callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
         callSection<StrategyV2>(sharedContext, 'strategy_v2'),
       ],
-      ([t, vc, s]) => ({
-        tech_evolution_v2: t  ?? DEFAULT_ANALYSIS_DATA.tech_evolution_v2,
+      ([vc, s]) => ({
         value_chain_v2:    vc ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
         strategy_v2:       s  ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
       }),
@@ -1016,9 +1029,9 @@ export async function analyzeCompany(
   if (!hasAnySources) {
     console.warn(`[golden-set] sources 전체 비어있음`);
   }
+  // industry_history_v2/tech_evolution_v2는 온디맨드 전환으로 초기 분석에서 항상 null이라
+  // "실패"가 아니므로 golden-set 빈 섹션 카운트에서 제외.
   const emptySectionCount = [
-    result.industry_history_v2.timeline.length === 0,
-    result.tech_evolution_v2.stages.length === 0,
     result.value_chain_v2.layers.length === 0,
     result.business_model_v2.revenue_streams.length === 0,
     result.competitors_v2.direct.length === 0,

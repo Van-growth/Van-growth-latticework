@@ -176,13 +176,14 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
       summary_v2: data.summary_v2 ?? null,
       summary:    data.summary_v2?.key_bullets?.join(' | ') ?? '',
     };
+    // industry_history_v2/tech_evolution_v2는 배치2/3이 더 이상 생성하지 않음(온디맨드 전환) —
+    // 여기서 필드를 포함하면 이미 온디맨드로 생성돼 있던 값을 배치 재실행 시 null로 덮어쓰게 되므로
+    // 아예 건드리지 않는다(별도 소유자: /api/analyze/reanalyze의 getReanalyzeSectionDbFields).
     case 2: return {
-      industry_history_v2: data.industry_history_v2 ?? null,
       business_model_v2:   data.business_model_v2   ?? null,
       competitors_v2:      data.competitors_v2       ?? null,
     };
     case 3: return {
-      tech_evolution_v2: data.tech_evolution_v2 ?? null,
       value_chain_v2:    data.value_chain_v2    ?? null,
       strategy_v2:       data.strategy_v2       ?? null,
     };
@@ -460,8 +461,11 @@ router.post('/stream', async (req: Request, res: Response) => {
 
       if (cached) {
         const b1 = !!cached.summary_v2;
-        const b2 = !!(cached.industry_history_v2 && cached.business_model_v2 && cached.competitors_v2);
-        const b3 = !!(cached.tech_evolution_v2 && cached.value_chain_v2 && cached.strategy_v2);
+        // industry_history_v2/tech_evolution_v2는 온디맨드 전환(2026-07)으로 배치2/3에 더 이상
+        // 포함되지 않음 — "배치 완료" 판정에서 제외해야 아직 온디맨드 생성 전인 정상 캐시 행이
+        // 매번 배치 전체 재생성으로 이어지지 않는다. 캐시에 있으면 sendCached에서 별도로 실어보냄.
+        const b2 = !!(cached.business_model_v2 && cached.competitors_v2);
+        const b3 = !!(cached.value_chain_v2 && cached.strategy_v2);
         const b4 = !!cached.financials_v2;
         const b5 = !!cached.founder_v2;
 
@@ -526,8 +530,18 @@ router.post('/stream', async (req: Request, res: Response) => {
         };
 
         if (b1) sendCached(1, { summary_v2: cached.summary_v2 });
-        if (b2) sendCached(2, { industry_history_v2: cached.industry_history_v2, business_model_v2: cached.business_model_v2, competitors_v2: cached.competitors_v2 });
-        if (b3) sendCached(3, { tech_evolution_v2: cached.tech_evolution_v2, value_chain_v2: cached.value_chain_v2, strategy_v2: cached.strategy_v2 });
+        // industry_history_v2/tech_evolution_v2는 온디맨드라 캐시에 있을 때만 실어보냄 —
+        // 없으면 프론트에서 undefined로 남아 해당 탭 클릭 시 온디맨드 생성이 트리거됨.
+        if (b2) sendCached(2, {
+          business_model_v2: cached.business_model_v2,
+          competitors_v2:    cached.competitors_v2,
+          ...(cached.industry_history_v2 ? { industry_history_v2: cached.industry_history_v2 } : {}),
+        });
+        if (b3) sendCached(3, {
+          value_chain_v2: cached.value_chain_v2,
+          strategy_v2:    cached.strategy_v2,
+          ...(cached.tech_evolution_v2 ? { tech_evolution_v2: cached.tech_evolution_v2 } : {}),
+        });
         if (b4) sendCached(4, { financials_v2: cached.financials_v2, sources: cached.sources ?? {} });
         if (b5) sendCached(5, { founder_v2: cached.founder_v2 });
 
