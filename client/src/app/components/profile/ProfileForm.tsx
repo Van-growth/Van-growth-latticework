@@ -94,6 +94,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
           labelFor={labels.orgSize}
           value={values.org_size}
           onChange={v => setValues(s => ({ ...s, org_size: v }))}
+          cols={3}
         />
       </div>
 
@@ -125,6 +126,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
           labelFor={labels.jobLevel}
           value={values.job_level}
           onChange={v => setValues(s => ({ ...s, job_level: v }))}
+          cols={3}
         />
       </div>
 

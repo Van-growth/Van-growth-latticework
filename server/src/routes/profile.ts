@@ -10,14 +10,14 @@ import { resolveAuthUser } from '../lib/authUser';
 
 const router = Router();
 
-const ORG_SIZES = ['1-10', '11-50', '51-200', '200+'];
+const ORG_SIZES = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+'];
 const INDUSTRIES = [
   'saas', 'manufacturing', 'biotech_healthcare', 'retail_commerce', 'finance',
   'media_content', 'hardware_semiconductor', 'energy', 'logistics_transport',
   'consumer_goods', 'real_estate_construction', 'other',
 ];
 const JOB_ROLES = ['sales', 'bd', 'strategy', 'other'];
-const JOB_LEVELS = ['junior', 'mid', 'senior', 'lead'];
+const JOB_LEVELS = ['junior', 'mid', 'senior', 'team_lead', 'executive'];
 const PURPOSES = ['meeting_prep', 'partner_research', 'competitor_analysis', 'other'];
 
 const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, onboarding_completed_at';

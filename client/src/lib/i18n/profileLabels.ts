@@ -5,7 +5,7 @@
 
 export type Locale = 'ko' | 'en';
 
-export const ORG_SIZE_CODES = ['1-10', '11-50', '51-200', '200+'] as const;
+export const ORG_SIZE_CODES = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+'] as const;
 export type OrgSizeCode = (typeof ORG_SIZE_CODES)[number];
 
 // sector_mapping의 12개 sector_tag 분류를 소문자로 재사용 — 기업 분류축과 유저 자신의
@@ -20,7 +20,7 @@ export type IndustryCode = (typeof INDUSTRY_CODES)[number];
 export const JOB_ROLE_CODES = ['sales', 'bd', 'strategy', 'other'] as const;
 export type JobRoleCode = (typeof JOB_ROLE_CODES)[number];
 
-export const JOB_LEVEL_CODES = ['junior', 'mid', 'senior', 'lead'] as const;
+export const JOB_LEVEL_CODES = ['junior', 'mid', 'senior', 'team_lead', 'executive'] as const;
 export type JobLevelCode = (typeof JOB_LEVEL_CODES)[number];
 
 export const PURPOSE_CODES = ['meeting_prep', 'partner_research', 'competitor_analysis', 'other'] as const;
@@ -36,7 +36,8 @@ interface ProfileLabelDict {
 
 const ko: ProfileLabelDict = {
   orgSize: {
-    '1-10': '1-10명', '11-50': '11-50명', '51-200': '51-200명', '200+': '200명 이상',
+    '1-10': '1-10명', '11-50': '11-50명', '51-200': '51-200명',
+    '201-500': '201-500명', '501-1000': '501-1000명', '1000+': '1000명 이상',
   },
   industry: {
     saas: 'SaaS',
@@ -53,7 +54,7 @@ const ko: ProfileLabelDict = {
     other: '기타',
   },
   jobRole: { sales: '세일즈', bd: 'BD', strategy: '전략', other: '기타' },
-  jobLevel: { junior: '주니어', mid: '미들', senior: '시니어', lead: '리더' },
+  jobLevel: { junior: '주니어', mid: '미들', senior: '시니어', team_lead: '팀 리드', executive: '대표·임원(C-level)' },
   purpose: {
     meeting_prep: '미팅 준비',
     partner_research: '파트너 리서치',
