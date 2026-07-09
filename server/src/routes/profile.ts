@@ -36,6 +36,7 @@ router.get('/', async (req: Request, res: Response) => {
     .maybeSingle();
 
   if (error) {
+    console.error('[profile] GET 실패', { userId: authUser.id, message: error.message, code: error.code, details: error.details });
     res.status(500).json({ error: '프로필 조회 중 오류가 발생했습니다.' });
     return;
   }
@@ -104,6 +105,7 @@ router.patch('/', async (req: Request, res: Response) => {
     .maybeSingle();
 
   if (error) {
+    console.error('[profile] PATCH 실패', { userId: authUser.id, fields: Object.keys(fields), message: error.message, code: error.code, details: error.details });
     res.status(500).json({ error: '프로필 저장 중 오류가 발생했습니다.' });
     return;
   }
