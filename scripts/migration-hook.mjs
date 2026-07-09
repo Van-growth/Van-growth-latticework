@@ -9,7 +9,8 @@
 import { readFileSync } from 'fs';
 import { basename } from 'path';
 
-const PROJECT_ID = 'rtpcmbxijcxhzvortwxf';
+const PROJECT_ID_PROD = 'rtpcmbxijcxhzvortwxf';
+const PROJECT_ID_DEV = 'ininmbvzzdqplnfdnisf';
 
 let raw = '';
 try {
@@ -35,7 +36,8 @@ const migrationName = basename(filePath).replace(/\.sql$/, '');
 const sql = (tool_input?.content ?? '').trim();
 
 console.log(`\n[migration-hook] 새 마이그레이션 파일 감지: ${basename(filePath)}`);
-console.log(`Supabase MCP apply_migration을 즉시 호출하세요:`);
-console.log(`  project_id : ${PROJECT_ID}`);
+console.log(`Supabase MCP apply_migration을 prod + dev 두 프로젝트 모두에 즉시 호출하세요:`);
+console.log(`  1) project_id : ${PROJECT_ID_PROD}  (prod)`);
+console.log(`  2) project_id : ${PROJECT_ID_DEV}  (dev — MCP 미연결 시 Session pooler로 direct 접속 우회, CLAUDE.md 참고)`);
 console.log(`  name       : ${migrationName}`);
 console.log(`  query      :\n${sql}`);
