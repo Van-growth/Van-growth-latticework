@@ -46,24 +46,87 @@ latticework/
 
 ## Supabase MCP 마이그레이션 워크플로우
 
-**Supabase 프로젝트 ID**: `rtpcmbxijcxhzvortwxf`
+**Supabase 프로젝트 ID (prod)**: `rtpcmbxijcxhzvortwxf`
+**Supabase 프로젝트 ID (dev)**: `ininmbvzzdqplnfdnisf` (2026-07 생성)
 
-### 규칙: 새 마이그레이션 파일 작성 시 반드시 MCP로 즉시 적용
+✅ **2026-07-10부터 MCP가 prod/dev 둘 다 정상 연결됨** — 두 프로젝트 모두 "Van-growth"
+조직(`hcreensppxfymzapzmnb`) 아래 있고, `apply_migration`/`list_migrations` 전부 정상 동작
+확인함. 아래는 그 전까지 겪었던 문제와 최종 조치 기록(재발 방지용, dev가 다시 다른 조직으로
+분리되는 일이 생기면 참고할 것):
+- dev는 처음에 별도 조직("1min-dev")에 생성돼서 MCP(Claude Code 플러그인, OAuth 기반이라
+  조직 하나만 스코프로 잡힘)가 못 봤음 → dev 프로젝트를 Van-growth 조직으로 **Transfer**해서 해결.
+  (시도했던 대안 — 계정을 상대 조직에 멤버 초대만 하는 방법은 재인증 시 조직을 하나만 골라야 해서
+  근본적으로 안 됨 — 프로젝트를 한 조직으로 합치는 게 유일한 정공법이었음)
+- MCP 연결 전까지는 dev 마이그레이션 적용을 Session Pooler(`aws-1-ap-northeast-2.pooler.
+  supabase.com:5432`, direct connection은 이 환경에서 IPv6 전용이라 안 됨) + `pg` 패키지 direct
+  접속으로 우회했음 — `supabase_migrations.schema_migrations` 테이블도 대시보드로 만든 새
+  프로젝트엔 기본 생성이 안 돼있어서 직접 만들어야 했음
+- ⚠️ **direct 접속으로 새 테이블을 만들면 두 가지가 자동으로 안 붙음** — Supabase가 대시보드/CLI/MCP
+  `apply_migration`으로 마이그레이션을 적용할 때 내부적으로 처리해주는 것들인데, `postgres` role로
+  직접 `CREATE TABLE`하면 빠짐:
+  1. `service_role`/`anon`/`authenticated` 테이블 권한 — 없으면 서버가 `SUPABASE_SERVICE_ROLE_KEY`로
+     접속해도 `permission denied for table ...` 에러가 남 (2026-07 dev 이관 후 라이브 서버 테스트에서
+     발견 — 원인 파악까지 데이터/RLS 문제로 오인하기 쉬우니 주의). 조치:
+     ```sql
+     GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+     GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+     GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+     GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
+     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO postgres, anon, authenticated, service_role;
+     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
+     ```
+     (`supabase/migrations/20260710_public_schema_grants.sql`로 정식 기록됨 — RLS가 전 테이블에
+     활성화(정책 0개)돼있어서 anon/authenticated에 테이블 권한을 줘도 row 단위로는 여전히 완전
+     차단, prod와 동일한 보안 구조라 안전함)
+  2. `supabase_migrations.schema_migrations.idempotency_key`의 **UNIQUE 제약** — 이게 없으면
+     MCP `apply_migration`이 `there is no unique or exclusion constraint matching the ON
+     CONFLICT specification` 에러로 실패함(직접 겪음). direct 접속으로 이 테이블을 만들 때
+     `CREATE TABLE ... (version text PRIMARY KEY, statements text[], name text, created_by text,
+     idempotency_key text, rollback text[])`만으로는 부족 — 반드시
+     `ALTER TABLE supabase_migrations.schema_migrations ADD CONSTRAINT
+     schema_migrations_idempotency_key_key UNIQUE (idempotency_key);`까지 같이 실행할 것.
+
+### 규칙: 새 마이그레이션 파일 작성 시 반드시 MCP로 즉시 적용 — **prod + dev 둘 다**
 
 `supabase/migrations/*.sql` 파일을 Write 할 때마다 **반드시** 같은 응답 안에서
-`mcp__plugin_supabase_supabase__apply_migration`을 호출하여 적용해야 함.
+`mcp__plugin_supabase_supabase__apply_migration`을 **두 프로젝트 각각에** 호출하여 적용해야 함.
+하나만 적용하고 잊으면 dev/prod 스키마가 갈라져(schema drift) 이후 마이그레이션이 dev에서만
+성공하거나 prod에서만 실패하는 사고로 이어짐 — 별도 프로젝트로 분리한 대가로 생긴 프로세스
+부담이니 절대 생략하지 말 것.
 
 ```
+# 1) prod
 apply_migration(
   project_id = "rtpcmbxijcxhzvortwxf",
   name       = "<파일명에서 .sql 제거>",
   query      = "<파일 전체 SQL>"
 )
+
+# 2) dev — project_id만 다르고 나머지 동일
+apply_migration(
+  project_id = "ininmbvzzdqplnfdnisf",
+  name       = "<파일명에서 .sql 제거>",
+  query      = "<파일 전체 SQL>"
+)
 ```
 
-- PostToolUse hook(`scripts/migration-hook.mjs`)이 파일 감지 후 적용 정보를 출력함
-- 마이그레이션 SQL은 항상 `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`로 멱등성 보장
-- 마이그레이션 적용 확인: `list_migrations(project_id="rtpcmbxijcxhzvortwxf")`
+**새 마이그레이션 작성 시 체크리스트**
+- [ ] **Supabase SQL Editor(대시보드)에서 직접 실행 금지** — 반드시 로컬 `supabase/migrations/*.sql`
+  파일을 먼저 작성한 뒤, 그 파일 내용으로 prod/dev 둘 다 적용할 것. 이유: 2026-07 dev 프로젝트
+  마이그레이션 이관 작업 중 `20260703_sector_benchmark_cache_rls`라는, 로컬에 대응 `.sql` 파일이
+  아예 없는 마이그레이션이 prod에 적용돼 있는 걸 발견함 — SQL Editor(또는 MCP 호출 시 파일 없이
+  즉석 SQL)로 직접 실행하고 파일로 남기지 않은 사례로 보임. 다행히 prod의 `supabase_migrations.
+  schema_migrations` 트래킹 테이블에 실행된 SQL 원문이 남아있어 복구할 수 있었지만, 그 테이블이
+  없거나 접근 안 되는 상황이었다면 dev 프로젝트가 영구적으로 prod와 다른 스키마를 갖게 될
+  뻔했음. 로컬 파일이 "무엇이 적용됐는지"의 유일하게 신뢰할 수 있는 기록이 되게 할 것.
+- [ ] SQL이 `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` 등으로 멱등성 보장하는지 확인
+- [ ] prod(`rtpcmbxijcxhzvortwxf`)에 `apply_migration` 적용
+- [ ] dev(`ininmbvzzdqplnfdnisf`)에 적용 — **빠뜨리기 가장 쉬운 단계, 반드시 확인**
+- [ ] 두 프로젝트 모두 `list_migrations(project_id=...)`로 적용 확인
+- [ ] RLS가 필요한 신규 테이블이면 두 프로젝트 모두에서 RLS 활성화 여부 확인 (Security Principles 원칙 2 참고 — 신규 테이블은 기본적으로 RLS 꺼진 상태로 생성됨)
+
+- PostToolUse hook(`scripts/migration-hook.mjs`)이 파일 감지 후 적용 정보를 출력함 — dev 프로젝트 ID도 반영됨(`ininmbvzzdqplnfdnisf`)
 
 ## Dev
 ```bash
@@ -128,10 +191,11 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### 2. 섹션별 데이터 소스 우선순위
 ```
-재무수치:   DART > EDGAR > FMP > StockAnalysis > 웹검색
-시세/밸류:  TradingView > KIS > 웹검색
-텍스트분석: Claude 웹검색 기반 (L2/L3)
-창업자정보: LinkedIn > Crunchbase > TheVC > 언론
+재무수치:    DART > EDGAR > FMP > StockAnalysis > 웹검색
+시세/밸류:   TradingView > KIS > 웹검색
+텍스트분석:  Claude 웹검색 기반 (L2/L3)
+창업자정보:  LinkedIn > Crunchbase > TheVC > 언론
+트리거이벤트: EDGAR 8-K > DART 유상증자공시 > 웹검색
 ```
 
 ### 3. 캐시 무효화 기준
@@ -177,7 +241,7 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - "5명이 매일 쓰는 게 목표"
 
 ### 핵심 타겟 유저 (주 타겟 — 제품/GTM 방향 결정 기준)
-- 세일즈 담당자: 미팅 전 고객사 빠른 파악
+- AE(Account Executive): 제안/디스커버리 미팅 전 고객사 심층 파악 (사업모델·재무상태·전략 이해 → 미팅에서 신뢰도 있는 대화)
 - BD 담당자: 파트너/협력사 리서치
 - 전략 담당자: 경쟁사 분석 / 밸류체인 / M&A 대상 탐색
 
@@ -283,10 +347,21 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   - 1배치 (병렬 1개): summary_v2
   - fin_preview: EDGAR/DART 캐시·라이브 raw 데이터로 재무 탭 즉시 프리뷰 (batch4 Claude 응답 이전)
 - **2차** (1차 이후 백그라운드로 계속 처리, 기존 Promise.all 그대로):
-  - 2배치 (병렬 3개): industry_history_v2, business_model_v2, competitors_v2
-  - 3배치 (병렬 3개): tech_evolution_v2, value_chain_v2, strategy_v2
+  - 2배치 (병렬 2개): business_model_v2, competitors_v2
+  - 3배치 (병렬 2개): value_chain_v2, strategy_v2
   - 4배치 (병렬 2개): financials_v2, sources
   - 5배치: founder_v2
+- **온디맨드** (2026-07~, 초기 배치에서 제외): industry_history_v2(산업역사), tech_evolution_v2(기술변화) —
+  해당 탭을 처음 열 때만 `/api/analyze/reanalyze`(기존 "탭별 재분석" 경로 재사용)로 그 시점에 생성,
+  생성 중엔 스피너 + "생성 중..." 표시, 완료되면 DB 저장 + 이후 재방문·다른 유저 조회 시 캐시 히트.
+  DB 컬럼은 생성 전까지 `null` — "생성 실패"와 "아직 생성 안 함"을 구분하기 위해 빈 placeholder
+  객체 대신 명시적 null 사용(2배치/3배치 캐시 히트 판정에서도 이 두 필드는 제외됨).
+  실측(2026-07-09, Datadog, 개발 서버 1회 측정 — 배치 완료 시간은 병렬 호출 중 가장 느린 것에
+  의해 결정되므로 기업별 편차 있음): 2배치 30.4s(business_model_v2 26.7s, competitors_v2 30.4s),
+  3배치 36.7s(value_chain_v2 36.7s, strategy_v2 29.3s) — 이전에는 각 배치에 industry_history_v2/
+  tech_evolution_v2가 3번째 병렬 호출로 더해져 있었음. 셋 중 가장 느린 호출이 배치 완료 시간을
+  결정하는 구조라, 제거로 인한 체감 단축 폭은 그 두 섹션이 해당 배치에서 병목이었는지에 따라
+  기업마다 다름(느슨한 상한 감소는 항상 있음: 동시 API 호출·실패 표면 감소).
 - **3차** (2차 전체 완료 후, revenue_history 3개년 이상 확보된 기업만):
   - 6배치: growth_scenario_v2 — 몬테카를로 매출 시뮬레이션 (순수 계산, 프리미엄 전용 탭)
 - 각 배치 완료 시 즉시 Supabase DB 저장 + SSE(`batch` 이벤트)로 프론트엔드 반영
@@ -306,7 +381,10 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 ### GTM 방향
 - 1차 타겟: 미국 시장 (영어 버전 우선)
 - 채널: Product Hunt, Reddit (r/sales, r/BusinessDevelopment, r/startups)
-- 랜딩페이지: Framer 무료 플랜
+- 투트랙 메시징:
+  ① AE 개인 대상 — "고객사 이해 격차 해소" (Reddit/PH 통한 바텀업 발견 → 개인 셀프서브)
+  ② 대표/CBO/세일즈리드 대상 — "팀 영업 퀄리티 평준화, 온보딩 단축" (직접 아웃리치/창업자 커뮤니티 통한 탑다운 도입)
+- 랜딩페이지: Framer 무료 플랜 — 메인은 AE 언어, "팀으로 도입" 별도 섹션/CTA 분리
 - 결제: 앱 내 Stripe만 (랜딩페이지 결제 없음)
 - 도메인: 1min.so 또는 get1min.com (미정)
 - 온보딩: 구글 로그인 + 설문 (직무/지역/목적/회사규모)
@@ -334,6 +412,7 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
    - 주요 제품/서비스 + 매출 비중
    - 주요 고객사 + 집중도 리스크
    - 성장 모멘텀 / 핵심 리스크
+   - 최근 트리거 이벤트 (투자유치/유상증자/대규모딜, 최근 12개월·최대 3개, 없으면 섹션 미노출)
 
 ③ 산업/경쟁 분석
    - 산업역사 타임라인
@@ -440,7 +519,6 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 ### 🟡 2순위 (데이터/기능)
 - [ ] EDGAR 태그 매핑 강화 + FMP 폴백
 - [ ] 한국 주식 KRX 티커 매핑
-- [ ] 세일즈 특화 기능 (임직원수/채용/LinkedIn/Glassdoor)
 - [ ] 산업군별 정리
 - [ ] AI 비서 재활성화 (현재 코드 주석 처리됨)
 
@@ -451,6 +529,9 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - [ ] Posthog 행동 로그
 - [ ] Crisp 라이브 채팅
 - [ ] Stripe 결제 연동
+- [ ] 세일즈 특화 기능 (임직원수/채용트렌드/LinkedIn/Glassdoor) — 우선순위 하향(🟡→🟢, 2026-07):
+  AE 콜 프렙 중심으로 재포지셔닝하며 SDR 볼륨 프로스펙팅용 기능은 우선순위 밖으로 이동.
+  SDR 볼륨 리서치는 Apollo/ZoomInfo/Clay가 이미 커버하는 영역이라 직접 경쟁할 필요 없음
 - [ ] Product Hunt 런칭
 - [ ] 도메인 구매 (1min.so)
 
@@ -465,7 +546,7 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - [x] CLAUDE.md SSOT 완성
 - [x] 밸류체인 세로 구조 (업스트림→다운스트림 ↓ 화살표)
 - [x] 더 보기/접기 토글 (ShowMore)
-- [x] PDF 온디맨드 생성 (pdf().toBlob())
+- [x] PDF 온디맨드 생성 (pdf().toBlob()) (관리자 전용 노출, 2026-07)
 - [x] AI 비서 우측 패널 임시 제거 (단일 컬럼)
 - [x] 스켈레톤 UI (sentinel completedBatches Set([-1]))
 - [x] gatherResearch 통합 웹검색 (1 pass 공유, 중복 제거, maxRounds=4)
