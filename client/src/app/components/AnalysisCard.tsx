@@ -38,6 +38,7 @@ import {
   FounderV2,
   GrowthScenarioV2,
 } from '@/types';
+import { isPlaceholder, countFinancialsReliability } from '@/lib/financialsReliability';
 
 // ── Country flag map ─────────────────────────────────────────────────────────
 
@@ -347,11 +348,6 @@ function CitedText({ text, className = '' }: { text: string | null | undefined; 
 }
 
 // ── Legacy Helpers ────────────────────────────────────────────────────────────
-
-function isPlaceholder(v: string | number | null | undefined): boolean {
-  if (v == null) return false;
-  return /^-999([.,]\d+)?([%\s]|$)/.test(String(v).trim());
-}
 
 function splitLines(text: string): string[] {
   return text.split('\n').map(s => s.trim()).filter(Boolean);
@@ -1816,9 +1812,17 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
     'FCF':           'bg-green-500',
   };
 
+  // 데이터 신뢰도 요약 — 이 탭에 표시되는 필드들 중 (추정) 배지 / 확인 필요(플레이스홀더) 값 카운트
+  const { estimatedCount, unknownCount } = useMemo(() => countFinancialsReliability(f), [f]);
+
   return (
     <div className="space-y-4">
       <KeyBulletsBlock bullets={f.key_bullets} />
+      {(estimatedCount > 0 || unknownCount > 0) && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          ⚠️ 이 리포트에는 추정값 {estimatedCount}건, 확인 필요 데이터 {unknownCount}건이 포함되어 있습니다
+        </p>
+      )}
       {/* 데이터 출처 뱃지 + Refresh 버튼 */}
       <div className="flex items-center justify-between">
         {dataSource === 'edgar' ? (
