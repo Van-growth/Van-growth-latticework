@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Latticework — AI 기업 분석",
-  description: "Claude AI + Web Search 기반 기업 심층 분석 플랫폼",
+  title: "1min — AI 기업 분석",
+  description: "AI 기반 기업 심층 분석 플랫폼",
 };
 
 export default function RootLayout({

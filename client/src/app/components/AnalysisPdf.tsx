@@ -26,6 +26,7 @@ import type {
   Source,
   AnalysisSources,
 } from '@/types';
+import { countFinancialsReliability } from '@/lib/financialsReliability';
 
 // Absolute URL required: react-pdf fetches fonts via URL at render time,
 // and relative paths may not resolve correctly in all environments.
@@ -253,6 +254,21 @@ const s = StyleSheet.create({
   cardText: {
     fontSize:   7.5,
     color:      C.mid,
+    lineHeight: 1.4,
+  },
+
+  // ── Reliability banner (재무 데이터 신뢰도 요약, amber-50/100/700 대응) ──
+  reliabilityBanner: {
+    backgroundColor:   '#FFFBEB',
+    border:            '1 solid #FEF3C7',
+    borderRadius:      4,
+    paddingVertical:   5,
+    paddingHorizontal: 8,
+    marginBottom:      8,
+  },
+  reliabilityBannerText: {
+    fontSize:   7.5,
+    color:      '#B45309',
     lineHeight: 1.4,
   },
 
@@ -1150,10 +1166,19 @@ function BSTable({ rows }: { rows: FinancialsV2BSRow[] }) {
 
 function FinancialsSection({ v }: { v: FinancialsV2 }) {
   const mb = v.munger_buffett_metrics;
+  const { estimatedCount, unknownCount } = countFinancialsReliability(v);
   return (
     <View style={s.section}>
       <SectionHeader num={8} title="재무 분석" />
       <KeyBulletsPdf bullets={v.key_bullets} />
+
+      {(estimatedCount > 0 || unknownCount > 0) && (
+        <View style={s.reliabilityBanner}>
+          <Text style={s.reliabilityBannerText}>
+            {sp(`이 리포트에는 추정값 ${estimatedCount}건, 확인 필요 데이터 ${unknownCount}건이 포함되어 있습니다`)}
+          </Text>
+        </View>
+      )}
 
       {v.narrative && <Text style={[s.para, { marginBottom: 8 }]}>{v.narrative}</Text>}
 
@@ -1479,7 +1504,7 @@ export default function AnalysisPdf({ data, shareUrl }: { data: AnalysisDetail; 
   );
 
   return (
-    <Document title={`${data.companyName} 기업 분석 보고서`} author="Latticework">
+    <Document title={`${data.companyName} 기업 분석 보고서`} author="1min">
       {/* Cover */}
       <Page size="A4" style={s.page}>
         <CoverPage data={data} shareUrl={shareUrl} />

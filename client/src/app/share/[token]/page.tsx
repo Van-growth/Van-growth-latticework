@@ -11,26 +11,26 @@ export async function generateMetadata({
   const { token } = await params;
   try {
     const res = await fetch(`${API_URL}/api/share/${token}`, { cache: 'no-store' });
-    if (!res.ok) return { title: 'Latticework' };
+    if (!res.ok) return { title: '1min' };
     const data = await res.json();
     const company: string = data.companyName ?? '';
     const desc: string = data.summary_v2?.one_line ?? data.summary ?? `${company} 기업 심층 분석`;
     return {
-      title: `${company} 분석 — Latticework`,
+      title: `${company} 분석 — 1min`,
       description: desc,
       openGraph: {
-        title: `${company} 기업 분석 — Latticework`,
+        title: `${company} 기업 분석 — 1min`,
         description: desc,
         type: 'article',
       },
       twitter: {
         card: 'summary',
-        title: `${company} 분석 — Latticework`,
+        title: `${company} 분석 — 1min`,
         description: desc,
       },
     };
   } catch {
-    return { title: 'Latticework' };
+    return { title: '1min' };
   }
 }
 

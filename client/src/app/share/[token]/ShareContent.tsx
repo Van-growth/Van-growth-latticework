@@ -40,7 +40,7 @@ export default function ShareContent({ token }: { token: string }) {
       <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/" className="font-bold text-gray-900 text-lg hover:text-blue-600 transition-colors">
-            ← Latticework
+            ← 1min
           </Link>
           <div className="flex items-center gap-2">
             {data && (
@@ -89,7 +89,7 @@ export default function ShareContent({ token }: { token: string }) {
       {/* Watermark */}
       {!loading && data && (
         <div className="text-xs text-gray-400 text-center border-t border-gray-100 pt-4 mt-8 pb-8">
-          Ben의 개인 프로젝트 · 특정 기업 분석 열람 목적으로만 활용 부탁드립니다 · Powered by Latticework
+          Ben의 개인 프로젝트 · 특정 기업 분석 열람 목적으로만 활용 부탁드립니다 · Powered by 1min
         </div>
       )}
 

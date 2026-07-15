@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 
 const STEPS = [
   { message: 'DART/EDGAR에서 공시 데이터 수집 중...', color: 'text-emerald-600', dot: 'bg-emerald-500' },
-  { message: 'Claude가 산업 역사 분석 중...',          color: 'text-blue-600',    dot: 'bg-blue-500'    },
+  { message: 'AI가 산업 역사 분석 중...',              color: 'text-blue-600',    dot: 'bg-blue-500'    },
   { message: '밸류체인 구조 파악 중...',               color: 'text-violet-600',  dot: 'bg-violet-500'  },
   { message: '경쟁사 스캔 중...',                      color: 'text-orange-500',  dot: 'bg-orange-500'  },
   { message: '재무 전망 분석 중...',                   color: 'text-sky-600',     dot: 'bg-sky-500'     },

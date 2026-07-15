@@ -487,7 +487,7 @@ export default function HomeContent() {
       {/* Hero */}
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold text-gray-900 mb-3">기업 심층 분석</h1>
-        <p className="text-gray-500">Claude AI + Web Search — 산업역사, 기술변화, 밸류체인, BM, 재무를 한번에</p>
+        <p className="text-gray-500">산업역사, 기술변화, 밸류체인, BM, 재무를 한번에</p>
       </div>
 
       {/* Search form */}
