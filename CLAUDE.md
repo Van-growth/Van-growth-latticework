@@ -162,6 +162,20 @@ cd client && npm install && npm run dev
 
 **cik_master**(추가 컬럼): `sic_code`, `sic_description`, `sector_tag` — EDGAR 전체(8,021개) 적재 중
 
+**company_listings** (2026-07-16, v2.1.0): `id`, `company_id`(FK→companies), `source`
+('EDGAR'|'DART'), `identifier`(EDGAR: cik, DART: corp_code), `ticker`, `exchange`(대부분
+null — corp_master/cik_master 둘 다 거래소 정보가 없음), `created_at`. UNIQUE(source,
+identifier). **지연 생성(lazy)** — corp_master/cik_master 전체를 일괄 적재하지 않고,
+유저가 typeahead에서 실제로 클릭한 회사만 `POST /api/companies/resolve`가 그 순간
+upsert. 다중상장 회사(EDGAR+DART 둘 다 있는 회사)는 이 테이블에 같은 company_id로
+2행이 생긴다.
+
+**company_dual_listings_manual** (2026-07-16, v2.1.0): `dart_corp_code`(PK),
+`edgar_cik`(UNIQUE), `note`. 다중상장 회사 수동 큐레이션 매핑 — DART(한글)와
+EDGAR(영문) 회사명은 자동 이름매칭이 불가능해서 손으로 관리한다. typeahead 검색
+결과 병합 + resolve 시 참조. 현재 7행(KB금융/한국전력공사/LG디스플레이/신한지주/
+SK텔레콤/우리금융지주/SK하이닉스 — 상세는 아래 실전 발견 이력 참고).
+
 **sector_mapping**: `id`, `source`('DART'|'EDGAR'), `original_code`(KSIC division/SIC major group·상세코드),
 `original_name`, `sector_tag`(12개 공통 태그: SAAS/MANUFACTURING/BIOTECH_HEALTHCARE/RETAIL_COMMERCE/
 FINANCE/MEDIA_CONTENT/HARDWARE_SEMICONDUCTOR/ENERGY/LOGISTICS_TRANSPORT/CONSUMER_GOODS/
@@ -211,7 +225,24 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 데이터 없는 항목은 `확인 필요` 대신 `—` 표시
 - 추정값은 반드시 `(추정)` 뱃지 표시
 
-### 5. 출처 표시 규칙 (전 탭 공통 — 가장 중요)
+### 5. 다중상장 회사 재무 우선순위 (v2.1.0)
+- company_listings에 EDGAR + DART 둘 다 있으면 재무 데이터는 EDGAR 우선 사용
+  (미국 타겟 GTM 기준 — 한미 병기/자동전환은 하지 않음, 추후 백로그)
+- EDGAR 없으면 DART, 둘 다 없으면 웹추정 (기존 우선순위 원칙과 동일 폴백 체인 재사용)
+- 구현: `fetchFinancialContext(companyName, listings?)`(`server/src/lib/financialContext.ts`)가
+  `listings`에 EDGAR+DART가 모두 있을 때만 이름 기반 한글 휴리스틱(`isKoreanCompany`)을
+  건너뛰고 알려진 identifier(cik/corp_code)로 직접 조회 — `fetchEdgarDataByCik`/
+  `fetchDartDataByCorpCode`(각각 `edgar.ts`/`dart.ts`, lookup 단계만 건너뛰는 순수
+  extract-function이라 기존 이름 기반 경로는 회귀 없음). `analyze.ts`가 요청의
+  `companyId` → `company_listings` 조회 → 이 함수로 전달.
+- 실측(2026-07-16, SK텔레콤): EDGAR 우선 시도 → CIK 정상 조회됐지만 XBRL
+  `us-gaap` concept가 전부 비어있어(외국 민간 발행인이 IFRS 태그로 20-F 제출,
+  us-gaap 태깅 자체가 없는 경우가 흔함) rev/opInc/netInc 모두 null → 자동으로 DART
+  폴백 → 정상적으로 한글 재무 수치 반환. "EDGAR에 CIK가 있다"와 "EDGAR에 쓸 수 있는
+  재무 데이터가 있다"는 다르다는 걸 실측으로 확인 — 폴백 체인이 정확히 이 케이스를
+  위해 필요함.
+
+### 6. 출처 표시 규칙 (전 탭 공통 — 가장 중요)
 - 모든 탭 (요약/산업역사/기술변화/밸류체인/비즈니스모델/경쟁사/전략/재무/창업자) 출처 표시 필수
 - 재무 탭뿐 아니라 웹검색 기반 텍스트 데이터도 반드시 출처 포함
 - 출처 없는 수치/사실 데이터 표시 금지
@@ -342,6 +373,37 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 투자자 타겟 포지셔닝 금지
 - 1min은 리드 레이어(Cognism/Apollo류 — 연락처/워크플로우 DB)가 아니라
   리포트 레이어(기업 자체에 대한 구조화된 AI 리서치)를 다루는 제품
+
+### 검색-캐시 조회 흐름 (v2.1.0)
+- 검색창은 자유 텍스트 아님 — companies/company_listings 기반 typeahead
+  (`GET /api/companies/typeahead`, corp_master/cik_master를 그때그때 직접 조회)
+- 유저가 리스트에서 엔티티 클릭 = disambiguation 완료 (별도 "이 회사 맞나요?" 확인 절대 없음)
+- 클릭 즉시 `POST /api/companies/resolve`가 company_id로 analyses 조회 → 조건부 렌더링
+  - 캐시 있음: "최근 분석 n일 전" + 바로보기/재분석하기 버튼만 노출
+  - 캐시 없음: 새 분석 시작 CTA만 노출
+- 절대 금지: 프론트엔드 토글/탭으로 "캐시 있음/없음" 두 상태를 유저가 선택하게 하는 UI
+  (이건 순수 서버사이드 조건 분기이며 유저는 하나의 결과 화면만 봄 — `HomeContent.tsx`의
+  `resolveResult.cached` 하나로만 분기)
+- 기존 24시간 캐시/무기한 TTL 정책 그대로 재사용, 실제 분석 로드도 기존
+  `GET /api/analyses/:id` 그대로 재사용 — 새 캐시 정책 안 만듦
+- `GET /api/companies/autocomplete`(이미 분석 이력 있는 기업만 보여주던 중복 방지용
+  typeahead)는 이 흐름으로 완전히 대체되어 제거됨
+
+### 회사-상장 데이터 모델 (v2.1.0)
+- 배경: SK하이닉스가 2026-07-10 나스닥에 ADR(SKHY) 상장하며 DART(원주)+EDGAR(ADR)
+  동시 상장 케이스 발생 — "회사 1개 = 데이터소스 1개" 전제가 깨짐
+- companies(회사 1행, 기존 그대로) / company_listings(상장 N행, source별 신규) 구조로
+  분리 — DB schema 섹션 참고
+- **지연 생성(lazy)**: corp_master/cik_master 전체를 일괄 적재하지 않음 — 유저가
+  typeahead에서 실제로 클릭한 회사만 그 순간 companies/company_listings에 upsert.
+  companies가 12만 행으로 급증하지 않고, corp_master/cik_master 배치 리싱크마다
+  company_listings를 별도로 재동기화해줄 필요도 없음
+- 다중상장 병합은 수동 큐레이션 테이블 `company_dual_listings_manual`로 처리(자동
+  한글↔영문 이름매칭은 안 함 — 하지 않는 게 최선인 문제)
+- 캐시 조회는 company_id 단위로 통합 (분석은 회사당 1세트)
+- typeahead 다중상장 회사는 국기 병기 표시(EDGAR→🇺🇸, DART→🇰🇷 + ticker)
+- 재무 우선순위: EDGAR > DART > 웹추정 (미국 타겟 GTM 기준, 한미 병기는 하지 않음 —
+  상세는 Data SSOT 기준 > 5번 참고)
 
 ### 분석 배치 구조 (1차/2차/3차)
 - **1차** (목표 60초 이내, 완료 즉시 요약/재무 탭 렌더링):
@@ -574,7 +636,9 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - [x] ⑮ 기업명 자동완성 (중복 분석 방지) — `GET /api/companies/autocomplete?q=` (2글자 미만 빈 배열,
   최근 분석일순 최대 8개, 이미 분석 이력 있는 기업만), 검색창 300ms 디바운스 드롭다운 +
   키보드 위/아래·Enter·Esc, 선택 시 `/api/analyze/stream` 대신 `GET /api/analyses/:id`로 직접
-  로드(history 탭과 동일 경로) — 신규 Claude 호출도 무료 횟수 카운트도 발생하지 않음
+  로드(history 탭과 동일 경로) — 신규 Claude 호출도 무료 횟수 카운트도 발생하지 않음.
+  **(2026-07-16, 검색-캐시 조회 흐름 v2.1.0으로 완전히 대체되어 이 라우트는 제거됨 —
+  아래 참고, 키보드 네비게이션 등 UX 패턴은 그대로 이어받음)**
 - [x] 구글 로그인 (Supabase Auth, 2026-07-03) — 로그인 방식은 구글 OAuth 단일 지원.
   클라이언트: `@supabase/supabase-js` anon 키로 `signInWithOAuth`/세션 관리만 수행
   (데이터 조회는 여전히 서버 경유만, RLS가 anon 키로는 전 테이블 차단). `AuthContext`
@@ -591,6 +655,30 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   폴백 처리 (`runWithWebSearch`에 `label` 파라미터로 로그 태깅 추가,
   `gatherResearch1`/`2`에 방어적 try/catch 추가) — 2026-07-06 삼성전기 분석 전체
   실패 사고 수정, 상세는 Security Principles 실전 발견 이력 10번 참고.
+- [x] 검색-캐시 조회 흐름 v2.1.0 + 회사-상장 데이터 모델 (2026-07-16) —
+  `companies`/`company_listings`(신규, lazy 생성) 분리, `GET /api/companies/typeahead`
+  (corp_master+cik_master 직접 조회, `company_dual_listings_manual`로 다중상장 병합)
+  + `POST /api/companies/resolve`(lazy upsert + 캐시조회 통합) 신규, 기존
+  `GET /api/companies/autocomplete` 제거. `HomeContent.tsx` 자유 텍스트 제출 차단,
+  드롭다운 클릭 필수, `resolveResult.cached` 단일 분기로 바로보기/재분석하기 vs
+  새 분석 시작 렌더링. 계기: SK하이닉스 2026-07-10 나스닥 ADR(SKHY) 상장으로
+  "회사 1개 = 데이터소스 1개" 전제가 깨짐 — 실제 조사해보니 `companies`/
+  `analyses.company_id` FK는 이미 있었고(cik/corp_code 기반 연결은 애초에 없었음),
+  `financial_cache`도 이미 소스별 identifier 키라 다중소스 공존 가능했음 — 진짜
+  빠진 건 `fetchFinancialContext`의 라우팅(회사명 한글 포함 여부로 DART/EDGAR
+  결정하는 휴리스틱이라 "두 시장에 다 있다"는 사실 자체를 몰랐음)뿐이었음.
+- [x] 다중상장 회사 재무 우선순위 (2026-07-16) — `fetchFinancialContext(name, listings?)`가
+  EDGAR+DART 둘 다 아는 회사면 이름 휴리스틱 대신 identifier로 직접 조회, EDGAR 우선
+  → 실패/데이터없음 시 DART 폴백(`fetchEdgarDataByCik`/`fetchDartDataByCorpCode`,
+  기존 함수에서 lookup 단계만 건너뛰는 순수 추출이라 회귀 없음). 다중상장 확정 7건
+  (KB금융/한국전력공사/LG디스플레이/신한지주/SK텔레콤/우리금융지주/SK하이닉스) —
+  SK하이닉스는 cik_master 배치 동기화가 아직 못 따라잡아 웹 조사로 실제 CIK(2120882,
+  ticker SKHY, Form F-6)를 찾아 수동 시드. 포스코홀딩스는 corp_master에서 지주사
+  자체 corp_name을 못 찾아 보류. 실측(SK텔레콤)으로 확인한 함정: EDGAR에 CIK가
+  있어도 재무 데이터가 있다는 보장은 없음 — 외국 민간 발행인은 IFRS 태그로 20-F를
+  내는 경우가 흔해 `us-gaap` XBRL concept가 통째로 비어있을 수 있음(SK텔레콤 실측:
+  rev/opInc/netInc 전부 null) → 폴백 체인이 이 케이스를 정확히 잡아서 DART로
+  넘어가는 것까지 확인함.
 - [x] Posthog 행동 로그 + Microsoft Clarity (2026-07-09, 커밋 `d15c479`) — 둘 다
   `client/src/app/components/Analytics.tsx`(전역, `layout.tsx`에 마운트 — 공유 링크
   페이지도 트래킹 대상이라 `AppShell` 밖에 둠)에서 초기화. Posthog는
@@ -938,5 +1026,8 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
 | v2.0.0 | 2026-06-29 — EDGAR/DART 배치 적재(9,583개), 배치 병렬화(75s→35s), founder 독립 batch5, financial_cache 우선순위 + 출처 뱃지, TTL 무기한, Quality Gate, Prompt Caching, 로딩 애니메이션, 탭 상태 아이콘, nudge 배너, 탭별 재분석 버튼, Render Cron Job 매월 1일 자동화 |
 | v2.0.1 | 2026-07-03 — 섹터 매핑(sector_mapping, KSIC/SIC→12개 태그), financial_cache/라이브 조회 4개년 시계열, 몬테카를로 성장 시나리오 엔진, 배치 1차(요약+재무)/2차(백그라운드)/3차(몬테카를로) 스플릿, 무료 분석 횟수 제한(rolling 7일 2회, 임시 식별자), 성장 시나리오 탭 프리미엄 게이팅 |
 | v2.1.0 | 구글 로그인(완료, 2026-07-03) + 온보딩 설문(완료, 2026-07-10) + Posthog/Microsoft Clarity(완료, 2026-07-09) |
+| v2.1.1 | 2026-07-16 — companies/company_listings 스키마 분리(지연 생성), 검색-캐시 조회
+  흐름(typeahead + 서버사이드 캐시 조건부 렌더링), 다중상장 재무 우선순위(EDGAR>DART),
+  다중상장 대응(SK하이닉스 등) |
 | v2.2.0 | 영문화 (언어 토글 EN/KR) |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

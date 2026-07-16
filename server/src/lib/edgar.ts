@@ -287,8 +287,17 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
     console.log(`[edgar] fetchEdgarData MISS (no CIK): "${companyName}"`);
     return null;
   }
+  return fetchEdgarDataById(found.cik, found.name, found.ticker);
+}
 
-  const { cik, name: entityName, ticker } = found;
+// company_listings로 CIK를 이미 아는 경우(다중상장 회사 등) — 이름 기반 lookupCik를
+// 건너뛰고 바로 SEC 조회. entityName은 로그/표시용일 뿐 조회 자체엔 안 쓰임.
+export async function fetchEdgarDataByCik(cik: string, ticker: string | null, entityName?: string): Promise<EdgarData | null> {
+  console.log(`[edgar] fetchEdgarDataByCik start: CIK ${cik}`);
+  return fetchEdgarDataById(cik, entityName ?? ticker ?? cik, ticker);
+}
+
+async function fetchEdgarDataById(cik: string, entityName: string, ticker: string | null): Promise<EdgarData | null> {
   console.log(`[edgar] fetching submissions + companyfacts for CIK ${cik} (${entityName})`);
 
   // 최근 공시 + XBRL 전체 팩트(다년도 포함) 병렬 조회
@@ -413,7 +422,7 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
     }
   }
 
-  console.log(`[edgar] XBRL result for "${companyName}" (CIK ${cik}): rev=${financials.revenue ?? 'null'} opInc=${financials.operatingIncome ?? 'null'} netInc=${financials.netIncome ?? 'null'} year=${financials.year ?? 'null'} years=${rawSeries?.fiscalYears.length ?? 0}`);
+  console.log(`[edgar] XBRL result for "${entityName}" (CIK ${cik}): rev=${financials.revenue ?? 'null'} opInc=${financials.operatingIncome ?? 'null'} netInc=${financials.netIncome ?? 'null'} year=${financials.year ?? 'null'} years=${rawSeries?.fiscalYears.length ?? 0}`);
 
   return { cik, companyName: entityName, ticker, filings, financials, rawSeries, triggerEvents };
 }

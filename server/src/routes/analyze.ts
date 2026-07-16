@@ -4,7 +4,7 @@ import {
   analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, reanalyzeSingleSection,
   generateGrowthScenarioNarrative,
 } from '../lib/claude';
-import { fetchFinancialContext } from '../lib/financialContext';
+import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
 import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
 } from '../services/monteCarloService';
@@ -13,6 +13,17 @@ import { checkAnalysisUsage, recordAnalysisUsage } from '../lib/analysisUsage';
 import { resolveAuthUser } from '../lib/authUser';
 
 const router = Router();
+
+// company_id로 상장 정보 조회 — 다중상장 회사(EDGAR+DART 둘 다 있음)면
+// fetchFinancialContext가 이름 휴리스틱 대신 이 identifier로 직접 조회한다.
+async function fetchCompanyListings(companyId: string | undefined): Promise<CompanyListingRef[] | undefined> {
+  if (!companyId) return undefined;
+  const { data } = await supabase
+    .from('company_listings')
+    .select('source, identifier, ticker')
+    .eq('company_id', companyId);
+  return data?.length ? (data as CompanyListingRef[]) : undefined;
+}
 
 // ── 3차: 몬테카를로 성장 시나리오 (revenue_history 확보 시에만) ─────────────────
 
@@ -260,7 +271,7 @@ async function saveSources(analysisId: string, companyName: string, sources: Ana
 // ── Non-streaming POST /api/analyze ──────────────────────────────────────────
 
 router.post('/', async (req: Request, res: Response) => {
-  const { companyName } = req.body as { companyName?: string };
+  const { companyName, companyId } = req.body as { companyName?: string; companyId?: string };
 
   if (!companyName?.trim()) {
     res.status(400).json({ error: '기업명을 입력해주세요.' });
@@ -277,7 +288,8 @@ router.post('/', async (req: Request, res: Response) => {
       .single();
     if (companyErr) throw companyErr;
 
-    const { source: dataSource, contextText } = await fetchFinancialContext(name);
+    const listings = await fetchCompanyListings(companyId ?? company.id);
+    const { source: dataSource, contextText } = await fetchFinancialContext(name, listings);
     const analysis = await analyzeCompany(name, contextText || undefined);
 
     const { data: savedAnalysis, error: analysisErr } = await supabase
@@ -360,8 +372,9 @@ router.get('/usage', async (req: Request, res: Response) => {
 // ── Streaming POST /api/analyze/stream ───────────────────────────────────────
 
 router.post('/stream', async (req: Request, res: Response) => {
-  const { companyName, forceRefresh, sectorTag, baseRevenue } = req.body as {
+  const { companyName, companyId, forceRefresh, sectorTag, baseRevenue } = req.body as {
     companyName?: string;
+    companyId?: string;
     forceRefresh?: boolean;
     // 상장 정보/자체 매출 시계열이 없는 기업의 몬테카를로 폴백용 (섹터 벤치마크).
     // 업종 선택 UI가 아직 없어 우선 요청 파라미터로 받는다 — 둘 다 있어야 사용됨.
@@ -422,6 +435,10 @@ router.post('/stream', async (req: Request, res: Response) => {
       .select('id')
       .single();
     if (companyErr) throw companyErr;
+
+    // 다중상장 회사(EDGAR+DART 둘 다 company_listings에 있음)면 fetchFinancialContext가
+    // 이름 휴리스틱 대신 이 identifier로 직접 조회한다 — 없으면 기존 경로 그대로.
+    const listings = await fetchCompanyListings(companyId ?? company.id);
 
     // 2. Check financials_v2_cache (3-month validity, company_name exact match)
     const finCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
@@ -547,7 +564,7 @@ router.post('/stream', async (req: Request, res: Response) => {
 
         if (!(await checkAndRecordUsage())) return;
 
-        const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name);
+        const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name, listings);
         send('meta', { isFirstLookup: !isCacheHit });
         const useCachedFin = !skipBatches.has(4) ? cachedFinancials : undefined;
 
@@ -610,7 +627,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     // 4. No cache — full analysis with per-batch DB saves
     if (!(await checkAndRecordUsage())) return;
 
-    const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name);
+    const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name, listings);
     send('meta', { isFirstLookup: !isCacheHit });
 
     // fin_preview: show financials immediately from raw/cached data if available

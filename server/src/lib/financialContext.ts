@@ -1,12 +1,20 @@
 // Orchestrates DART+KIS / EDGAR+FMP data fetch and formats as Claude prompt context
 
-import { fetchDartData, DartData }                from './dart';
-import { fetchEdgarData, EdgarData, EdgarRawSeries, lookupCikByName } from './edgar';
+import { fetchDartData, fetchDartDataByCorpCode, DartData }                from './dart';
+import { fetchEdgarData, fetchEdgarDataByCik, EdgarData, EdgarRawSeries, lookupCikByName } from './edgar';
 import { fetchKisQuote, KisQuote }               from './kis';
 import { fetchFmpData, FmpData, buildFmpContext } from './fmp';
 import { supabase }                              from './supabase';
 
 export type DataSource = 'dart' | 'edgar' | 'web_search';
+
+// company_listings 행 — 다중상장 회사(company_id에 EDGAR+DART 둘 다 있는 경우) 재무
+// 우선순위 판단용. 하나만 있거나 아예 안 넘어오면 기존 이름 휴리스틱 경로를 그대로 탄다.
+export interface CompanyListingRef {
+  source: 'EDGAR' | 'DART';
+  identifier: string;      // EDGAR: cik, DART: corp_code
+  ticker: string | null;
+}
 
 export interface FinancialContext {
   source:      DataSource;
@@ -250,8 +258,38 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function fetchFinancialContext(companyName: string): Promise<FinancialContext> {
+export async function fetchFinancialContext(companyName: string, listings?: CompanyListingRef[]): Promise<FinancialContext> {
   console.log(`[financialCtx] start "${companyName}"`);
+
+  // 다중상장 회사(company_listings에 EDGAR+DART 둘 다 존재) — 이름 기반 한글 휴리스틱
+  // 대신 이미 아는 identifier로 직접 조회. 다중상장 재무 우선순위 원칙: EDGAR 우선,
+  // 없으면 DART, 둘 다 없으면 웹추정(기존 web_search 폴백 재사용).
+  const edgarListing = listings?.find(l => l.source === 'EDGAR');
+  const dartListing  = listings?.find(l => l.source === 'DART');
+  if (edgarListing && dartListing) {
+    try {
+      const edgar = await fetchEdgarDataByCik(edgarListing.identifier, edgarListing.ticker);
+      if (edgar && (edgar.financials.revenue || edgar.rawSeries)) {
+        const fmpData = edgarListing.ticker
+          ? await fetchFmpData(companyName, edgarListing.ticker).catch(() => null)
+          : null;
+        console.log(`[financialCtx] "${companyName}" → 다중상장 source=edgar (CIK ${edgarListing.identifier})`);
+        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData), rawEdgar: edgar.rawSeries, isCacheHit: false };
+      }
+      const dart = await fetchDartDataByCorpCode(dartListing.identifier, dartListing.ticker, companyName);
+      if (dart) {
+        const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
+        console.log(`[financialCtx] "${companyName}" → 다중상장, EDGAR 데이터 없음 → source=dart (corp_code ${dartListing.identifier})`);
+        return { source: 'dart', contextText: buildDartContext(dart, kis), rawDart: dart.rawSeries, isCacheHit: false };
+      }
+      console.log(`[financialCtx] "${companyName}" → 다중상장, EDGAR/DART 둘 다 실패 → source=web_search`);
+      return { source: 'web_search', contextText: '', isCacheHit: false };
+    } catch (e) {
+      console.warn(`[financialCtx] 다중상장 identifier 조회 실패, 기존 휴리스틱으로 폴백: ${(e as Error).message}`);
+      // 아래 기존 경로로 이어감 — identifier 조회가 실패해도 전체 실패시키지 않음
+    }
+  }
+
   const isKorean = isKoreanCompany(companyName);
 
   try {

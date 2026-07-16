@@ -253,8 +253,19 @@ export async function fetchDartData(companyName: string): Promise<DartData | nul
   const corp = await lookupCorpCode(companyName, key);
   if (!corp) return null;
 
-  const { corpCode, corpName, stockCode } = corp;
+  return fetchDartDataById(corp.corpCode, corp.corpName, corp.stockCode, key);
+}
 
+// company_listings로 corp_code를 이미 아는 경우(다중상장 회사 등) — 이름 기반
+// lookupCorpCode를 건너뛰고 바로 DART API 조회.
+export async function fetchDartDataByCorpCode(corpCode: string, stockCode: string | null, corpName: string): Promise<DartData | null> {
+  const key = process.env.DART_API_KEY;
+  if (!key) return null;
+
+  return fetchDartDataById(corpCode, corpName, stockCode, key);
+}
+
+async function fetchDartDataById(corpCode: string, corpName: string, stockCode: string | null, key: string): Promise<DartData | null> {
   // 최근 공시 목록 + 최근 4개년 재무 시계열 + 트리거 이벤트(주요사항보고서) 병렬 조회
   const [disclosuresResult, seriesResult, triggerResult] = await Promise.allSettled([
     fetchDisclosures(corpCode, key),

@@ -6,7 +6,7 @@ import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
-import { AnalysisDetail, AnalyzeResponse, CompanySuggestion } from '@/types';
+import { AnalysisDetail, AnalyzeResponse, CompanySuggestion, CompanyListing, CompanyResolveResponse } from '@/types';
 import { getClientId } from '@/lib/clientId';
 import { buildAuthHeaders } from '@/lib/authHeaders';
 import { trackEvent } from '@/lib/analytics';
@@ -16,6 +16,11 @@ const API_URL = (() => {
   if (!url) throw new Error('NEXT_PUBLIC_API_URL is not set');
   return url;
 })();
+
+function daysAgo(iso: string | null): number {
+  if (!iso) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+}
 
 function normalizeResponse(data: AnalyzeResponse): AnalysisDetail {
   return {
@@ -127,6 +132,11 @@ export default function HomeContent() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const suppressAutocompleteRef = useRef(false);
+  // typeahead에서 클릭 → /api/companies/resolve로 확정된 엔티티. 자유 텍스트 제출은
+  // 이게 없으면 막힌다 — disambiguation은 반드시 드롭다운 클릭으로만 완료됨.
+  const [selectedCompany, setSelectedCompany] = useState<{ name: string; companyId: string; listings: CompanyListing[] } | null>(null);
+  const [resolveResult, setResolveResult] = useState<CompanyResolveResponse | null>(null);
+  const [resolving, setResolving] = useState(false);
   const [result, setResult] = useState<AnalysisDetail | null>(null);
   const [displayData, setDisplayData] = useState<AnalysisDetail | null>(null);
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
@@ -273,7 +283,7 @@ export default function HomeContent() {
     }
   }
 
-  async function startAnalysis(name: string, forceRefresh: boolean) {
+  async function startAnalysis(name: string, forceRefresh: boolean, companyId?: string) {
     trackEvent('search_executed', { companyName: name, forceRefresh });
     setLoading(true);
     setError(null);
@@ -283,6 +293,8 @@ export default function HomeContent() {
     setIsCached(false);
     setIsFirstLookup(false);
     setRateLimitInfo(null);
+    setSelectedCompany(null);
+    setResolveResult(null);
     setCompletedBatches(new Set([-1])); // sentinel: streaming started, no batch done yet → all tabs show skeleton
     streamingRef.current = null;
 
@@ -294,7 +306,7 @@ export default function HomeContent() {
           'Content-Type': 'application/json',
           ...buildAuthHeaders(clientId, session?.access_token),
         },
-        body: JSON.stringify({ companyName: name, forceRefresh }),
+        body: JSON.stringify({ companyName: name, forceRefresh, companyId }),
       });
 
       if (!res.ok || !res.body) {
@@ -388,18 +400,25 @@ export default function HomeContent() {
     }
   }
 
+  // 자유 텍스트 그대로 제출 차단 — 드롭다운에서 클릭해 resolve까지 끝난 선택
+  // (selectedCompany)이 없거나, 이미 캐시가 있는 회사(그땐 바로보기/재분석하기
+  // 버튼으로만 진행)면 제출을 막는다.
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!companyName.trim() || loading) return;
-    await startAnalysis(companyName.trim(), false);
+    if (loading || resolving) return;
+    if (!selectedCompany || selectedCompany.name !== companyName.trim() || resolveResult?.cached) return;
+    await startAnalysis(selectedCompany.name, false, selectedCompany.companyId);
   }
 
-  async function handleForceRefresh() {
-    if (!companyName.trim() || loading) return;
-    await startAnalysis(companyName.trim(), true);
+  async function handleForceRefresh(companyId?: string, name?: string) {
+    const targetName = name ?? companyName.trim();
+    if (!targetName || loading) return;
+    await startAnalysis(targetName, true, companyId);
   }
 
-  // 이미 분석된 기업 자동완성 — 300ms 디바운스, 2글자 미만은 요청 자체를 안 보냄
+  // corp_master(DART)+cik_master(EDGAR) 전체 기반 typeahead — 300ms 디바운스,
+  // 2글자 미만은 요청 자체를 안 보냄. 이미 분석한 기업뿐 아니라 전체 상장/등록
+  // 기업 유니버스에서 검색된다(다중상장 회사는 배지 2개로 병합돼서 옴).
   useEffect(() => {
     if (suppressAutocompleteRef.current) {
       suppressAutocompleteRef.current = false;
@@ -413,28 +432,46 @@ export default function HomeContent() {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_URL}/api/companies/autocomplete?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`${API_URL}/api/companies/typeahead?q=${encodeURIComponent(q)}`);
         if (!res.ok) return;
         const { results } = await res.json() as { results: CompanySuggestion[] };
         setSuggestions(results);
         setShowDropdown(results.length > 0);
         setActiveSuggestion(-1);
       } catch {
-        // 자동완성은 best-effort — 실패해도 "분석하기" 수동 진행은 그대로 가능
+        // 자동완성은 best-effort — 실패해도 목록에서 다시 검색해 선택하면 됨
       }
     }, 300);
     return () => clearTimeout(timer);
   }, [companyName]);
 
-  // 제안 클릭/Enter 선택 — 캐시된 분석을 id로 직접 로드 (history 진입과 동일 경로).
-  // /api/analyze/stream을 타지 않으므로 신규 Claude 호출도, 무료 횟수 카운트도 발생하지 않음.
-  function handleSelectSuggestion(s: CompanySuggestion) {
+  // 드롭다운 클릭 = disambiguation 완료. 서버에 resolve 요청해서 companies/
+  // company_listings에 lazy upsert하고, 이 회사의 기존 분석 캐시 유무를 받아온다 —
+  // 그 결과(cached true/false) 하나로만 아래 렌더링이 분기된다(유저가 고르는 토글 아님).
+  async function handleSelectSuggestion(s: CompanySuggestion) {
     suppressAutocompleteRef.current = true;
     setCompanyName(s.name);
     setShowDropdown(false);
     setSuggestions([]);
     setActiveSuggestion(-1);
-    router.push(`/?id=${s.analysisId}`);
+    setSelectedCompany(null);
+    setResolveResult(null);
+    setResolving(true);
+    try {
+      const res = await fetch(`${API_URL}/api/companies/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: s.name, listings: s.listings }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as CompanyResolveResponse;
+      setSelectedCompany({ name: s.name, companyId: data.companyId, listings: s.listings });
+      setResolveResult(data);
+    } catch {
+      showToast('기업 정보를 확인하지 못했습니다. 다시 시도해주세요.');
+    } finally {
+      setResolving(false);
+    }
   }
 
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -497,7 +534,7 @@ export default function HomeContent() {
             <input
               type="text"
               value={companyName}
-              onChange={e => setCompanyName(e.target.value)}
+              onChange={e => { setCompanyName(e.target.value); setSelectedCompany(null); setResolveResult(null); }}
               onKeyDown={handleSearchKeyDown}
               onBlur={() => setShowDropdown(false)}
               placeholder="기업명 입력 (예: 삼성전자, Apple, NVIDIA)"
@@ -512,29 +549,70 @@ export default function HomeContent() {
             {showDropdown && suggestions.length > 0 && !loading && (
               <ul id="company-suggestions" role="listbox" className="absolute left-0 right-0 z-20 mt-1.5 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden py-1">
                 {suggestions.map((s, i) => (
-                  <li key={s.analysisId}>
+                  <li key={s.name}>
                     <button
                       type="button"
                       onMouseDown={e => { e.preventDefault(); handleSelectSuggestion(s); }}
                       className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors ${i === activeSuggestion ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                     >
                       <span className="text-sm text-gray-900 truncate">{s.name}</span>
-                      <span className="text-xs text-gray-400 shrink-0">{new Date(s.lastAnalyzedAt).toLocaleDateString('ko-KR')} 분석됨</span>
+                      <span className="flex items-center gap-2 text-xs text-gray-400 shrink-0">
+                        {s.listings.map(l => (
+                          <span key={l.source}>{l.source === 'EDGAR' ? '🇺🇸' : '🇰🇷'} {l.ticker ?? '—'}</span>
+                        ))}
+                      </span>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
           </div>
-          <button
-            type="submit"
-            disabled={loading || !companyName.trim()}
-            className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-          >
-            {loading ? '분석 중...' : '분석하기'}
-          </button>
+          {selectedCompany && resolveResult && !resolveResult.cached ? (
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            >
+              {loading ? '분석 중...' : '새 분석 시작'}
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled
+              title="검색 목록에서 기업을 선택하세요"
+              className="px-6 py-3 rounded-xl bg-gray-200 text-gray-400 font-medium shadow-sm cursor-not-allowed transition-colors whitespace-nowrap"
+            >
+              {resolving ? '확인 중...' : '분석하기'}
+            </button>
+          )}
         </div>
       </form>
+
+      {/* 캐시 있음 — 서버 응답(resolveResult.cached)에 따라서만 보여짐, 유저가 고르는 토글 아님 */}
+      {selectedCompany && resolveResult?.cached && !loading && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-4 mb-6 max-w-2xl mx-auto">
+          <span className="text-sm text-blue-800">
+            {selectedCompany.name} — 최근 분석 {daysAgo(resolveResult.lastAnalyzedAt)}일 전
+          </span>
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => resolveResult.analysisId && router.push(`/?id=${resolveResult.analysisId}`)}
+              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
+            >
+              바로 보기
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => handleForceRefresh(selectedCompany.companyId, selectedCompany.name)}
+              className="px-4 py-2 rounded-xl border border-blue-300 bg-white text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              재분석하기
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 무료 분석 횟수 카운터 */}
       {usage && (
@@ -605,7 +683,7 @@ export default function HomeContent() {
                 이전 분석 결과입니다 ({new Date(result.createdAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })})
               </span>
               <button
-                onClick={handleForceRefresh}
+                onClick={() => handleForceRefresh()}
                 disabled={loading}
                 className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 font-medium disabled:opacity-50"
               >

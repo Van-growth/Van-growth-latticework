@@ -449,10 +449,23 @@ export interface UserProfile {
   onboarding_completed_at: string | null;
 }
 
+export interface CompanyListing {
+  source: 'EDGAR' | 'DART';
+  identifier: string;
+  ticker: string | null;
+}
+
 export interface CompanySuggestion {
-  analysisId: string;
   name: string;
-  lastAnalyzedAt: string;
+  listings: CompanyListing[];
+  companyId?: string;
+}
+
+export interface CompanyResolveResponse {
+  companyId: string;
+  cached: boolean;
+  lastAnalyzedAt: string | null;
+  analysisId: string | null;
 }
 
 export type DataSource = 'dart' | 'edgar' | 'web_search';
