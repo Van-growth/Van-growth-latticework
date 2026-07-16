@@ -26,12 +26,16 @@ export type JobLevelCode = (typeof JOB_LEVEL_CODES)[number];
 export const PURPOSE_CODES = ['meeting_prep', 'partner_research', 'competitor_analysis', 'other'] as const;
 export type PurposeCode = (typeof PURPOSE_CODES)[number];
 
+export const REGION_CODES = ['kr', 'us', 'other'] as const;
+export type RegionCode = (typeof REGION_CODES)[number];
+
 interface ProfileLabelDict {
   orgSize: Record<OrgSizeCode, string>;
   industry: Record<IndustryCode, string>;
   jobRole: Record<JobRoleCode, string>;
   jobLevel: Record<JobLevelCode, string>;
   purpose: Record<PurposeCode, string>;
+  region: Record<RegionCode, string>;
 }
 
 const ko: ProfileLabelDict = {
@@ -61,6 +65,7 @@ const ko: ProfileLabelDict = {
     competitor_analysis: '경쟁사 분석',
     other: '기타',
   },
+  region: { kr: '한국', us: '미국', other: '기타' },
 };
 
 // TODO(영문화): 실제 영어 번역으로 교체. 구조만 미리 잡아두고 지금은 ko로 폴백.

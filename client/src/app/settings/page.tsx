@@ -45,6 +45,7 @@ export default function SettingsPage() {
           job_level: values.job_level || null,
           purpose: values.purpose,
           purpose_other: values.purpose_other || null,
+          region: values.region || null,
         }),
       });
       if (res.ok) {

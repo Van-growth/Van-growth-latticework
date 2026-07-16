@@ -1,4 +1,4 @@
-import type { OrgSizeCode, IndustryCode, JobRoleCode, JobLevelCode, PurposeCode } from '@/lib/i18n/profileLabels';
+import type { OrgSizeCode, IndustryCode, JobRoleCode, JobLevelCode, PurposeCode, RegionCode } from '@/lib/i18n/profileLabels';
 
 // ── Legacy types (kept for backward-compat with old analyses) ─────────────────
 
@@ -446,6 +446,7 @@ export interface UserProfile {
   job_level: JobLevelCode | null;
   purpose: PurposeCode[] | null;
   purpose_other: string | null;
+  region: RegionCode | null;
   onboarding_completed_at: string | null;
 }
 

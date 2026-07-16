@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { UserProfile } from '@/types';
 import {
-  getProfileLabels, ORG_SIZE_CODES, INDUSTRY_CODES, JOB_ROLE_CODES, JOB_LEVEL_CODES, PURPOSE_CODES,
-  OrgSizeCode, IndustryCode, JobRoleCode, JobLevelCode, PurposeCode,
+  getProfileLabels, ORG_SIZE_CODES, INDUSTRY_CODES, JOB_ROLE_CODES, JOB_LEVEL_CODES, PURPOSE_CODES, REGION_CODES,
+  OrgSizeCode, IndustryCode, JobRoleCode, JobLevelCode, PurposeCode, RegionCode,
 } from '@/lib/i18n/profileLabels';
 
 // TODO(영문화): 앱에 실제 로케일 컨텍스트가 생기면 여기 'ko' 대신 그 값을 쓸 것.
@@ -18,6 +18,7 @@ export interface ProfileFormValues {
   job_level: JobLevelCode | '';
   purpose: PurposeCode[];
   purpose_other: string;
+  region: RegionCode | '';
 }
 
 function toFormValues(p?: Partial<UserProfile> | null): ProfileFormValues {
@@ -29,6 +30,7 @@ function toFormValues(p?: Partial<UserProfile> | null): ProfileFormValues {
     job_level: (p?.job_level ?? '') as JobLevelCode | '',
     purpose: p?.purpose ?? [],
     purpose_other: p?.purpose_other ?? '',
+    region: (p?.region ?? '') as RegionCode | '',
   };
 }
 
@@ -84,6 +86,17 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
           onChange={e => setValues(v => ({ ...v, company_name: e.target.value }))}
           placeholder="예: Acme Inc."
           className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">지역</label>
+        <ChoiceGroup
+          options={REGION_CODES}
+          labelFor={labels.region}
+          value={values.region}
+          onChange={v => setValues(s => ({ ...s, region: v }))}
+          cols={3}
         />
       </div>
 

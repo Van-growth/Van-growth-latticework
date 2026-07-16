@@ -19,8 +19,9 @@ const INDUSTRIES = [
 const JOB_ROLES = ['sales', 'bd', 'strategy', 'other'];
 const JOB_LEVELS = ['junior', 'mid', 'senior', 'team_lead', 'executive'];
 const PURPOSES = ['meeting_prep', 'partner_research', 'competitor_analysis', 'other'];
+const REGIONS = ['kr', 'us', 'other'];
 
-const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, onboarding_completed_at';
+const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, onboarding_completed_at';
 
 router.get('/', async (req: Request, res: Response) => {
   const authUser = await resolveAuthUser(req);
@@ -50,7 +51,7 @@ router.patch('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const { company_name, org_size, industry, job_role, job_level, purpose, purpose_other, completeOnboarding } = req.body as {
+  const { company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, completeOnboarding } = req.body as {
     company_name?: string | null;
     org_size?: string | null;
     industry?: string | null;
@@ -58,6 +59,7 @@ router.patch('/', async (req: Request, res: Response) => {
     job_level?: string | null;
     purpose?: string[] | null;
     purpose_other?: string | null;
+    region?: string | null;
     completeOnboarding?: boolean;
   };
 
@@ -81,6 +83,10 @@ router.patch('/', async (req: Request, res: Response) => {
     res.status(400).json({ error: `purpose는 ${PURPOSES.join('/')} 중에서만 선택할 수 있습니다.` });
     return;
   }
+  if (region != null && !REGIONS.includes(region)) {
+    res.status(400).json({ error: `region은 ${REGIONS.join('/')} 중 하나여야 합니다.` });
+    return;
+  }
 
   const fields: Record<string, unknown> = {};
   if (company_name !== undefined) fields.company_name = company_name;
@@ -90,6 +96,7 @@ router.patch('/', async (req: Request, res: Response) => {
   if (job_level !== undefined) fields.job_level = job_level;
   if (purpose !== undefined) fields.purpose = purpose;
   if (purpose_other !== undefined) fields.purpose_other = purpose_other;
+  if (region !== undefined) fields.region = region;
   if (completeOnboarding) fields.onboarding_completed_at = new Date().toISOString();
 
   if (Object.keys(fields).length === 0) {

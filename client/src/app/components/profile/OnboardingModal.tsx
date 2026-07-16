@@ -56,6 +56,7 @@ export default function OnboardingModal() {
           job_level: values.job_level || null,
           purpose: values.purpose,
           purpose_other: values.purpose_other || null,
+          region: values.region || null,
           completeOnboarding: true,
         }),
       });
@@ -69,6 +70,7 @@ export default function OnboardingModal() {
         industry: values.industry || null,
         job_role: values.job_role || null,
         job_level: values.job_level || null,
+        region: values.region || null,
       });
       setShow(false);
     } catch {

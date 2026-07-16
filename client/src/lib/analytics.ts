@@ -37,6 +37,7 @@ export function syncProfileProperties(profile: {
   org_size?: string | null;
   industry?: string | null;
   company_name?: string | null;
+  region?: string | null;
 }) {
   if (!POSTHOG_KEY) return;
   const props: Record<string, string> = {};
@@ -45,6 +46,7 @@ export function syncProfileProperties(profile: {
   if (profile.org_size) props.org_size = profile.org_size;
   if (profile.industry) props.industry = profile.industry;
   if (profile.company_name) props.company_name = profile.company_name;
+  if (profile.region) props.region = profile.region;
   if (Object.keys(props).length === 0) return;
   posthog.setPersonProperties(props);
 }
