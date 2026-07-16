@@ -146,12 +146,36 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// 공개 링크 on/off는 생성자 본인만 — analyses.created_by가 채워진 행(2026-07-16 이후
+// 생성분)에서만 소유권을 강제한다. created_by가 NULL인 기존 행(생성자 미기록, 공용 캐시
+// 시절 유산)은 예외적으로 로그인 유저 누구나 허용 — 소급 차단은 하지 않는다.
+async function assertShareOwner(id: string, authUserId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const { data, error } = await supabase.from('analyses').select('created_by').eq('id', id).maybeSingle();
+  if (error) return { ok: false, status: 500, error: '분석 조회 중 오류가 발생했습니다.' };
+  if (!data) return { ok: false, status: 404, error: '분석을 찾을 수 없습니다.' };
+  if (data.created_by && data.created_by !== authUserId) {
+    return { ok: false, status: 403, error: '본인이 생성한 분석만 공유 설정을 변경할 수 있습니다.' };
+  }
+  return { ok: true };
+}
+
 // POST /api/analyses/:id/share  — create / refresh share link
 router.post('/:id/share', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const token = randomBytes(6).toString('base64url');
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
 
   try {
+    const ownerCheck = await assertShareOwner(String(id), authUser.id);
+    if (!ownerCheck.ok) {
+      res.status(ownerCheck.status).json({ error: ownerCheck.error });
+      return;
+    }
+
+    const token = randomBytes(6).toString('base64url');
     const { data, error } = await supabase
       .from('analyses')
       .update({ share_token: token, is_shared: true, shared_at: new Date().toISOString() })
@@ -170,8 +194,19 @@ router.post('/:id/share', async (req: Request, res: Response) => {
 // DELETE /api/analyses/:id/share  — revoke share
 router.delete('/:id/share', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
 
   try {
+    const ownerCheck = await assertShareOwner(String(id), authUser.id);
+    if (!ownerCheck.ok) {
+      res.status(ownerCheck.status).json({ error: ownerCheck.error });
+      return;
+    }
+
     const { error } = await supabase
       .from('analyses')
       .update({ share_token: null, is_shared: false, shared_at: null })
@@ -186,8 +221,16 @@ router.delete('/:id/share', async (req: Request, res: Response) => {
 });
 
 // POST /api/analyses/:id/refresh-financials
+// 하드 401만 적용, 소유권(403) 체크는 없음 — reanalyze와 동일하게 공용 캐시된 재무
+// 데이터를 로그인 유저 누구나 새로고침할 수 있는 협업성 기능으로 유지(실전 발견 이력
+// 16번 참고, 사용자가 명시적으로 이 동작 선택).
 router.post('/:id/refresh-financials', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
 
   try {
     const { data: analysis, error } = await supabase

@@ -158,6 +158,13 @@ cd client && npm install && npm run dev
 
 **analyses**(추가 컬럼): `growth_scenario_v2` (JSONB — 몬테카를로 성장 시나리오, 3차 배치)
 
+**analyses**(추가 컬럼, 2026-07-16): `created_by`(uuid, NULL 허용, FK→auth.users) — 이
+마이그레이션 이전 생성된 기존 행은 전부 NULL(생성자 미기록). `POST /api/analyses/:id/share`,
+`DELETE /api/analyses/:id/share`의 소유권(403) 체크 전용 컬럼 — `reanalyze`/
+`refresh-financials`는 이 컬럼을 참조하지 않음(아래 실전 발견 이력 16번 참고, analyses는
+여전히 전 유저 공용 캐시이고 이 컬럼은 "생성자"만 기록할 뿐 "유일한 열람/수정 권한자"를
+뜻하지 않음).
+
 **corp_master**(추가 컬럼): `ksic_code`, `sector_tag` — DART 상장기업(3,971개) 전수 적재 완료
 
 **cik_master**(추가 컬럼): `sic_code`, `sic_description`, `sector_tag` — EDGAR 전체(8,021개) 적재 중
@@ -1005,6 +1012,53 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
     기능 작업으로) 아무도 모르게 rot한다. 서버 내부 스크립트는 처음부터 HTTP
     계층을 거치지 말고 서비스 함수/DB를 직접 호출하는 편이 이런 종류의 결합을
     원천 차단한다.
+16. (2026-07-16) 15번 직후 전체 API 라우트 인증정책 감사(보고 전용) 결과를 토대로
+    실제 수정 진행 — **`POST /api/analyze/reanalyze`, `POST/DELETE
+    /api/analyses/:id/share`, `POST /api/analyses/:id/refresh-financials` 4개
+    라우트가 인증 체크 자체가 전혀 없어서 비로그인 상태로도 Claude/EDGAR/DART
+    API를 호출하는 비용발생 요청을 무제한으로 보낼 수 있었음.**
+    - **소유권(403) 모델 설계 이슈**: 처음 요청은 4개 라우트 전부에 "본인이
+      생성한 분석이 아니면 403" 체크를 요구했는데, `analyses` 테이블에는
+      애초에 owner 컬럼이 없다(실전 발견 이력 8번 — 전 유저 공용 캐시로 설계).
+      게다가 `reanalyze`/`refresh-financials`는 "탭별 재분석" 버튼을 통해 지금
+      **로그인 여부와 무관하게 누구나** 눌러서 공용 캐시를 갱신할 수 있는
+      협업성 기능으로 이미 동작 중이었음 — 여기에 "생성자만" 제약을 걸면 다른
+      유저가 먼저 조회해둔 회사의 오래된 탭을 갱신해주는 원래 기능 자체가
+      깨짐. 반면 공개 공유 링크 on/off는 성격이 달라(더 개인적인 결정) 생성자
+      제한이 타당함. → 사용자에게 세 가지 안(라우트 통일 소유권 강제 / 로그인만
+      요구 / 라우트별 분리)을 제시해 **"라우트별로 다르게 적용"**으로 확정:
+      `analyses.created_by`(uuid, NULL 허용) 컬럼 신설, `share`/`unshare`
+      2개만 이 컬럼으로 403 체크(`created_by`가 NULL인 기존 111건은 예외적으로
+      로그인 유저 전원 허용 — 소급 차단 없음), `reanalyze`/`refresh-financials`는
+      하드 401만 추가하고 기존 협업 UX 그대로 유지.
+    - **`/api/cron/daily`(2순위)**: render.yaml/render.dev.yaml 재확인 결과 실제
+      cron 서비스는 `npx ts-node scripts/edgarBatchPrecompute.ts` 등 스크립트를
+      직접 실행하고 이 HTTP 라우트는 어디서도(client 코드 전체 grep 포함) 호출되지
+      않는 고아 코드로 재확인 — 라우트 유지 대신 **완전 제거**(`cron.ts` 파일 +
+      `index.ts` mount 삭제, 이 라우트에서만 쓰이던 `selectDailyCompany`도 같이
+      제거 — 살려두면 어차피 안 쓰이는 죽은 export).
+    - **수정**: `supabase/migrations/20260716_analyses_created_by.sql`(prod+dev
+      적용) + 서버 4개 라우트에 `resolveAuthUser` 하드 401(공통), `share`/`unshare`
+      에 `assertShareOwner()` 403 체크 추가. 클라이언트(`HomeContent.tsx`,
+      `AnalysisCard.tsx`)의 `handleReanalyzeTab`/`handleShare`/`handleRevoke`/
+      `handleRefreshFinancials`도 `Authorization: Bearer` 헤더를 보내도록 수정하고,
+      세션 없으면 `signInWithGoogle()`로 유도.
+    - 검증: 4개 라우트 전부 curl로 미인증 401 확인, `/api/cron/daily`는 404(라우트
+      사라짐) 확인, 서버/클라이언트 `tsc --noEmit` 통과. **403(비소유자) 경로는
+      실제 구글 계정 2개로 로그인해 서로 다른 유저 토큰이 있어야 재현 가능한데
+      이 세션엔 그 수단이 없어 자동화 불가**(같은 한계가 2026-07-03 구글 로그인
+      도입 때도 있었음, Security Principles 참고) — 코드 리뷰로 갈음
+      (`created_by`가 있고 다른 유저 id일 때만 403, NULL이면 통과하는 조건문
+      직접 확인).
+    - **이번 세션 전체에서 발견된 인증 우회 패턴 총정리** (resolve 엔드포인트 →
+      `/history` 페이지 → 이번 4개 라우트+cron, 총 3라운드에 걸쳐 반복 발견):
+      공통 근본원인 — **새 라우트를 추가할 때 "인증 미들웨어를 붙였는가"가
+      코드리뷰/체크리스트 어디에도 강제 항목으로 없었다.** 각 라운드가 서로
+      다른 시점에 다른 이유로 인증 없이 작성됐음(resolve는 초기 프로토타입 잔재,
+      `/history`는 로그인 도입 이전 코드, 이번 4개는 "탭별 재분석" 등 원래
+      비로그인 시절 설계된 기능이 로그인 필수화 이후에도 안 바뀐 채 방치) —
+      즉 한 번의 실수가 아니라 "로그인 필수화"라는 정책이 도입된 시점에 **기존
+      라우트 전수 재감사가 없었던 것**이 근본 원인. 아래 체크리스트에 항목 추가.
 
 ### 새 프로젝트/기능 착수 시 체크리스트
 - [ ] 신규 테이블 생성 시 RLS 활성화 여부 확인
@@ -1019,6 +1073,11 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
 - [ ] "이 기능 신규 구현" 요청을 받으면 코드부터 짜기 전에 컴포넌트/라우트 이름으로
   grep해서 이미 있는지 먼저 확인할 것 — 백로그 문서가 "미착수"라고 적혀있어도 실제
   코드 상태와 다를 수 있음(2026-07-16, 실전 발견 이력 12번 참고)
+- [ ] "로그인 필수화"처럼 앱 전역 인증 정책이 바뀌는 시점엔, 그 정책 도입 **이전에
+  이미 존재하던 라우트 전체**를 인증 여부 기준으로 재감사할 것 — 새로 짜는 코드에만
+  정책을 적용하고 기존 라우트를 그대로 두면 조용히 예외로 남는다(resolve →
+  `/history` → reanalyze/share/refresh-financials/cron까지 한 세션에서 3라운드
+  반복 발견, 실전 발견 이력 11·15·16번 참고)
 
 ## Data Aggregation Principles (SSOT)
 

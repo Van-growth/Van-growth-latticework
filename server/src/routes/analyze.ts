@@ -302,6 +302,7 @@ router.post('/', async (req: Request, res: Response) => {
       .from('analyses')
       .insert({
         company_id:           company.id,
+        created_by:           authUser.id,
         summary:              analysis.summary_v2?.key_bullets?.join(' | ') ?? '',
         industry_history:     analysis.industry_history_v2?.industry_name ?? '',
         tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
@@ -667,6 +668,7 @@ router.post('/stream', async (req: Request, res: Response) => {
             .from('analyses')
             .insert({
               company_id: company.id,
+              created_by: authUser.id,
               summary:    data.summary_v2?.key_bullets?.join(' | ') ?? '',
               industry_history: '', tech_evolution: '', value_chain_overview: '',
               business_model: '', financials: '',
@@ -762,6 +764,16 @@ function getReanalyzeSectionDbFields(sectionKey: string, data: any): Record<stri
 }
 
 router.post('/reanalyze', async (req: Request, res: Response) => {
+  // 하드 401만 적용 — 소유권(403) 체크는 없음. 이 라우트는 "탭별 재분석" 버튼을 통해
+  // 공용 캐시된 분석을 누구든(생성자가 아니어도) 갱신할 수 있는 협업성 기능으로 설계됨
+  // (2026-07-16 소유권 검증 감사 때 사용자가 명시적으로 이 동작 유지를 선택 — 실전 발견
+  // 이력 16번 참고). 로그인 자체는 필수 — 비로그인 무단 비용발생만 차단한다.
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
   const { analysisId, companyName, section } = req.body as {
     analysisId?: string;
     companyName?: string;

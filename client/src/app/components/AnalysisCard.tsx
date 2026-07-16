@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo, useTransition } from 'react';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
+import { buildAuthHeaders } from '@/lib/authHeaders';
 import { trackEvent } from '@/lib/analytics';
 import dynamic from 'next/dynamic';
 import {
@@ -2575,7 +2576,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
   onReanalyze?: (tab: string) => void;
   isPremium?: boolean;
 }) {
-  const { user } = useAuth();
+  const { user, session, signInWithGoogle } = useAuth();
   const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
   const [tab, setTab] = useState<TabKey>('summary');
   const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
@@ -2623,10 +2624,14 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
 
   const handleRefreshFinancials = useCallback(async () => {
+    if (!session) { signInWithGoogle(); return; }
     setRefreshingFinancials(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-      const res = await fetch(`${apiUrl}/api/analyses/${data.id}/refresh-financials`, { method: 'POST' });
+      const res = await fetch(`${apiUrl}/api/analyses/${data.id}/refresh-financials`, {
+        method: 'POST',
+        headers: buildAuthHeaders(null, session.access_token),
+      });
       if (res.ok) {
         const { financials_v2 } = await res.json();
         setFinancialsV2Local(financials_v2);
@@ -2636,7 +2641,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
     } finally {
       setRefreshingFinancials(false);
     }
-  }, [data.id]);
+  }, [data.id, session, signInWithGoogle]);
 
   const ticker = data.summary_v2?.ticker ?? null;
 

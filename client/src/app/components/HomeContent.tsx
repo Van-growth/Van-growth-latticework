@@ -220,9 +220,13 @@ export default function HomeContent() {
 
   async function handleShare() {
     if (!result?.id || sharing) return;
+    if (!session) { signInWithGoogle(); return; }
     setSharing(true);
     try {
-      const res = await fetch(`${API_URL}/api/analyses/${result.id}/share`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/analyses/${result.id}/share`, {
+        method: 'POST',
+        headers: buildAuthHeaders(null, session.access_token),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setShareToken(data.share_token);
@@ -246,8 +250,12 @@ export default function HomeContent() {
 
   async function handleRevoke() {
     if (!result?.id) return;
+    if (!session) { signInWithGoogle(); return; }
     try {
-      await fetch(`${API_URL}/api/analyses/${result.id}/share`, { method: 'DELETE' });
+      await fetch(`${API_URL}/api/analyses/${result.id}/share`, {
+        method: 'DELETE',
+        headers: buildAuthHeaders(null, session.access_token),
+      });
       setIsShared(false);
       setShareToken(null);
       showToast('공유가 해제되었습니다.');
@@ -291,11 +299,12 @@ export default function HomeContent() {
 
   async function handleReanalyzeTab(tab: string) {
     if (!result?.id) return;
+    if (!session) { signInWithGoogle(); return; }
     setReanalyzingTabs(prev => new Set([...prev, tab]));
     try {
       const resp = await fetch(`${API_URL}/api/analyze/reanalyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(null, session.access_token) },
         body: JSON.stringify({ analysisId: result.id, companyName: result.companyName, section: tab }),
       });
       if (!resp.ok) throw new Error(`${resp.status}`);

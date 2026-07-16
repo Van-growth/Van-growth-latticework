@@ -1125,19 +1125,3 @@ ${formatScenarioForPrompt(currency, simulation)}`;
     return null;
   }
 }
-
-export async function selectDailyCompany(): Promise<string> {
-  const systemPrompt = `당신은 기업 분석 전문가입니다. 오늘 분석하기에 흥미로운 글로벌 또는 한국 기업 하나를 선정하세요.
-최신 뉴스, 트렌드, 업계 이슈를 고려하여 선정하고, 기업명만 응답하세요. 설명 없이 기업명만.`;
-
-  const name = await runWithWebSearch(
-    systemPrompt,
-    `오늘(${new Date().toISOString().slice(0, 10)}) 분석할 만한 흥미로운 기업을 추천해주세요. 기업명만 답하세요.`,
-    'claude-sonnet-4-6',
-    6,
-    16000,
-    'selectDailyCompany',
-  );
-
-  return name.trim().split('\n')[0].trim();
-}

@@ -5,7 +5,6 @@ import analyzeRouter from './routes/analyze';
 import analysesRouter from './routes/analyses';
 import companiesRouter from './routes/companies';
 import shareRouter from './routes/share';
-import cronRouter from './routes/cron';
 import profileRouter from './routes/profile';
 import { APP_ENV } from './lib/env';
 
@@ -35,7 +34,6 @@ app.use('/api/analyze', analyzeRouter);
 app.use('/api/analyses', analysesRouter);
 app.use('/api/companies', companiesRouter);
 app.use('/api/share', shareRouter);
-app.use('/api/cron', cronRouter);
 app.use('/api/profile', profileRouter);
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT} (APP_ENV=${APP_ENV})`));
