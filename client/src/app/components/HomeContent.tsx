@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, FormEvent, KeyboardEvent } from '
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
+import LoginPromptModal from './LoginPromptModal';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { AnalysisDetail, AnalyzeResponse, CompanySuggestion, CompanyListing, CompanyResolveResponse } from '@/types';
@@ -16,6 +17,11 @@ const API_URL = (() => {
   if (!url) throw new Error('NEXT_PUBLIC_API_URL is not set');
   return url;
 })();
+
+// 로그인 유도 모달에서 "구글로 계속하기"를 누른 시점에 선택했던 회사를 저장 —
+// signInWithGoogle()이 전체 페이지가 새로고침되는 OAuth 리다이렉트라 React state로는
+// 못 살리므로, 로그인 후 마운트 시 이 키를 읽어 자동으로 resolve를 이어간다.
+const PENDING_SELECTION_KEY = 'pending_company_selection';
 
 function daysAgo(iso: string | null): number {
   if (!iso) return 0;
@@ -137,6 +143,12 @@ export default function HomeContent() {
   const [selectedCompany, setSelectedCompany] = useState<{ name: string; companyId: string; listings: CompanyListing[] } | null>(null);
   const [resolveResult, setResolveResult] = useState<CompanyResolveResponse | null>(null);
   const [resolving, setResolving] = useState(false);
+  // 비로그인 상태에서 드롭다운을 클릭한 경우 — resolve를 바로 부르는 대신 이 값을
+  // 채워서 LoginPromptModal을 띄운다. 로그인은 페이지 전체가 리로드되는 OAuth
+  // 리다이렉트라 이 React state 자체는 로그인 후 못 살림 — "구글로 계속하기" 클릭
+  // 시점에 sessionStorage(PENDING_SELECTION_KEY)에 저장해두고, 로그인 후 마운트되는
+  // effect에서 다시 읽어와 자동으로 resolve를 이어간다.
+  const [pendingSuggestion, setPendingSuggestion] = useState<CompanySuggestion | null>(null);
   const [result, setResult] = useState<AnalysisDetail | null>(null);
   const [displayData, setDisplayData] = useState<AnalysisDetail | null>(null);
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
@@ -152,19 +164,20 @@ export default function HomeContent() {
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [reanalyzingTabs, setReanalyzingTabs] = useState<Set<string>>(new Set());
   const [isFirstLookup, setIsFirstLookup] = useState(false);
-  const [rateLimitInfo, setRateLimitInfo] = useState<{ message: string; nextAvailableAt: string | null } | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{ message: string; nextAvailableAt: string | null; usedCount: number } | null>(null);
   const [usage, setUsage] = useState<{ isPremium: boolean; usedCount: number; limit: number | null } | null>(null);
 
   const loadedIdRef = useRef<string | null>(null);
   const streamingRef = useRef<AnalysisDetail | null>(null);
 
   async function refreshUsage() {
-    const clientId = getClientId();
-    if (!clientId && !session) return;
+    // 무료 분석 카운트는 로그인 유저 기준으로만 동작 — 비로그인 상태면 조회 자체를 스킵.
+    if (!session) { setUsage(null); return; }
     try {
       const res = await fetch(`${API_URL}/api/analyze/usage`, {
-        headers: buildAuthHeaders(clientId, session?.access_token),
+        headers: buildAuthHeaders(null, session.access_token),
       });
+      if (!res.ok) return;
       const data = await res.json();
       setUsage({ isPremium: data.isPremium, usedCount: data.usedCount, limit: data.limit });
     } catch {
@@ -174,6 +187,24 @@ export default function HomeContent() {
 
   // 로그인/로그아웃으로 premium 판정이 바뀌면 카운터도 다시 조회
   useEffect(() => { refreshUsage(); }, [session]);
+
+  // 로그인 유도 모달에서 로그인하고 돌아온 경우 — sessionStorage에 저장해둔 선택을
+  // 자동으로 이어서 resolve(처음부터 다시 검색 안 해도 되게). session이 아직 없으면
+  // (로그아웃 상태로 마운트) 그냥 둔다 — 다음에 실제로 로그인했을 때 이 effect가
+  // 다시 돌면서 처리된다.
+  useEffect(() => {
+    if (!session) return;
+    const raw = sessionStorage.getItem(PENDING_SELECTION_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PENDING_SELECTION_KEY);
+    try {
+      const s = JSON.parse(raw) as CompanySuggestion;
+      if (s?.name) handleSelectSuggestion(s);
+    } catch {
+      // 저장된 값이 깨졌으면 조용히 무시 — 유저가 다시 검색하면 그만
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   useEffect(() => {
     if (result) {
@@ -345,7 +376,7 @@ export default function HomeContent() {
               setIsFirstLookup(!!payload.isFirstLookup);
 
             } else if (eventType === 'rate_limited') {
-              setRateLimitInfo({ message: payload.message, nextAvailableAt: payload.nextAvailableAt ?? null });
+              setRateLimitInfo({ message: payload.message, nextAvailableAt: payload.nextAvailableAt ?? null, usedCount: payload.usedCount ?? 2 });
               refreshUsage();
 
             } else if (eventType === 'fin_preview') {
@@ -406,6 +437,7 @@ export default function HomeContent() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (loading || resolving) return;
+    if (!session) { signInWithGoogle(); return; }
     if (!selectedCompany || selectedCompany.name !== companyName.trim() || resolveResult?.cached) return;
     await startAnalysis(selectedCompany.name, false, selectedCompany.companyId);
   }
@@ -413,7 +445,26 @@ export default function HomeContent() {
   async function handleForceRefresh(companyId?: string, name?: string) {
     const targetName = name ?? companyName.trim();
     if (!targetName || loading) return;
+    if (!session) { signInWithGoogle(); return; }
     await startAnalysis(targetName, true, companyId);
+  }
+
+  function handleRequestFreeTrial() {
+    const userEmail = session?.user?.email ?? '(이메일 확인 불가)';
+    const requestedAt = new Date().toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' });
+    const limit = usage?.limit ?? 2;
+    const usedCount = rateLimitInfo?.usedCount ?? limit;
+    const lastCompany = companyName.trim();
+
+    const subject = `[1min] 무료 이용권 요청 - ${userEmail}`;
+    const body = [
+      `유저 이메일: ${userEmail}`,
+      `요청 일시: ${requestedAt}`,
+      `사용한 무료 분석 횟수: ${usedCount}/${limit}`,
+      ...(lastCompany ? [`마지막 검색 시도 기업: ${lastCompany}`] : []),
+    ].join('\n');
+
+    window.location.href = `mailto:sg.van.p@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   // corp_master(DART)+cik_master(EDGAR) 전체 기반 typeahead — 300ms 디바운스,
@@ -450,9 +501,14 @@ export default function HomeContent() {
   // 그 결과(cached true/false) 하나로만 아래 렌더링이 분기된다(유저가 고르는 토글 아님).
   async function handleSelectSuggestion(s: CompanySuggestion) {
     // /api/companies/resolve는 /api/analyze/stream과 동일하게 로그인이 필요함 —
-    // 비로그인 상태면 resolve 호출 자체를 하지 않고 로그인 모달만 띄운다(2026-07-16,
-    // 로그인 없이 캐시된 분석 전체를 열람할 수 있던 문제 수정).
-    if (!session) { signInWithGoogle(); return; }
+    // 비로그인 상태면 resolve 호출 자체를 하지 않고 앱 내 로그인 유도 모달만 띄운다
+    // (2026-07-16, 로그인 없이 캐시된 분석 전체를 열람할 수 있던 문제 수정 +
+    // 맥락 없이 바로 구글 로그인 페이지로 리다이렉트하던 UX 개선).
+    if (!session) {
+      setShowDropdown(false);
+      setPendingSuggestion(s);
+      return;
+    }
 
     suppressAutocompleteRef.current = true;
     setCompanyName(s.name);
@@ -471,7 +527,7 @@ export default function HomeContent() {
         },
         body: JSON.stringify({ name: s.name, listings: s.listings }),
       });
-      if (res.status === 401) { signInWithGoogle(); return; }
+      if (res.status === 401) { setPendingSuggestion(s); return; }
       if (!res.ok) throw new Error();
       const data = await res.json() as CompanyResolveResponse;
       setSelectedCompany({ name: s.name, companyId: data.companyId, listings: s.listings });
@@ -623,8 +679,8 @@ export default function HomeContent() {
         </div>
       )}
 
-      {/* 무료 분석 횟수 카운터 */}
-      {usage && (
+      {/* 무료 분석 횟수 카운터 (로그인 유저 전용) / 비로그인 안내 */}
+      {session && usage ? (
         <div className="flex justify-center mb-6">
           <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-3 py-1">
             {usage.isPremium
@@ -632,7 +688,13 @@ export default function HomeContent() {
               : `최근 7일 무료 분석 ${usage.usedCount}/${usage.limit}회 사용`}
           </span>
         </div>
-      )}
+      ) : !session ? (
+        <div className="flex justify-center mb-6">
+          <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-3 py-1">
+            로그인 후 무료 2회 분석 가능
+          </span>
+        </div>
+      ) : null}
 
       {/* Phase 2 progress bar — only shows after batch 1 completes */}
       {loading && progress && completedBatches.has(1) && (
@@ -657,15 +719,24 @@ export default function HomeContent() {
 
       {/* Rate limit block — 무료 분석 횟수 소진 */}
       {rateLimitInfo && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-4 flex items-center justify-between gap-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <p className="text-sm text-amber-800">{rateLimitInfo.message}</p>
-          <button
-            type="button"
-            className="shrink-0 px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors whitespace-nowrap"
-            onClick={() => showToast('프리미엄 플랜 준비 중입니다')}
-          >
-            프리미엄으로 무제한 이용하기
-          </button>
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl border border-amber-300 bg-white text-amber-700 text-xs font-medium hover:bg-amber-50 transition-colors whitespace-nowrap"
+              onClick={handleRequestFreeTrial}
+            >
+              무료 이용권 요청하기
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors whitespace-nowrap"
+              onClick={() => showToast('프리미엄 플랜 준비 중입니다')}
+            >
+              프리미엄으로 무제한 이용하기
+            </button>
+          </div>
         </div>
       )}
 
@@ -782,6 +853,17 @@ export default function HomeContent() {
             )}
           </div>
         </div>
+      )}
+
+      {pendingSuggestion && (
+        <LoginPromptModal
+          companyName={pendingSuggestion.name}
+          onClose={() => setPendingSuggestion(null)}
+          onContinue={() => {
+            sessionStorage.setItem(PENDING_SELECTION_KEY, JSON.stringify(pendingSuggestion));
+            signInWithGoogle();
+          }}
+        />
       )}
     </div>
   );

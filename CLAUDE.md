@@ -682,6 +682,16 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   내는 경우가 흔해 `us-gaap` XBRL concept가 통째로 비어있을 수 있음(SK텔레콤 실측:
   rev/opInc/netInc 전부 null) → 폴백 체인이 이 케이스를 정확히 잡아서 DART로
   넘어가는 것까지 확인함.
+- [x] 로그인 유도 모달 + 로그인 후 자동 재개 (2026-07-16) — `LoginPromptModal.tsx`
+  신규(라이트 테마, 12px 라운드 카드, 배경 클릭/X로 닫힘, 타이틀 "시작하고 무료로
+  분석해보세요"). typeahead 드롭다운 클릭 시 비로그인 상태면 기존처럼
+  `signInWithGoogle()` 바로 리다이렉트 대신 이 모달을 먼저 띄우고, "구글로 계속하기"
+  클릭 시에만 리다이렉트(이 시점에 선택했던 회사를 `sessionStorage`에 저장).
+  `signInWithGoogle()`이 전체 페이지가 새로고침되는 OAuth 리다이렉트라 React state로는
+  로그인 후 복원이 안 되는데, `sessionStorage`는 페이지 리로드에도 살아남으므로 로그인
+  후 마운트되는 effect가 이 값을 읽어 자동으로 resolve를 이어감(처음부터 다시 검색 안
+  해도 됨) — 처음엔 스코프 아웃했던 항목인데 바로 다음 요청에서 함께 구현됨. 실전
+  발견 이력 11번에서 추가한 `resolve` 401 응답 케이스도 동일하게 모달로 전환.
 - [x] Posthog 행동 로그 + Microsoft Clarity (2026-07-09, 커밋 `d15c479`) — 둘 다
   `client/src/app/components/Analytics.tsx`(전역, `layout.tsx`에 마운트 — 공유 링크
   페이지도 트래킹 대상이라 `AppShell` 밖에 둠)에서 초기화. Posthog는
