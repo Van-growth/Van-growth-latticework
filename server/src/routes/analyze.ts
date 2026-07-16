@@ -271,6 +271,12 @@ async function saveSources(analysisId: string, companyName: string, sources: Ana
 // ── Non-streaming POST /api/analyze ──────────────────────────────────────────
 
 router.post('/', async (req: Request, res: Response) => {
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
   const { companyName, companyId } = req.body as { companyName?: string; companyId?: string };
 
   if (!companyName?.trim()) {
@@ -358,20 +364,28 @@ router.post('/', async (req: Request, res: Response) => {
 // ── GET /api/analyze/usage — 무료 분석 횟수 조회 (분석 실행 없이 카운터 표시용) ──
 
 router.get('/usage', async (req: Request, res: Response) => {
-  const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
   const authUser = await resolveAuthUser(req);
-  if (await isPremiumUser({ clientId, authUserId: authUser?.id ?? null })) {
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+  if (await isPremiumUser({ clientId: null, authUserId: authUser.id })) {
     res.json({ isPremium: true, usedCount: 0, limit: null, nextAvailableAt: null });
     return;
   }
-  // 로그인 상태면 auth user id 기준으로, 아니면 기존 클라이언트 임시 식별자 기준으로 카운트.
-  const usage = await checkAnalysisUsage(authUser?.id ?? clientId);
+  const usage = await checkAnalysisUsage(authUser.id);
   res.json({ isPremium: false, usedCount: usage.usedCount, limit: 2, nextAvailableAt: usage.nextAvailableAt ?? null });
 });
 
 // ── Streaming POST /api/analyze/stream ───────────────────────────────────────
 
 router.post('/stream', async (req: Request, res: Response) => {
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
   const { companyName, companyId, forceRefresh, sectorTag, baseRevenue } = req.body as {
     companyName?: string;
     companyId?: string;
@@ -381,11 +395,8 @@ router.post('/stream', async (req: Request, res: Response) => {
     sectorTag?: string;
     baseRevenue?: number;
   };
-  const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
-  const authUser = await resolveAuthUser(req);
-  const isPremium = await isPremiumUser({ clientId, authUserId: authUser?.id ?? null });
-  // 로그인 상태면 auth user id 기준으로, 아니면 기존 클라이언트 임시 식별자 기준으로 카운트.
-  const usageUserId = authUser?.id ?? clientId;
+  const isPremium = await isPremiumUser({ clientId: null, authUserId: authUser.id });
+  const usageUserId = authUser.id;
 
   if (!companyName?.trim()) {
     res.status(400).json({ error: '기업명을 입력해주세요.' });

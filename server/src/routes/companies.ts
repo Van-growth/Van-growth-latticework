@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
+import { resolveAuthUser } from '../lib/authUser';
+import { recordAnalysisUsage } from '../lib/analysisUsage';
 
 const router = Router();
 
@@ -116,6 +118,15 @@ router.get('/typeahead', async (req: Request, res: Response) => {
 // typeahead에서 클릭한 항목을 companies/company_listings에 upsert(지연 생성)하고
 // 이 회사의 기존 분석 캐시 유무를 함께 반환 — 프론트는 이 응답 하나로만 조건부 렌더링한다.
 router.post('/resolve', async (req: Request, res: Response) => {
+  // /api/analyze/stream과 동일한 로그인 게이트 — 캐시 조회든 신규 분석 시작이든
+  // 이 엔드포인트를 거쳐야 하므로 여기서 막지 않으면 로그인 없이 전체 분석 결과를
+  // 열람할 수 있게 된다(2026-07-16 발견, 실전 발견 이력 참고).
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
   const { name, listings } = req.body as { name?: string; listings?: Listing[] };
   if (!name?.trim()) {
     res.status(400).json({ error: '기업명이 필요합니다.' });
@@ -149,6 +160,12 @@ router.post('/resolve', async (req: Request, res: Response) => {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // 캐시 있음 = 이 유저가 이 회사를 조회했다는 히스토리 기록 — 무료 횟수(checkAnalysisUsage)는
+    // 안 깎지만(isCacheView=true) GET /api/analyses(히스토리 목록)에는 나타나야 한다.
+    if (cached) {
+      await recordAnalysisUsage(authUser.id, name.trim(), true);
+    }
 
     res.json({
       companyId: company.id,

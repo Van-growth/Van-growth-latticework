@@ -182,7 +182,10 @@ FINANCE/MEDIA_CONTENT/HARDWARE_SEMICONDUCTOR/ENERGY/LOGISTICS_TRANSPORT/CONSUMER
 REAL_ESTATE_CONSTRUCTION/OTHER)
 
 **analysis_usage**: `id`, `user_id`(로그인 시 auth.users.id, 비로그인 시 클라이언트 임시 식별자),
-`analysis_target`, `created_at` — 무료 분석 횟수 제한(rolling 7일 2회) 추적용
+`analysis_target`, `created_at`, `is_cache_view`(BOOLEAN, 기본 false — 2026-07-16 추가) —
+무료 분석 횟수 제한(rolling 7일 2회) 추적 + `GET /api/analyses`(내 히스토리) 소스, 두 역할
+겸용. `checkAnalysisUsage`는 `is_cache_view=false`인 행만 카운트 — 캐시 조회는 히스토리엔
+남지만 무료 횟수는 안 깎음
 
 **profiles** (2026-07-03, 구글 로그인 도입): `id`(PK, auth.users(id) 참조), `email`,
 `is_premium_override`(BOOLEAN, 기본 false — Stripe 연동 전 로그인 유저 개별 프리미엄 우회용),
@@ -915,6 +918,32 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
     "무료/프리미엄 모델" 섹션의 동일 문구는 놓쳤던 것. (4) 2026-07-09 커밋
     (`8b0088e`)으로 추가된 `render.dev.yaml`/`APP_ENV` dev-prod 인프라 분리가
     "Dev" 섹션 어디에도 반영 안 됨. 교차검증 삼아 KRX 티커 매핑/산업군별 정리/
+11. (2026-07-16) 검색-캐시 조회 흐름(v2.1.1) 구현 직후 발견 — 신규 `POST
+    /api/companies/resolve`가 `/api/analyze/stream`과 동일한 로그인 게이트를
+    빠뜨리고 있었음. curl로 직접 대조 확인: 헤더 없이 호출 시 `/api/analyze/stream`은
+    401, `resolve`는 200 + `companies` row까지 정상 생성. 원인은 신규 엔드포인트
+    작성 시 "이건 Claude를 호출하지 않고 캐시 존재 여부만 확인하니 기존
+    `/api/companies/autocomplete`(원래도 무인증)와 같은 성격"이라고 판단해 인증을
+    아예 안 넣은 것 — 그런데 이 엔드포인트의 "바로 보기" 결과가 `GET
+    /api/analyses/:id`(이것도 원래 무인증)로 이어지면서, 결과적으로 로그인 없이
+    캐시된 분석 전체를 열람할 수 있는 경로가 생겼음. `resolveAuthUser` 401 게이트를
+    `resolve`에 추가 + 프론트 `handleSelectSuggestion`에 `!session` 체크를 넣어
+    비로그인 클릭 시 `resolve` 호출 자체를 안 하고 구글 로그인 유도로 전환.
+    같은 조사에서 "캐시 조회는 히스토리에 안 남는다"도 확인됐는데, 여기서
+    `analysis_usage`가 "무료 횟수 카운터"와 "히스토리 목록 소스"(`GET
+    /api/analyses`) 두 역할을 겸하고 있다는 게 드러남 — 캐시 조회도 그냥
+    `recordAnalysisUsage`로 기록하면 히스토리엔 뜨지만 동시에 무료 2회 중 1회를
+    "보기만 해도" 소진시키는 부작용이 생김. `analysis_usage.is_cache_view`
+    컬럼(기본 false)을 추가해 `checkAnalysisUsage`가 `is_cache_view=false`만
+    카운트하도록 분리, `recordAnalysisUsage(userId, target, isCacheView)`로 시그니처
+    확장. 검증: 테스트 유저로 캐시조회 3번 기록 → `usedCount` 그대로 0, 실제분석
+    2번 기록 → `usedCount=2`(차단) 확인, 전체 5행은 히스토리 소스 쿼리에 다 잡힘.
+    교훈: (1) "이 엔드포인트는 비용이 안 드니 인증 필요 없다"는 판단은 그 엔드포인트가
+    반환하는 데이터(이 경우 캐시된 분석 열람 경로로 이어지는 id)까지 감안해서
+    다시 봐야 한다 — 비용 발생 여부와 접근 통제 필요 여부는 다른 축. (2) 기존
+    필드/테이블을 새 목적(cache-view 기록)으로 재사용하기 전에 그 필드가 이미
+    다른 로직(무료 횟수 카운트)의 입력으로 쓰이고 있는지 먼저 확인할 것 — 겸용
+    테이블에 무심코 행을 추가하면 의도 안 한 곳에서 부작용이 남.
     AI 비서/Crisp/영문화/Stripe 백로그 항목도 코드로 확인했는데 이건 전부 실제로
     미착수 상태 맞음(오탐 아님).
     교훈: (1) 같은 세션 안에서도 "이 항목 하나 고쳤다"가 "그 항목이 언급된 모든

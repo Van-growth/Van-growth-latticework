@@ -125,7 +125,7 @@ export default function HomeContent() {
   const searchParams = useSearchParams();
   const urlId = searchParams.get('id');
   const { setAnalysisData, setCompletedBatches, completedBatches } = useAnalysis();
-  const { session } = useAuth();
+  const { session, signInWithGoogle } = useAuth();
 
   const [companyName, setCompanyName] = useState('');
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
@@ -449,6 +449,11 @@ export default function HomeContent() {
   // company_listings에 lazy upsert하고, 이 회사의 기존 분석 캐시 유무를 받아온다 —
   // 그 결과(cached true/false) 하나로만 아래 렌더링이 분기된다(유저가 고르는 토글 아님).
   async function handleSelectSuggestion(s: CompanySuggestion) {
+    // /api/companies/resolve는 /api/analyze/stream과 동일하게 로그인이 필요함 —
+    // 비로그인 상태면 resolve 호출 자체를 하지 않고 로그인 모달만 띄운다(2026-07-16,
+    // 로그인 없이 캐시된 분석 전체를 열람할 수 있던 문제 수정).
+    if (!session) { signInWithGoogle(); return; }
+
     suppressAutocompleteRef.current = true;
     setCompanyName(s.name);
     setShowDropdown(false);
@@ -460,9 +465,13 @@ export default function HomeContent() {
     try {
       const res = await fetch(`${API_URL}/api/companies/resolve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(null, session.access_token),
+        },
         body: JSON.stringify({ name: s.name, listings: s.listings }),
       });
+      if (res.status === 401) { signInWithGoogle(); return; }
       if (!res.ok) throw new Error();
       const data = await res.json() as CompanyResolveResponse;
       setSelectedCompany({ name: s.name, companyId: data.companyId, listings: s.listings });
