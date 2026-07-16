@@ -9,19 +9,19 @@ const router = Router();
 
 type CompanyRef = { name: string } | null;
 
-// GET /api/analyses — 이 유저(로그인 시 auth user id, 아니면 client_id)가 실제로
-// 분석 요청한 기업만 반환. analyses/companies에는 소유자 컬럼이 없어(원래 전 유저
-// 공용 캐시 설계) analysis_usage를 "내 히스토리" 소스로 사용한다.
-// 식별자가 아예 없으면 fail-closed — 절대 전체 유저 데이터를 반환하지 않는다.
+// GET /api/analyses — 로그인한 유저가 실제로 분석 요청한 기업만 반환.
+// analyses/companies에는 소유자 컬럼이 없어(원래 전 유저 공용 캐시 설계)
+// analysis_usage를 "내 히스토리" 소스로 사용한다.
+// 검색/분석 실행 자체가 로그인 필수로 전환된 뒤에도 이 목록 라우트만 client_id
+// 폴백으로 열려있어 비로그인 상태에서 과거(로그인 필수화 이전) 기록이 그대로
+// 노출되던 문제가 있었음(2026-07-16 발견) — 다른 라우트와 동일하게 하드 401로 통일.
 router.get('/', async (req: Request, res: Response) => {
-  const clientId = (req.headers['x-client-id'] as string | undefined)?.trim() || null;
   const authUser = await resolveAuthUser(req);
-  const userId = authUser?.id ?? clientId;
-
-  if (!userId) {
-    res.json([]);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
     return;
   }
+  const userId = authUser.id;
 
   try {
     const { data: usageRows, error: usageErr } = await supabase

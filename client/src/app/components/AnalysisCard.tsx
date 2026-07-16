@@ -56,6 +56,10 @@ const COUNTRY_FLAG: Record<string, string> = {
   // English variants
   'US': '🇺🇸', 'USA': '🇺🇸', 'United States': '🇺🇸', 'America': '🇺🇸',
   'Korea': '🇰🇷', 'South Korea': '🇰🇷',
+  // ISO 3166-1 alpha-2 코드 — 스키마상 country 필드 포맷이 강제돼있지 않아
+  // Claude가 가끔 국가명 대신 2자리 코드로 반환하는 경우 대비(2026-07-16, 레거시
+  // CompetitorCard가 flagOf() 호출 자체를 안 하던 버그와 별개 — 그것도 같이 수정함)
+  'KR': '🇰🇷', 'CN': '🇨🇳', 'JP': '🇯🇵', 'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧', 'IN': '🇮🇳',
   'China': '🇨🇳', 'Japan': '🇯🇵', 'Germany': '🇩🇪', 'France': '🇫🇷',
   'UK': '🇬🇧', 'United Kingdom': '🇬🇧', 'Britain': '🇬🇧', 'India': '🇮🇳',
   'Canada': '🇨🇦', 'Australia': '🇦🇺', 'Italy': '🇮🇹', 'Spain': '🇪🇸',
@@ -1465,7 +1469,7 @@ function CompetitorCard({ comp }: { comp: DirectCompetitor }) {
     <div className="bg-white border border-gray-100 rounded-xl p-4 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
-        {comp.country && <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{comp.country}</span>}
+        {comp.country && <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>}
       </div>
       {comp.market_share && <div className="text-blue-600 font-medium text-sm">{comp.market_share}</div>}
       {(comp.strengths?.length ?? 0) > 0 && (

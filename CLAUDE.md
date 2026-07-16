@@ -727,6 +727,20 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   `NODE_ENV`는 `next build`가 배포 환경과 무관하게 항상 `production`으로 고정돼서
   별도 플래그가 필요했음. `render.dev.yaml`(dev용 Render Blueprint) 추가,
   `scripts/migration-hook.mjs`가 prod/dev 둘 다 안내하도록 확장.
+- [x] `/history` 페이지 로그인 게이트 통일 (2026-07-16) — `GET /api/analyses`가
+  `resolveAuthUser` 하드 401로 전환(client_id 폴백 제거), `history/page.tsx`는
+  `!session`이면 목록 요청 자체를 안 보내고 `LoginPromptModal` 노출. 검색
+  typeahead와 무관한 별개 경로였던 만큼 실전 발견 이력 15번에 경위 기록.
+- [x] 경쟁사 카드 국기 미표시 버그 수정 (2026-07-16) — "PC에서만 국기 없이
+  텍스트만 보인다"는 신고로 조사, 원인은 플랫폼/폰트가 아니라 **레거시
+  `CompetitorCard`(competitors_v2 없는 구버전 캐시 데이터일 때만 쓰이는 폴백
+  컴포넌트)가 `flagOf()` 호출 자체를 안 하고 있었던 것** — `CompetitorsV2Tab`
+  등 나머지 4곳은 전부 정상 호출 중이었음. `flagOf()` 호출 추가 + `COUNTRY_FLAG`에
+  ISO 2자리 코드(KR/CN/JP/DE/FR/GB/IN) 방어적 추가(country 필드 포맷이
+  프롬프트에 강제돼있지 않아 Claude가 가끔 국가명 대신 코드로 반환할 가능성 대비).
+  **Windows Segoe UI Emoji가 국기 이모지를 코드 텍스트로 폴백하는 알려진 OS
+  이슈일 가능성도 별도로 있어 이번 수정 후에도 PC에서 재발하면 SVG 국기 아이콘
+  전환이 필요함 — 아직 미확정, 재현 테스트로 확인 필요.**
 
 ## Security Principles (SSOT)
 
@@ -1012,6 +1026,34 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
     기능 작업으로) 아무도 모르게 rot한다. 서버 내부 스크립트는 처음부터 HTTP
     계층을 거치지 말고 서비스 함수/DB를 직접 호출하는 편이 이런 종류의 결합을
     원천 차단한다.
+15. (2026-07-16) 실전 발견 이력 11번(resolve 인증 우회) 수정 직후, 검색창
+    typeahead 외에 로그인 없이 과거 분석에 도달하는 다른 경로가 있는지 재현
+    요청받아 확인 — **`/history` 페이지에서 두 번째로 같은 종류의 인증 게이트
+    누락을 발견함.** 오늘 손댄 typeahead/resolve/LoginPromptModal 작업과는
+    완전히 무관한, 세션 시작 훨씬 전부터 있던 코드 경로라 그 작업들에서 전혀
+    건드리지 않았던 것.
+    - **원인**: `client/src/app/history/page.tsx`가 `!session` 체크 없이
+      `GET /api/analyses`를 호출했고, 서버(`server/src/routes/analyses.ts`)가
+      `authUser?.id ?? clientId`로 폴백해서 비로그인 상태에서도 localStorage
+      client_id 기준 과거 기록(회사명 + 정확한 분석 날짜)을 그대로 반환했음.
+      클릭 시(`handleSelect`)도 resolve나 로그인 모달을 전혀 거치지 않고 바로
+      `GET /api/analyses/:id` + `router.push('/?id=...')`로 직행.
+    - **수정**: 서버 — `GET /api/analyses`에 `resolveAuthUser` 하드 401 게이트
+      추가(client_id 폴백 제거, 다른 라우트와 통일). 클라이언트 — `!session`이면
+      목록 요청 자체를 안 보내고 `LoginPromptModal`(companyName 빈 값 → 범용
+      로그인 안내 문구) 노출, 모달 닫으면 홈으로 리다이렉트.
+    - 비로그인 유저에게 "기존 분석 존재"를 존재 여부만 안내하는 절충안(날짜만
+      숨기고 목록은 보여주기) 대신 **목록 자체를 통째로 로그인 게이트 뒤로
+      숨기는 쪽을 선택** — 검색 화면 쪽도 이미 로그인해야만 캐시 조회 결과가
+      보이는 구조라, `/history`만 다른 기준을 적용할 이유가 없었음.
+    - 검증: 헤더 없이 curl로 `GET /api/analyses` → 401(`/api/analyze/stream`과
+      동일 응답) 확인, 타입체크/dev 서버 hot-reload 정상. 브라우저 실클릭 재현은
+      이 세션에 브라우저 자동화 도구가 없어 못 함(코드 검토로 갈음).
+    교훈: "이 기능을 오늘 고쳤다"가 "같은 문제를 가진 다른 진입점이 없다"를
+    보장하지 않는다 — 로그인 요구사항처럼 앱 전역에 적용돼야 하는 정책 변경은
+    그 정책이 새로 생긴 기능(오늘의 typeahead)뿐 아니라 **그 정책이 생기기
+    전부터 있던 기존 페이지/라우트**에도 똑같이 적용됐는지 별도로 감사해야
+    한다 — 새 기능 코드만 보면 이런 경로는 시야에 아예 안 들어온다.
 16. (2026-07-16) 15번 직후 전체 API 라우트 인증정책 감사(보고 전용) 결과를 토대로
     실제 수정 진행 — **`POST /api/analyze/reanalyze`, `POST/DELETE
     /api/analyses/:id/share`, `POST /api/analyses/:id/refresh-financials` 4개
