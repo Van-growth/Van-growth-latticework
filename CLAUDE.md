@@ -10,24 +10,25 @@
 > git log/커밋 메시지를 참고할 것.
 
 **날짜**: 2026-07-26
-**커밋**: caee208, 95eb8b2, bee0625
-**Render 배포**: 미확인 — Render API 토큰/CLI 없음, render.yaml엔 cron만 정의돼 있고 web 서비스 자체가 없어 이 환경에서 조회 불가
+**커밋**: 없음 (이번 세션은 조사만, 코드 변경 없음)
+**Render 배포**: 미확인 — 이번 세션 push 없음
 
 ### 완료
-- Rocket Lab 빈 카드 버그: summary_v2.bull_case/bear_case, business_model_v2.growth_motion_detail 조건부 렌더링 가드 추가 (원인은 camelCase/snake_case 불일치 아니었음, caee208)
-- quality-gate 로깅: 위 3개 필드 빈 값 발생 시 관찰용 warn 로그 추가, SECTION_CONTENT_SIGNALS는 미변경 (caee208)
-- 리포트 마크다운 복사: 9개 섹션 변환 함수 + 헤더 "전체 복사"/"이 탭 복사" 버튼 (95eb8b2)
-- 미푸시 커밋 정리: 이전 세션 보안수정 7개 + 오늘 2개 push, origin과 완전 동기화
-- /done 개선: CLAUDE.md 자동 커밋 로직 + Handoff 고정 포맷화 (`.claude/commands/done.md`는 gitignore 대상이라 git 추적 안 됨, 로컬 전용)
+- 프로덕션 긴급 신고("요약 탭 전체 콘텐츠 사라짐") 조사: 코드 회귀 아님으로 확정 — DB 직접 조회로 해당 레코드(Rocket Lab, e870646f)의 summary_v2 자체가 생성 시점부터 빈 기본값이었음을 확인, caee208/95eb8b2와 무관(그 레코드는 커밋들보다 1시간+ 먼저 DB에 저장됨)
+- Batch1(summary_v2) 조용한 폴백 문제 원인 규명: 폴백 지점·로깅 범위·재발 건수 확인 완료(아래 발견 참고), 수정은 보류(사용자 지시로 조사만)
 
 ### 남음
 - STEP 2 게이팅 해제: 성장시나리오/PDF를 상수 하나로 온오프 가능하게 로그인 유저 전원 개방 — 다음 세션
 - STEP 3 웹/PDF 패리티 감사 + 성장시나리오 PDF 추가 — 별도 세션(사용자 지정)
+- Batch1 조용한 폴백 수정 여부/방식 결정 — 사용자가 "수정 계획은 다음에 결정"이라 보류, 결정 나면 착수
 
 ### 발견 (미처리)
-- 산업역사/기술변화 탭 "생성 중..." 무한 스피너: 원인 미규명 — 온디맨드 생성 경로 전반(Rocket Lab 등) 영향
-- financials_v2.outlook 웹 미노출: PDF(관리자 전용)에만 렌더링, 웹 탭엔 없음 — 노출 여부 제품 판단 필요
-- SectionSource date/isEstimate 누락: 백엔드가 섹션 스키마에 생성 지시 자체를 안 함 — 웹 8개 탭 출처 목록 전부 영향
+- Batch1(summary_v2) 실패 시 DEFAULT_ANALYSIS_DATA로 조용히 폴백돼 "성공"처럼 저장됨: 원인 규명 완료 — prod 119건 중 6건 영향(Rocket Lab/Exxon Mobil/쎄트렉아이 3건은 동일 패턴, palantir 3건은 2026-05-02 초기 테스트 잔재로 별개 원인)
+- caee208 quality-gate 로깅이 이 전체 실패(Rule 2 콘텐츠 전무)는 못 잡음: 원인 규명 완료 — return null이 로깅 코드 도달 전에 실행돼 구조적으로 커버 불가
+- golden-set 검증이 summary_v2를 검사 대상에서 누락: 원인 규명 완료 — company 필드는 폴백이 직접 채워 위장, emptySectionCount 배열에 summary_v2 자체가 없음
+- 산업역사/기술변화 탭 무한 스피너(이전 세션 발견): 원인 미규명 — 온디맨드 생성 경로 전반 영향
+- financials_v2.outlook 웹 미노출(이전 세션 발견): PDF(관리자 전용)에만 렌더링 — 제품 판단 필요
+- SectionSource date/isEstimate 누락(이전 세션 발견): 웹 8개 탭 출처 목록 날짜/추정뱃지 미표시
 
 ### 다음 세션 우선순위
 1. STEP 2 게이팅 해제 진행 (성장시나리오/PDF, 상수 기반 온오프)
