@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
-  TrendingUp, Lock,
+  TrendingUp, Lock, Copy, Check,
 } from 'lucide-react';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
 import {
@@ -2549,6 +2549,227 @@ function GrowthScenarioLocked() {
   );
 }
 
+// ── Markdown export (복사 기능) ─────────────────────────────────────────────────
+
+function mdJoin(parts: (string | false | null | undefined)[]): string {
+  return parts.filter((p): p is string => !!p).join('\n\n');
+}
+
+function mdList(items: (string | false | null | undefined)[]): string {
+  return items.filter((i): i is string => !!i).map(i => `- ${i}`).join('\n');
+}
+
+function mdSourcesBlock(sources: Source[] | undefined): string {
+  if (!sources?.length) return '';
+  const lines = sources.map((s, i) => {
+    const idx = s.index ?? i + 1;
+    return `[${idx}] ${s.organization}${s.date ? ` — ${s.date}` : ''}: ${s.content}${s.isEstimate ? ' (추정)' : ''}`;
+  });
+  return `**출처**\n${lines.join('\n')}`;
+}
+
+function summaryToMd(s: SummaryV2, sources: Source[] | undefined): string {
+  const cc = s.customer_concentration;
+  const body = mdJoin([
+    s.oneLiner,
+    s.key_bullets?.length ? `**핵심 요약**\n${mdList(s.key_bullets)}` : '',
+    s.key_metrics.length ? `**핵심 지표**\n${mdList(s.key_metrics.map(m => `${m.label}: ${m.value}`))}` : '',
+    s.products.length ? `**주요 제품/서비스**\n${mdList(s.products.map(p => `${p.name} — ${p.revenue_share}%`))}` : '',
+    s.key_markets.length ? `**주요 시장**\n${mdList(s.key_markets.map(m => `${m.country} — ${m.revenue_share}%`))}` : '',
+    s.top_customers.length ? `**주요 고객사**: ${s.top_customers.join(', ')}` : '',
+    cc && cc.top_n_share > 0 ? `상위 ${cc.top_n}개 고객이 매출 ${cc.top_n_share}% 차지${cc.trend === 'diversifying' ? ' (다변화 진행 중)' : cc.trend === 'concentrating' ? ' (집중도 심화)' : ''}` : '',
+    s.bull_case ? `**성장 모멘텀**: ${s.bull_case}` : '',
+    s.bear_case ? `**핵심 리스크**: ${s.bear_case}` : '',
+    s.trigger_events?.length ? `**최근 트리거 이벤트**\n${mdList(s.trigger_events.map(ev =>
+      `${ev.date} [${ev.type}]${ev.amount ? ` ${ev.amount}` : ''}${ev.counterparty ? ` · ${ev.counterparty}` : ''} — ${ev.description}`
+    ))}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 요약\n\n${body}` : '';
+}
+
+function industryHistoryToMd(h: IndustryHistoryV2, sources: Source[] | undefined): string {
+  const body = mdJoin([
+    h.key_bullets?.length ? `**핵심 요약**\n${mdList(h.key_bullets)}` : '',
+    h.timeline.length ? `**타임라인**\n${mdList(h.timeline.map(t =>
+      `${t.period} — ${t.title}: ${t.significance}${t.key_players.length ? ` (${t.key_players.join(', ')})` : ''}`
+    ))}` : '',
+    h.why_durable ? `**지속 가능성**: ${h.why_durable}` : '',
+    h.chasm_points.length ? `**캐즘 포인트**\n${mdList(h.chasm_points)}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 산업역사\n\n${body}` : '';
+}
+
+function techEvolutionToMd(t: TechEvolutionV2, sources: Source[] | undefined): string {
+  const body = mdJoin([
+    t.key_bullets?.length ? `**핵심 요약**\n${mdList(t.key_bullets)}` : '',
+    t.current_stage ? `**현재 단계**: ${t.current_stage}` : '',
+    t.next_inflection ? `**다음 변곡점**: ${t.next_inflection}` : '',
+    t.stages.length ? `**단계별 흐름**\n${mdList(t.stages.map(s => `${s.period} — ${s.title}: ${s.description}`))}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 기술변화\n\n${body}` : '';
+}
+
+function valueChainToMd(vc: ValueChainV2, sources: Source[] | undefined): string {
+  const body = mdJoin([
+    vc.key_bullets?.length ? `**핵심 요약**\n${mdList(vc.key_bullets)}` : '',
+    vc.layers.length ? `**밸류체인 레이어**\n${mdList(vc.layers.map(l =>
+      `${l.name}${l.is_subject ? ' (분석 대상)' : ''}${l.buyer ? ' [구매자]' : l.pricing_power ? ` [가격결정력: ${l.pricing_power}]` : ''}${l.bottleneck ? ' [Bottleneck]' : ''} — ${l.description}`
+    ))}` : '',
+    vc.value_flow ? `**가격 전가 메커니즘**: ${vc.value_flow}` : '',
+    vc.subject_position ? `**분석 기업 포지션**: ${vc.subject_position}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 밸류체인\n\n${body}` : '';
+}
+
+function businessModelToMd(bm: BusinessModelV2, sources: Source[] | undefined): string {
+  const ue = bm.unit_economics;
+  const body = mdJoin([
+    bm.key_bullets?.length ? `**핵심 요약**\n${mdList(bm.key_bullets)}` : '',
+    bm.growth_motion_detail ? `**Growth Motion (${bm.growth_motion})**: ${bm.growth_motion_detail}` : '',
+    bm.revenue_streams.length ? `**Revenue Streams**\n${mdList(bm.revenue_streams.map(rs => `${rs.name} (${rs.type}) — ${rs.revenue_share}%`))}` : '',
+    (ue.gross_margin || ue.operating_margin || ue.net_margin) ? `**Unit Economics**\n${mdList([
+      ue.gross_margin ? `Gross Margin: ${ue.gross_margin}%` : '',
+      ue.operating_margin ? `Operating Margin: ${ue.operating_margin}%` : '',
+      ue.net_margin ? `Net Margin: ${ue.net_margin}%` : '',
+      ue.fcf_margin ? `FCF Margin: ${ue.fcf_margin}%` : '',
+      ue.nrr ? `NRR: ${ue.nrr}%` : '',
+    ])}` : '',
+    bm.segments.length ? `**사업 세그먼트**\n${mdList(bm.segments.map(seg => `${seg.name} — ${seg.revenue_share}%: ${seg.characteristics}`))}` : '',
+    bm.moat.length ? `**경제적 해자**\n${mdList(bm.moat.map(m => `${m.type} (${m.strength}) — ${m.description}`))}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 비즈니스모델\n\n${body}` : '';
+}
+
+function competitorsToMd(c: CompetitorsV2, sources: Source[] | undefined): string {
+  const body = mdJoin([
+    `**경쟁 포지션**: ${c.competitive_position}`,
+    c.key_bullets?.length ? `**핵심 요약**\n${mdList(c.key_bullets)}` : '',
+    c.direct.length ? `**직접 경쟁사**\n${mdList(c.direct.map(comp =>
+      `${comp.name} (${comp.country})${comp.market_share ? ` — 점유율 ${comp.market_share}` : ''}${comp.vs_subject ? `: ${comp.vs_subject}` : ''}`
+    ))}` : '',
+    c.indirect.length ? `**간접 경쟁사**\n${mdList(c.indirect.map(x => `${x.name} — ${x.threat}`))}` : '',
+    c.substitutes.length ? `**대체재**\n${mdList(c.substitutes.map(x => `${x.name} — ${x.threat}`))}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 경쟁사\n\n${body}` : '';
+}
+
+function strategyToMd(st: StrategyV2, sources: Source[] | undefined): string {
+  const body = mdJoin([
+    st.key_bullets?.length ? `**핵심 요약**\n${mdList(st.key_bullets)}` : '',
+    st.corporate.direction ? `**기업 전략**: ${st.corporate.direction}` : '',
+    st.business.direction ? `**사업 전략**: ${st.business.direction}` : '',
+    st.financial.direction ? `**재무 전략**: ${st.financial.direction}` : '',
+    st.strategy_coherence ? `**전략 수렴**: ${st.strategy_coherence}` : '',
+    st.ten_year_durability ? `**10년 지속 가능성**: ${st.ten_year_durability}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 전략\n\n${body}` : '';
+}
+
+function financialsToMd(f: FinancialsV2, sources: Source[] | undefined): string {
+  const isRows = f.income_statement.filter(r => IS_COLS_V2.some(c => r[c]));
+  const bsRows = f.balance_sheet.filter(r => r.fy2023 || r.fy2024 || r.fy2025);
+  const body = mdJoin([
+    f.key_bullets?.length ? `**핵심 요약**\n${mdList(f.key_bullets)}` : '',
+    f.narrative ? `**재무 서사**: ${f.narrative}` : '',
+    isRows.length ? `**손익계산서 (I/S)**\n| 항목 | FY2021 | FY2022 | FY2023 | FY2024 | FY2025 | YoY |\n|---|---|---|---|---|---|---|\n${
+      isRows.map(r => `| ${r.item} | ${r.fy2021 ?? '—'} | ${r.fy2022 ?? '—'} | ${r.fy2023 ?? '—'} | ${r.fy2024 ?? '—'} | ${r.fy2025 ?? '—'} | ${r.yoy ?? '—'} |`).join('\n')
+    }` : '',
+    bsRows.length ? `**재무상태표 (B/S)**\n| 항목 | FY2023 | FY2024 | FY2025 |\n|---|---|---|---|\n${
+      bsRows.map(r => `| ${r.item} | ${r.fy2023 ?? '—'} | ${r.fy2024 ?? '—'} | ${r.fy2025 ?? '—'} |`).join('\n')
+    }` : '',
+    (f.cash_flow.operating || f.cash_flow.fcf) ? `**현금흐름**\n${mdList([
+      f.cash_flow.operating ? `Operating CF: ${f.cash_flow.operating}` : '',
+      f.cash_flow.investing ? `Investing CF: ${f.cash_flow.investing}` : '',
+      f.cash_flow.financing ? `Financing CF: ${f.cash_flow.financing}` : '',
+      f.cash_flow.fcf ? `FCF: ${f.cash_flow.fcf}` : '',
+    ])}` : '',
+    f.key_risks.length ? `**핵심 리스크**\n${mdList(f.key_risks)}` : '',
+    mdSourcesBlock(sources),
+  ]);
+  return body ? `## 재무\n\n${body}` : '';
+}
+
+function founderToMd(fo: FounderV2): string {
+  const body = mdJoin([
+    fo.key_bullets?.length ? `**핵심 요약**\n${mdList(fo.key_bullets)}` : '',
+    fo.founders.length ? `**기본 정보**\n${mdList(fo.founders.map(fd => `${fd.name}${fd.title && fd.title !== '-' ? ` (${fd.title})` : ''}${fd.education && fd.education !== '-' ? ` — ${fd.education}` : ''}`))}` : '',
+    fo.career_trajectory.length ? `**커리어 궤적**\n${mdList(fo.career_trajectory.map(c => `${c.period} — ${c.company} (${c.role})`))}` : '',
+    fo.founding_history.previous_ventures.length ? `**창업 이력** (${fo.founding_history.type === 'serial' ? 'Serial Founder' : '1st Time Founder'})\n${mdList(fo.founding_history.previous_ventures.map(v => `${v.name} — ${v.result}${v.exit_type ? ` (${v.exit_type})` : ''}`))}` : '',
+    mdSourcesBlock(fo.sources),
+  ]);
+  return body ? `## 창업자\n\n${body}` : '';
+}
+
+function growthScenarioToMd(g: GrowthScenarioV2): string {
+  const years = g.simulation.p50.length;
+  const body = mdJoin([
+    g.narrative ?? '',
+    `| 연차 | 보수적(P10) | 예상(P50) | 낙관적(P90) |\n|---|---|---|---|\n${
+      Array.from({ length: years }, (_, i) =>
+        `| Year+${i + 1} | ${g.simulation.p10[i]} | ${g.simulation.p50[i]} | ${g.simulation.p90[i]} |`
+      ).join('\n')
+    }`,
+  ]);
+  return body ? `## 성장 시나리오\n\n${body}` : '';
+}
+
+function analysisToMd(data: AnalysisDetail): string {
+  const parts: string[] = [
+    `# ${data.companyName}`,
+    `분석일: ${new Date(data.createdAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}`,
+  ];
+  if (data.summary_v2) parts.push(summaryToMd(data.summary_v2, data.summary_v2.sources ?? data.sources?.summary));
+  if (data.industry_history_v2) parts.push(industryHistoryToMd(data.industry_history_v2, data.industry_history_v2.sources ?? data.sources?.industry_history));
+  if (data.tech_evolution_v2) parts.push(techEvolutionToMd(data.tech_evolution_v2, data.tech_evolution_v2.sources ?? data.sources?.tech_evolution));
+  if (data.value_chain_v2) parts.push(valueChainToMd(data.value_chain_v2, data.value_chain_v2.sources ?? data.sources?.value_chain));
+  if (data.business_model_v2) parts.push(businessModelToMd(data.business_model_v2, data.business_model_v2.sources ?? data.sources?.business_model));
+  if (data.competitors_v2) parts.push(competitorsToMd(data.competitors_v2, data.competitors_v2.sources ?? data.sources?.competitors));
+  if (data.strategy_v2) parts.push(strategyToMd(data.strategy_v2, data.strategy_v2.sources ?? data.sources?.strategy));
+  if (data.financials_v2) parts.push(financialsToMd(data.financials_v2, data.financials_v2.sources ?? data.sources?.financials));
+  if (data.founder_v2) parts.push(founderToMd(data.founder_v2));
+  if (data.growth_scenario_v2) parts.push(growthScenarioToMd(data.growth_scenario_v2));
+  return parts.filter(Boolean).join('\n\n---\n\n');
+}
+
+function CopyButton({ getMarkdown, label = '복사', shortLabel }: { getMarkdown: () => string; label?: string; shortLabel?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(async () => {
+    const md = getMarkdown();
+    if (!md) return;
+    try {
+      await navigator.clipboard.writeText(md);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 클립보드 권한 거부 등 — 조용히 무시
+    }
+  }, [getMarkdown]);
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0"
+    >
+      {copied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+      {shortLabel ? (
+        <>
+          <span className="hidden sm:inline">{copied ? '복사됨' : label}</span>
+          <span className="sm:hidden">{copied ? '복사됨' : shortLabel}</span>
+        </>
+      ) : (
+        copied ? '복사됨' : label
+      )}
+    </button>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -2657,6 +2878,22 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
 
   const ticker = data.summary_v2?.ticker ?? null;
 
+  // "이 탭 복사" — 현재 활성 탭의 데이터만 골라 섹션별 복사와 동일한 변환 함수로 마크다운 생성
+  const getActiveTabMarkdown = useCallback((): string => {
+    switch (tab) {
+      case 'summary':          return data.summary_v2 ? summaryToMd(data.summary_v2, data.summary_v2.sources ?? data.sources?.summary) : '';
+      case 'industry_history': return data.industry_history_v2 ? industryHistoryToMd(data.industry_history_v2, data.industry_history_v2.sources ?? data.sources?.industry_history) : '';
+      case 'tech_evolution':   return data.tech_evolution_v2 ? techEvolutionToMd(data.tech_evolution_v2, data.tech_evolution_v2.sources ?? data.sources?.tech_evolution) : '';
+      case 'value_chain':      return data.value_chain_v2 ? valueChainToMd(data.value_chain_v2, data.value_chain_v2.sources ?? data.sources?.value_chain) : '';
+      case 'business_model':   return data.business_model_v2 ? businessModelToMd(data.business_model_v2, data.business_model_v2.sources ?? data.sources?.business_model) : '';
+      case 'competitors':      return data.competitors_v2 ? competitorsToMd(data.competitors_v2, data.competitors_v2.sources ?? data.sources?.competitors) : '';
+      case 'strategy':         return data.strategy_v2 ? strategyToMd(data.strategy_v2, data.strategy_v2.sources ?? data.sources?.strategy) : '';
+      case 'financials':       return financialsV2Local ? financialsToMd(financialsV2Local, financialsV2Local.sources ?? data.sources?.financials) : '';
+      case 'founder':          return data.founder_v2 ? founderToMd(data.founder_v2) : '';
+      case 'growth_scenario':  return data.growth_scenario_v2 ? growthScenarioToMd(data.growth_scenario_v2) : '';
+      default:                 return '';
+    }
+  }, [tab, data, financialsV2Local]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2673,6 +2910,8 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <CopyButton getMarkdown={() => analysisToMd(data)} label="전체 복사" />
+            <CopyButton getMarkdown={getActiveTabMarkdown} label="이 탭 복사" shortLabel="탭 복사" />
             {isAdmin && <ExportPdfButton data={data} />}
             <DataSourceBadge source={data.dataSource ?? 'web_search'} />
           </div>
