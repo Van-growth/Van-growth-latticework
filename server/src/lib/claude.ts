@@ -794,6 +794,15 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
       if (Array.isArray(r.sources) && r.sources.length === 0) {
         console.warn(`[quality-gate] ${sectionKey} sources 배열 비어있음`);
       }
+      // 프론트가 조건부 렌더링하는 단일 텍스트 필드가 비어있는 빈도 관찰용 — Quality Gate
+      // 룰로 승격하지 않음(business_model_v2 22% 폐기율 재현 위험, 실전 발견 이력 6번 참고).
+      if (sectionKey === 'summary_v2') {
+        if (!r.bull_case) console.warn(`[quality-gate] summary_v2.bull_case 비어있음`);
+        if (!r.bear_case) console.warn(`[quality-gate] summary_v2.bear_case 비어있음`);
+      }
+      if (sectionKey === 'business_model_v2' && !r.growth_motion_detail) {
+        console.warn(`[quality-gate] business_model_v2.growth_motion_detail 비어있음`);
+      }
     }
     // ─────────────────────────────────────────────────────────────────────
     console.log(`[claude] ${sectionKey} OK  ${Date.now() - t0}ms`);

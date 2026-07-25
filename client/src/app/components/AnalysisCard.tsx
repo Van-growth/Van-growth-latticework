@@ -561,17 +561,23 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
         </div>
       )}
 
-      {/* 성장 모멘텀 / 핵심 리스크 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">성장 모멘텀</div>
-          <p className="text-sm text-gray-700 leading-relaxed">{s.bull_case}</p>
+      {/* 성장 모멘텀 / 핵심 리스크 — 둘 다 없으면 섹션 자체 미노출 */}
+      {(s.bull_case || s.bear_case) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {s.bull_case && (
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">성장 모멘텀</div>
+              <p className="text-sm text-gray-700 leading-relaxed">{s.bull_case}</p>
+            </div>
+          )}
+          {s.bear_case && (
+            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-red-500 mb-2">핵심 리스크</div>
+              <p className="text-sm text-gray-700 leading-relaxed">{s.bear_case}</p>
+            </div>
+          )}
         </div>
-        <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-widest text-red-500 mb-2">핵심 리스크</div>
-          <p className="text-sm text-gray-700 leading-relaxed">{s.bear_case}</p>
-        </div>
-      </div>
+      )}
 
       {/* 최근 트리거 이벤트 — 이벤트 없으면 섹션 자체 미노출 */}
       {s.trigger_events && s.trigger_events.length > 0 && (
@@ -1138,15 +1144,17 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
         </SectionCard>
       )}
 
-      {/* Above fold: growth motion */}
-      <SectionCard title="Growth Motion" dotColor="bg-blue-400">
-        <div className="mb-3">
-          <span className={`inline-flex items-center text-sm font-semibold px-3 py-1.5 rounded-full ${gm.cls}`}>
-            {gm.label}
-          </span>
-        </div>
-        <p className="text-sm text-gray-600 leading-relaxed">{bm.growth_motion_detail}</p>
-      </SectionCard>
+      {/* Above fold: growth motion — 상세 서술 없으면 카드 자체 미노출 */}
+      {bm.growth_motion_detail && (
+        <SectionCard title="Growth Motion" dotColor="bg-blue-400">
+          <div className="mb-3">
+            <span className={`inline-flex items-center text-sm font-semibold px-3 py-1.5 rounded-full ${gm.cls}`}>
+              {gm.label}
+            </span>
+          </div>
+          <p className="text-sm text-gray-600 leading-relaxed">{bm.growth_motion_detail}</p>
+        </SectionCard>
+      )}
 
       {/* Below fold: unit economics + segments + moat */}
       <ShowMore label="Unit Economics · 세그먼트 · 경제적 해자 보기">
