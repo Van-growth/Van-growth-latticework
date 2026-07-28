@@ -52,6 +52,8 @@ services:
         sync: false
       - key: PREMIUM_OVERRIDE_CLIENT_IDS
         sync: false
+      - key: ADMIN_USER_IDS
+        sync: false
 
   # ── Dev: Client (Next.js) ─────────────────────────────────────────────────────
   - type: web

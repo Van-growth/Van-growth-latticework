@@ -9,6 +9,7 @@ import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
 } from '../services/monteCarloService';
 import { isPremiumUser } from '../lib/premium';
+import { isAdminUser } from '../lib/admin';
 import { checkAnalysisUsage, recordAnalysisUsage } from '../lib/analysisUsage';
 import { resolveAuthUser } from '../lib/authUser';
 
@@ -370,12 +371,13 @@ router.get('/usage', async (req: Request, res: Response) => {
     res.status(401).json({ error: '로그인이 필요합니다.' });
     return;
   }
+  const isAdmin = isAdminUser(authUser.id);
   if (await isPremiumUser({ clientId: null, authUserId: authUser.id })) {
-    res.json({ isPremium: true, usedCount: 0, limit: null, nextAvailableAt: null });
+    res.json({ isPremium: true, isAdmin, usedCount: 0, limit: null, nextAvailableAt: null });
     return;
   }
   const usage = await checkAnalysisUsage(authUser.id);
-  res.json({ isPremium: false, usedCount: usage.usedCount, limit: 2, nextAvailableAt: usage.nextAvailableAt ?? null });
+  res.json({ isPremium: false, isAdmin, usedCount: usage.usedCount, limit: 2, nextAvailableAt: usage.nextAvailableAt ?? null });
 });
 
 // ── Streaming POST /api/analyze/stream ───────────────────────────────────────

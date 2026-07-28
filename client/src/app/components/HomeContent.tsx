@@ -136,6 +136,10 @@ export default function HomeContent() {
   const [companyName, setCompanyName] = useState('');
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  // 2글자 이상 입력 후 typeahead가 0건으로 실제 응답한 상태 — 관리자 전용 "직접 입력"
+  // 폴백 노출 조건(타이핑 중 깜빡임 방지용, showDropdown/suggestions.length만으로는
+  // 디바운스 응답 전 프레임과 구분이 안 됨)
+  const [searchedEmpty, setSearchedEmpty] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const suppressAutocompleteRef = useRef(false);
   // typeahead에서 클릭 → /api/companies/resolve로 확정된 엔티티. 자유 텍스트 제출은
@@ -165,7 +169,7 @@ export default function HomeContent() {
   const [reanalyzingTabs, setReanalyzingTabs] = useState<Set<string>>(new Set());
   const [isFirstLookup, setIsFirstLookup] = useState(false);
   const [rateLimitInfo, setRateLimitInfo] = useState<{ message: string; nextAvailableAt: string | null; usedCount: number } | null>(null);
-  const [usage, setUsage] = useState<{ isPremium: boolean; usedCount: number; limit: number | null } | null>(null);
+  const [usage, setUsage] = useState<{ isPremium: boolean; isAdmin: boolean; usedCount: number; limit: number | null } | null>(null);
 
   const loadedIdRef = useRef<string | null>(null);
   const streamingRef = useRef<AnalysisDetail | null>(null);
@@ -179,7 +183,7 @@ export default function HomeContent() {
       });
       if (!res.ok) return;
       const data = await res.json();
-      setUsage({ isPremium: data.isPremium, usedCount: data.usedCount, limit: data.limit });
+      setUsage({ isPremium: data.isPremium, isAdmin: !!data.isAdmin, usedCount: data.usedCount, limit: data.limit });
     } catch {
       // 카운터 조회 실패는 조용히 무시 — 분석 자체를 막지 않음
     }
@@ -485,6 +489,7 @@ export default function HomeContent() {
       return;
     }
     const q = companyName.trim();
+    setSearchedEmpty(false);
     if (q.length < 2) {
       setSuggestions([]);
       setShowDropdown(false);
@@ -498,6 +503,7 @@ export default function HomeContent() {
         setSuggestions(results);
         setShowDropdown(results.length > 0);
         setActiveSuggestion(-1);
+        setSearchedEmpty(results.length === 0);
       } catch {
         // 자동완성은 best-effort — 실패해도 목록에서 다시 검색해 선택하면 됨
       }
@@ -639,6 +645,17 @@ export default function HomeContent() {
                   </li>
                 ))}
               </ul>
+            )}
+            {searchedEmpty && !selectedCompany && usage?.isAdmin && !loading && (
+              <div className="absolute left-0 right-0 z-20 mt-1.5 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden py-1">
+                <button
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); handleSelectSuggestion({ name: companyName.trim(), listings: [] }); }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors"
+                >
+                  “{companyName.trim()}” 직접 입력해서 분석하기 (비상장 등, 관리자 전용)
+                </button>
+              </div>
             )}
           </div>
           {selectedCompany && resolveResult && !resolveResult.cached ? (

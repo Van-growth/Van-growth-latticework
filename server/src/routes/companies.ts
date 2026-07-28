@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import { resolveAuthUser } from '../lib/authUser';
 import { recordAnalysisUsage } from '../lib/analysisUsage';
+import { isAdminUser } from '../lib/admin';
 
 const router = Router();
 
@@ -130,6 +131,14 @@ router.post('/resolve', async (req: Request, res: Response) => {
   const { name, listings } = req.body as { name?: string; listings?: Listing[] };
   if (!name?.trim()) {
     res.status(400).json({ error: '기업명이 필요합니다.' });
+    return;
+  }
+
+  // listings가 없으면 typeahead(DART/EDGAR) 매칭 없이 자유 입력한 회사(비상장사 등)라는
+  // 뜻 — 정상 typeahead 결과는 항상 listing이 1개 이상 딸려온다. 이 경로는 회사명 중복
+  // 생성 위험이 있어(같은 회사도 표기가 다르면 별도 행) 관리자 계정에서만 허용한다.
+  if (!listings?.length && !isAdminUser(authUser.id)) {
+    res.status(403).json({ error: '검색 목록에서 기업을 선택해주세요.' });
     return;
   }
 
