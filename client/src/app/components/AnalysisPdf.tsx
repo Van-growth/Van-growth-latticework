@@ -23,6 +23,7 @@ import type {
   FinancialsV2Row,
   FinancialsV2BSRow,
   FounderV2,
+  GrowthScenarioV2,
   Source,
   AnalysisSources,
 } from '@/types';
@@ -463,11 +464,27 @@ function pdfVal(v: string | number | null | undefined): string {
   return s;
 }
 
+// 성장 시나리오 표 숫자 포맷 (mirrors AnalysisCard.tsx fmtGrowthRevenue)
+function fmtPdfRevenue(v: number, currency: 'KRW' | 'USD'): string {
+  const abs = Math.abs(v);
+  if (currency === 'KRW') {
+    if (abs >= 1_000_000_000_000) return `${(v / 1_000_000_000_000).toFixed(1)}조원`;
+    if (abs >= 100_000_000)       return `${(v / 100_000_000).toFixed(0)}억원`;
+    return `${Math.round(v).toLocaleString()}원`;
+  }
+  const b = abs / 1_000_000_000;
+  return b >= 1 ? `${(v / 1_000_000_000).toFixed(1)}B USD` : `${(v / 1_000_000).toFixed(0)}M USD`;
+}
+
 // ── Primitives ───────────────────────────────────────────────────────────────
 
-function SectionHeader({ num, title }: { num: number; title: string }) {
+function SectionHeader({ num, title, id }: { num: number; title: string; id?: string }) {
   return (
     <View style={s.sectionHeaderWrap}>
+      {/* react-pdf named-destination 마커 — 줄바꿈되는 콘텐츠에 직접 id를 달면 페이지가
+          넘어갈 때 마지막 조각으로 점프하는 버그(react-pdf#2377)가 있어, 절대 줄바꿈되지
+          않는 빈 텍스트를 헤더 맨 앞에 둬서 목적지로 쓴다. */}
+      {id && <Text id={id} style={{ fontSize: 0 }} />}
       <Text style={s.sectionNum}>{String(num).padStart(2, '0')}</Text>
       <Text style={s.sectionTitle}>{title}</Text>
     </View>
@@ -573,30 +590,35 @@ function CoverPage({ data, shareUrl }: { data: AnalysisDetail; shareUrl?: string
 
 // ── TOC Page ──────────────────────────────────────────────────────────────────
 
-const TOC_SECTIONS = [
-  { num: 1, title: '기업 개요' },
-  { num: 2, title: '산업 역사' },
-  { num: 3, title: '기술 변화' },
-  { num: 4, title: '밸류체인' },
-  { num: 5, title: '비즈니스 모델' },
-  { num: 6, title: '경쟁사 분석' },
-  { num: 7, title: '전략 분석' },
-  { num: 8, title: '재무 분석' },
-  { num: 9, title: '창업자 분석' },
+// id는 각 섹션의 SectionHeader에 넘기는 id와 매칭되는 내부 링크 목적지(#없는 형태).
+// present는 실제 렌더링 조건(Document 본문의 `data.xxx_v2 &&`)과 반드시 동일하게 유지 —
+// 안 그러면 목차에는 있는데 실제로는 없는 섹션으로 가는 죽은 링크가 생긴다.
+const TOC_ITEMS: Array<{ num: number; id: string; title: string; present: (d: AnalysisDetail) => boolean }> = [
+  { num: 1,  id: 'sec-1',  title: '기업 개요',     present: d => !!d.summary_v2 },
+  { num: 2,  id: 'sec-2',  title: '산업 역사',     present: d => !!d.industry_history_v2 },
+  { num: 3,  id: 'sec-3',  title: '기술 변화',     present: d => !!d.tech_evolution_v2 },
+  { num: 4,  id: 'sec-4',  title: '밸류체인',      present: d => !!d.value_chain_v2 },
+  { num: 5,  id: 'sec-5',  title: '비즈니스 모델', present: d => !!d.business_model_v2 },
+  { num: 6,  id: 'sec-6',  title: '경쟁사 분석',   present: d => !!d.competitors_v2 },
+  { num: 7,  id: 'sec-7',  title: '전략 분석',     present: d => !!d.strategy_v2 },
+  { num: 8,  id: 'sec-8',  title: '재무 분석',     present: d => !!d.financials_v2 },
+  { num: 9,  id: 'sec-9',  title: '창업자 분석',   present: d => !!d.founder_v2 },
+  { num: 10, id: 'sec-10', title: '성장 시나리오', present: d => !!d.growth_scenario_v2 },
 ];
 
-function TOCPage({ company, shareUrl }: { company: string; shareUrl?: string }) {
+function TOCPage({ company, shareUrl, data }: { company: string; shareUrl?: string; data: AnalysisDetail }) {
+  const items = TOC_ITEMS.filter(item => item.present(data));
   return (
     <Page size="A4" style={s.page}>
       <View style={s.section}>
         <View style={[s.sectionHeaderWrap, { marginBottom: 12 }]}>
           <Text style={s.sectionTitle}>목차</Text>
         </View>
-        {TOC_SECTIONS.map(item => (
-          <View key={item.num} style={s.tocItem}>
+        {items.map(item => (
+          <Link key={item.id} src={`#${item.id}`} style={[s.tocItem, { textDecoration: 'none' }]}>
             <Text style={s.tocNum}>{String(item.num).padStart(2, '0')}</Text>
             <Text style={s.tocTitle}>{item.title}</Text>
-          </View>
+          </Link>
         ))}
         {shareUrl && (
           <View style={{ marginTop: 20 }}>
@@ -614,7 +636,7 @@ function TOCPage({ company, shareUrl }: { company: string; shareUrl?: string }) 
 function SummarySection({ v }: { v: SummaryV2 }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={1} title="기업 개요" />
+      <SectionHeader num={1} title="기업 개요" id="sec-1" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {/* Basic info */}
@@ -750,7 +772,7 @@ function SummarySection({ v }: { v: SummaryV2 }) {
 function IndustryHistorySection({ v }: { v: IndustryHistoryV2 }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={2} title={`산업 역사 — ${v.industry_name}`} />
+      <SectionHeader num={2} title={`산업 역사 — ${v.industry_name}`} id="sec-2" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {v.why_durable && (
@@ -801,7 +823,7 @@ const HYPE_COLOR: Record<string, string> = {
 function TechEvolutionSection({ v }: { v: TechEvolutionV2 }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={3} title={`기술 진화 — ${v.tech_name}`} />
+      <SectionHeader num={3} title={`기술 진화 — ${v.tech_name}`} id="sec-3" />
       <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label="현재 단계" value={v.current_stage} />
       <FieldRow label="다음 변곡점" value={v.next_inflection} />
@@ -840,7 +862,7 @@ const POWER_COLOR = { high: C.green, medium: C.orange, low: C.red };
 function ValueChainSection({ v }: { v: ValueChainV2 }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={4} title={`밸류체인 — ${v.industry}`} />
+      <SectionHeader num={4} title={`밸류체인 — ${v.industry}`} id="sec-4" />
       <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label="가치 흐름" value={v.value_flow} />
       <FieldRow label="분석 기업 위치" value={v.subject_position} />
@@ -892,7 +914,7 @@ function ValueChainSection({ v }: { v: ValueChainV2 }) {
 function BusinessModelSection({ v }: { v: BusinessModelV2 }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={5} title="비즈니스 모델" />
+      <SectionHeader num={5} title="비즈니스 모델" id="sec-5" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       <FieldRow label="성장 모션" value={v.growth_motion} />
@@ -964,7 +986,7 @@ function BusinessModelSection({ v }: { v: BusinessModelV2 }) {
 function CompetitorsSection({ v }: { v: CompetitorsV2 }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={6} title="경쟁사 분석" />
+      <SectionHeader num={6} title="경쟁사 분석" id="sec-6" />
       <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label="경쟁 포지션" value={v.competitive_position} />
 
@@ -1077,7 +1099,7 @@ function StrategySection({ v }: { v: StrategyV2 }) {
 
   return (
     <View style={s.section}>
-      <SectionHeader num={7} title="전략 분석" />
+      <SectionHeader num={7} title="전략 분석" id="sec-7" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {pdfSections.map((sec, i) => (sec.direction || sec.items.length > 0) && (
@@ -1168,7 +1190,7 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
   const { estimatedCount, unknownCount } = countFinancialsReliability(v);
   return (
     <View style={s.section}>
-      <SectionHeader num={8} title="재무 분석" />
+      <SectionHeader num={8} title="재무 분석" id="sec-8" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {(estimatedCount > 0 || unknownCount > 0) && (
@@ -1261,7 +1283,7 @@ function FounderSection({ v }: { v: FounderV2 }) {
   const isSerial = v.founding_history.type === 'serial';
   return (
     <View style={s.section}>
-      <SectionHeader num={9} title="창업자 분석" />
+      <SectionHeader num={9} title="창업자 분석" id="sec-9" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {/* Founder profiles */}
@@ -1300,7 +1322,7 @@ function FounderSection({ v }: { v: FounderV2 }) {
             <View key={i} style={[s.row, { marginBottom: 4, paddingBottom: 4, borderBottom: `1 solid ${C.border}` }]}>
               <Text style={[s.label, { width: 80 }]}>{ct.period}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={[s.value, { fontWeight: 700 }]}>{ct.company}</Text>
+                <Text style={[s.value, { fontWeight: 700, marginBottom: 2 }]}>{ct.company}</Text>
                 <Text style={[s.value, { color: C.mid }]}>{ct.role}</Text>
               </View>
             </View>
@@ -1342,21 +1364,21 @@ function FounderSection({ v }: { v: FounderV2 }) {
         <>
           <SubHeader>평판 & 퍼블릭 시그널</SubHeader>
           {v.reputation.sns_style !== '-' && (
-            <View style={s.row}>
+            <View style={[s.row, { marginBottom: 6 }]}>
               <Text style={s.label}>SNS 스타일</Text>
-              <Text style={s.value}>{v.reputation.sns_style}</Text>
+              <Text style={[s.value, { lineHeight: 1.5 }]}>{v.reputation.sns_style}</Text>
             </View>
           )}
           {v.reputation.media_exposure !== '-' && (
-            <View style={s.row}>
+            <View style={[s.row, { marginBottom: 6 }]}>
               <Text style={s.label}>미디어 노출</Text>
-              <Text style={s.value}>{v.reputation.media_exposure}</Text>
+              <Text style={[s.value, { lineHeight: 1.5 }]}>{v.reputation.media_exposure}</Text>
             </View>
           )}
           {v.reputation.blind_glassdoor !== '-' && (
-            <View style={s.row}>
+            <View style={[s.row, { marginBottom: 6 }]}>
               <Text style={s.label}>Blind/GD</Text>
-              <Text style={s.value}>{v.reputation.blind_glassdoor}</Text>
+              <Text style={[s.value, { lineHeight: 1.5 }]}>{v.reputation.blind_glassdoor}</Text>
             </View>
           )}
         </>
@@ -1367,27 +1389,89 @@ function FounderSection({ v }: { v: FounderV2 }) {
         <>
           <SubHeader>네트워크</SubHeader>
           {v.network.cofounders.length > 0 && (
-            <View style={s.row}>
+            <View style={[s.row, { marginBottom: 6 }]}>
               <Text style={s.label}>공동창업팀</Text>
-              <Text style={s.value}>{v.network.cofounders.join(' · ')}</Text>
+              <Text style={[s.value, { lineHeight: 1.5 }]}>{v.network.cofounders.join(' · ')}</Text>
             </View>
           )}
           {v.network.investors.length > 0 && (
-            <View style={s.row}>
+            <View style={[s.row, { marginBottom: 6 }]}>
               <Text style={s.label}>투자자</Text>
-              <Text style={s.value}>{v.network.investors.join(' · ')}</Text>
+              <Text style={[s.value, { lineHeight: 1.5 }]}>{v.network.investors.join(' · ')}</Text>
             </View>
           )}
           {v.network.advisors_board.length > 0 && (
-            <View style={s.row}>
+            <View style={[s.row, { marginBottom: 6 }]}>
               <Text style={s.label}>어드바이저/보드</Text>
-              <Text style={s.value}>{v.network.advisors_board.join(' · ')}</Text>
+              <Text style={[s.value, { lineHeight: 1.5 }]}>{v.network.advisors_board.join(' · ')}</Text>
             </View>
           )}
         </>
       )}
 
       <SectionSources sources={v.sources} />
+    </View>
+  );
+}
+
+// ── Section 10: 성장 시나리오 ─────────────────────────────────────────────────
+// 프리미엄 필터링은 서버 응답 조립 단계에서 이미 끝난 상태로 넘어옴(growth_scenario_v2가
+// null이면 이 섹션 자체를 렌더링 안 함) — 여기서 별도 isPremium 체크 불필요.
+// react-pdf엔 차트 라이브러리가 없고 이 문서 전체가 표/텍스트 위주라 웹 탭의 라인차트/
+// 히스토그램 대신 연도별 p10/p50/p90 표로 대체.
+
+const SCENARIO_ROW_LABEL: Record<'p10' | 'p50' | 'p90', string> = {
+  p10: '보수적', p50: '예상', p90: '낙관적',
+};
+
+function GrowthScenarioSection({ g }: { g: GrowthScenarioV2 }) {
+  const isHigh = g.confidenceLevel === 'high';
+  const sampleLabel = 'sampleSize' in g.stats
+    ? `${g.sectorTag ?? '섹터'} 동종업계 벤치마크 ${g.stats.sampleSize}개사`
+    : `자체 공식 재무 시계열 ${g.stats.dataPoints + 1}개년`;
+  const years = g.simulation.p50.length;
+
+  return (
+    <View style={s.section}>
+      <SectionHeader num={10} title="성장 시나리오" id="sec-10" />
+
+      <View style={s.tagsRow}>
+        <Text style={[s.tag, {
+          backgroundColor: isHigh ? '#DCFCE7' : '#FEF3C7',
+          color: isHigh ? '#15803D' : '#92400E',
+        }]}>
+          {isHigh ? '높은 신뢰도' : '낮은 신뢰도'} · {sampleLabel}
+        </Text>
+      </View>
+
+      <Text style={s.para}>
+        {g.narrative ?? '몬테카를로 시뮬레이션(1만회) 기반 매출 성장 시나리오입니다.'}
+      </Text>
+      {!isHigh && (
+        <Text style={[s.para, { color: C.mid, fontSize: 7 }]}>
+          ※ 자체 재무 시계열이 부족해 업종 벤치마크로 추정한 시나리오입니다 — 참고용으로만 활용하세요.
+        </Text>
+      )}
+
+      <View style={s.table}>
+        <View style={s.tHead}>
+          <Text style={s.th}>연차</Text>
+          <Text style={s.th}>보수적(P10)</Text>
+          <Text style={s.th}>예상(P50)</Text>
+          <Text style={s.th}>낙관적(P90)</Text>
+        </View>
+        {Array.from({ length: years }, (_, i) => (
+          <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
+            <Text style={s.td}>Year+{i + 1}</Text>
+            <Text style={s.td}>{fmtPdfRevenue(g.simulation.p10[i], g.currency)}</Text>
+            <Text style={s.td}>{fmtPdfRevenue(g.simulation.p50[i], g.currency)}</Text>
+            <Text style={s.td}>{fmtPdfRevenue(g.simulation.p90[i], g.currency)}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={[s.para, { color: C.light, fontSize: 6.5 }]}>
+        {SCENARIO_ROW_LABEL.p10}/{SCENARIO_ROW_LABEL.p50}/{SCENARIO_ROW_LABEL.p90} 시나리오 — 실제 결과와 다를 수 있는 확률적 추정치입니다.
+      </Text>
     </View>
   );
 }
@@ -1439,7 +1523,7 @@ function SourcesPage({ sources, founderSources, company }: { sources: AnalysisSo
   return (
     <Page size="A4" style={s.page}>
       <View style={s.section}>
-        <SectionHeader num={10} title="출처 목록" />
+        <SectionHeader num={11} title="출처 목록" />
         {filled.map(([key, srcs]) => (
           <View key={key}>
             <Text style={s.srcGroupLabel}>{SRC_TAB_LABELS[key] ?? key}</Text>
@@ -1493,7 +1577,7 @@ export default function AnalysisPdf({ data, shareUrl }: { data: AnalysisDetail; 
       </Page>
 
       {/* TOC */}
-      <TOCPage company={data.companyName} shareUrl={shareUrl} />
+      <TOCPage company={data.companyName} shareUrl={shareUrl} data={data} />
 
       {/* Content */}
       <Page size="A4" style={s.page}>
@@ -1510,6 +1594,7 @@ export default function AnalysisPdf({ data, shareUrl }: { data: AnalysisDetail; 
         {data.strategy_v2 && <StrategySection v={data.strategy_v2} />}
         {data.financials_v2 && <FinancialsSection v={data.financials_v2} />}
         {data.founder_v2 && <FounderSection v={data.founder_v2} />}
+        {data.growth_scenario_v2 && <GrowthScenarioSection g={data.growth_scenario_v2} />}
 
         <PageFooter company={data.companyName} />
       </Page>
