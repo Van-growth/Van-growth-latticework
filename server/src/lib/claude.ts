@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
 import { fetchFinancialContext } from './financialContext';
+import type { IndustryBenchmarkResult, CompetitorRevenueRanking } from '../services/industryBenchmarkService';
 
 dotenv.config();
 
@@ -187,6 +188,8 @@ export interface CompetitorsV2 {
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
   key_bullets: string[];
   sources: SectionSource[];
+  // EDGAR 기업 전용 — Claude가 생성하지 않고 industryBenchmarkService가 순수 계산 후 병합(analyze.ts).
+  revenue_ranking?: CompetitorRevenueRanking | null;
 }
 
 export interface StrategyV2 {
@@ -258,6 +261,8 @@ export interface FinancialsV2 {
   };
   key_bullets: string[];
   sources: SectionSource[];
+  // EDGAR 기업 전용 — Claude가 생성하지 않고 industryBenchmarkService가 순수 계산 후 병합(analyze.ts).
+  industry_benchmark?: IndustryBenchmarkResult | null;
 }
 
 export interface FounderV2 {

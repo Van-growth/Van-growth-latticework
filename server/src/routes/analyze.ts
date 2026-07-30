@@ -1,13 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import {
-  analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, reanalyzeSingleSection,
+  analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, reanalyzeSingleSection,
   generateGrowthScenarioNarrative,
 } from '../lib/claude';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
 import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
 } from '../services/monteCarloService';
+import {
+  extractLatestRatios, getIndustryBenchmark, getCompetitorRevenueRanking,
+} from '../services/industryBenchmarkService';
 import { isPremiumUser } from '../lib/premium';
 import { isAdminUser } from '../lib/admin';
 import { checkAnalysisUsage, recordAnalysisUsage } from '../lib/analysisUsage';
@@ -84,6 +87,77 @@ async function computeGrowthScenario(
 
   const narrative = await generateGrowthScenarioNarrative(companyName, scenario as any);
   return { ...scenario, narrative };
+}
+
+// ── 업종 벤치마크(재무 탭) + 매출 순위(경쟁사 탭) — EDGAR 기업 전용 ───────────────
+// Claude 배치와 무관하게 순수 계산되므로 financials_v2/competitors_v2가 어떤 경로로
+// 채워졌든(캐시/배치완료 무관) 최종 응답 조립 직전에 한 번만 호출해 결과 객체를 직접 mutate한다.
+// DART/웹서치 기반 기업은 rawEdgar 자체가 없어 자동으로 스킵됨(early return).
+async function attachIndustryData(
+  financialsV2: FinancialsV2 | null | undefined,
+  competitorsV2: Record<string, any> | null | undefined,
+  dataSource: string | null | undefined,
+  rawEdgar: any,
+): Promise<void> {
+  if (dataSource !== 'edgar' || !rawEdgar?.cik || !rawEdgar?.ticker) return;
+  if (!financialsV2 && !competitorsV2) return;
+
+  try {
+    // EdgarRawSeries.cik는 "CIK0000320193" 형태지만 cik_master.cik는 접두어 없는
+    // 순수 10자리("0000320193")로 저장돼 있어 조인 전 접두어를 제거해야 한다.
+    const cik = String(rawEdgar.cik).replace(/^CIK/, '');
+    const { data: cikRow } = await supabase
+      .from('cik_master')
+      .select('sic_code')
+      .eq('cik', cik)
+      .maybeSingle();
+    const sicCode = cikRow?.sic_code;
+    if (!sicCode) return;
+
+    const subjectRatios = extractLatestRatios(rawEdgar);
+    const [benchmark, ranking] = await Promise.all([
+      subjectRatios ? getIndustryBenchmark(sicCode, subjectRatios) : Promise.resolve(null),
+      getCompetitorRevenueRanking(sicCode, rawEdgar.ticker),
+    ]);
+
+    // 벤치마크/순위 결과를 각 섹션의 sources 배열에 "1min 자체 집계" 항목으로 추가하고,
+    // 그 인덱스를 문장에 [n]으로 삽입 — 기존 CitedText/[n] 각주 렌더링을 그대로 재사용.
+    if (financialsV2) {
+      if (benchmark) {
+        const sources: SectionSource[] = financialsV2.sources ?? [];
+        const idx = sources.length + 1;
+        sources.push({
+          index: idx, level: 'L1', organization: '1min 자체 집계',
+          content: `동종업계(SIC ${benchmark.sicCode}) EDGAR 공식 재무데이터 기준, ${benchmark.asOf}`,
+        });
+        financialsV2.sources = sources;
+        financialsV2.industry_benchmark = {
+          ...benchmark,
+          sourceIndex: idx,
+          metrics: benchmark.metrics.map((m) => ({ ...m, sentence: `${m.sentence} [${idx}]` })),
+        };
+      } else {
+        financialsV2.industry_benchmark = null;
+      }
+    }
+
+    if (competitorsV2) {
+      if (ranking) {
+        const sources: SectionSource[] = competitorsV2.sources ?? [];
+        const idx = sources.length + 1;
+        sources.push({
+          index: idx, level: 'L1', organization: '1min 자체 집계',
+          content: `동종업계(SIC ${ranking.sicCode}) EDGAR 공식 매출데이터 기준, ${ranking.asOf}`,
+        });
+        competitorsV2.sources = sources;
+        competitorsV2.revenue_ranking = { ...ranking, sourceIndex: idx };
+      } else {
+        competitorsV2.revenue_ranking = null;
+      }
+    }
+  } catch (e) {
+    console.warn('[industryBenchmark] attach failed', (e as Error).message);
+  }
 }
 
 // ── financial_cache → FinancialsV2 변환 (배치 프리컴퓨트 raw 데이터 → 표시용 구조체) ──
@@ -503,6 +577,7 @@ router.post('/stream', async (req: Request, res: Response) => {
         if (b1 && b2 && b3 && b4 && b5) {
           // Full cache hit — financial_cache 조회 (web_search 기반 캐시만 업그레이드)
           let effectiveFinancials = cached.financials_v2;
+          let effectiveCompetitors = cached.competitors_v2;
           let effectiveSource: string = cached.data_source ?? 'web_search';
 
           if (cached.data_source === 'web_search') {
@@ -540,8 +615,15 @@ router.post('/stream', async (req: Request, res: Response) => {
             }
           }
 
+          // 업종 벤치마크/매출 순위(EDGAR 전용) — fetchFinancialContext는 financial_cache
+          // 우선 조회라 캐시 히트 시 빠름. DART/web_search 소스면 호출 자체를 건너뛴다.
+          if (effectiveSource === 'edgar') {
+            const { rawEdgar } = await fetchFinancialContext(name, listings);
+            await attachIndustryData(effectiveFinancials, effectiveCompetitors, effectiveSource, rawEdgar);
+          }
+
           send('done', buildDonePayload(
-            { ...cached, financials_v2: effectiveFinancials },
+            { ...cached, financials_v2: effectiveFinancials, competitors_v2: effectiveCompetitors },
             name,
             { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium },
           ));
@@ -625,6 +707,8 @@ router.post('/stream', async (req: Request, res: Response) => {
         if (growthScenario && isPremium) {
           send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: completedCount, total: 5, analysisId: cached.id });
         }
+
+        await attachIndustryData(analysis.financials_v2, analysis.competitors_v2, dataSource, rawEdgar);
 
         send('done', buildDonePayload(analysis, name, {
           cached: false,
@@ -724,6 +808,8 @@ router.post('/stream', async (req: Request, res: Response) => {
     if (growthScenario && savedId && isPremium) {
       send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: batchCount, total: 5, analysisId: savedId });
     }
+
+    await attachIndustryData(analysis.financials_v2, analysis.competitors_v2, dataSource, rawEdgar);
 
     send('done', buildDonePayload(analysis, name, {
       cached:     false,

@@ -1349,7 +1349,7 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
 
 // ── V2 Tab: 경쟁사 ────────────────────────────────────────────────────────────
 
-const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources }: { c: CompetitorsV2; sources: Source[] | undefined }) {
+const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource }: { c: CompetitorsV2; sources: Source[] | undefined; dataSource?: DataSource }) {
   const pos = COMPETITIVE_POSITION_CFG[c.competitive_position] ?? COMPETITIVE_POSITION_CFG.niche;
   const topDirect = c.direct.slice(0, 3);
   const restDirect = c.direct.slice(3);
@@ -1403,6 +1403,39 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources }: { c: Com
               </div>
             ))}
           </div>
+        </SectionCard>
+      )}
+
+      {dataSource === 'edgar' && c.revenue_ranking && (
+        <SectionCard title="매출 순위" dotColor="bg-blue-400">
+          <p className="text-[11px] text-gray-400 mb-2">
+            <CitedText text={`SIC ${c.revenue_ranking.sicCode} 동종업계, EDGAR ${c.revenue_ranking.totalCompanies}개사 중 매출 상위 ${c.revenue_ranking.top.length}개사${c.revenue_ranking.sourceIndex ? ` [${c.revenue_ranking.sourceIndex}]` : ''}`} />
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400 border-b border-gray-100">
+                  <th className="text-left font-medium py-1.5 pr-2">순위</th>
+                  <th className="text-left font-medium py-1.5 pr-2">기업명</th>
+                  <th className="text-right font-medium py-1.5">매출</th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.revenue_ranking.top.map((row) => (
+                  <tr key={row.ticker} className={row.isSubject ? 'bg-blue-50 font-semibold text-blue-700' : 'text-gray-700'}>
+                    <td className="py-1.5 pr-2">{row.rank}</td>
+                    <td className="py-1.5 pr-2">{row.name} <span className="text-gray-400 font-normal">({row.ticker})</span></td>
+                    <td className="py-1.5 text-right">{fmtGrowthRevenue(row.revenue, 'USD')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {c.revenue_ranking.subjectRank != null && (
+            <p className="text-[11px] text-gray-500 mt-2">
+              조회 대상 기업 순위: {c.revenue_ranking.subjectRank}위 / 총 {c.revenue_ranking.totalCompanies}개사
+            </p>
+          )}
         </SectionCard>
       )}
 
@@ -1860,6 +1893,19 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
           {isRefreshing ? '새로고침 중...' : '데이터 새로고침'}
         </button>
       </div>
+
+      {/* 업종 벤치마크 — EDGAR 기업 전용, 표본 부족 지표는 서버가 이미 배열에서 제외함 */}
+      {dataSource === 'edgar' && f.industry_benchmark && (
+        <SectionCard title="업종 벤치마크" dotColor="bg-violet-400">
+          <div className="space-y-1.5">
+            {f.industry_benchmark.metrics.map((m) => (
+              <p key={m.key} className="text-sm text-gray-700 leading-relaxed">
+                <CitedText text={m.sentence} />
+              </p>
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
       {/* Narrative */}
       {f.narrative && (
@@ -3017,7 +3063,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
         {tab === 'competitors' && (
           (isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <CardsSkeleton count={4} /> :
           data.competitors_v2
-            ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} />
+            ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} dataSource={data.dataSource} />
             : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>
         )}
         {tab === 'strategy' && (

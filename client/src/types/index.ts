@@ -293,6 +293,23 @@ export interface DirectCompetitorV2 {
   vs_subject: string;
 }
 
+export interface CompetitorRevenueRankingRow {
+  rank: number;
+  name: string;
+  ticker: string;
+  revenue: number;
+  isSubject: boolean;
+}
+
+export interface CompetitorRevenueRanking {
+  sicCode: string;
+  totalCompanies: number;
+  top: CompetitorRevenueRankingRow[];
+  subjectRank: number | null;
+  asOf: string;
+  sourceIndex?: number;
+}
+
 export interface CompetitorsV2 {
   direct: DirectCompetitorV2[];
   indirect: { name: string; threat: string }[];
@@ -300,6 +317,8 @@ export interface CompetitorsV2 {
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
   key_bullets?: string[];
   sources?: Source[];
+  // EDGAR 기업 전용 — industryBenchmarkService가 순수 계산 후 병합(Claude 미생성)
+  revenue_ranking?: CompetitorRevenueRanking | null;
 }
 
 export interface StrategyV2 {
@@ -371,6 +390,26 @@ export interface FinancialsV2 {
   };
   key_bullets?: string[];
   sources?: Source[];
+  // EDGAR 기업 전용 — industryBenchmarkService가 순수 계산 후 병합(Claude 미생성)
+  industry_benchmark?: IndustryBenchmarkResult | null;
+}
+
+export interface IndustryBenchmarkMetric {
+  key: 'equity_ratio' | 'debt_ratio' | 'operating_margin' | 'revenue_growth';
+  label: string;
+  companyValue: number;
+  industryAvg: number;
+  sampleSize: number;
+  verdict: '우수' | '평이' | '열위';
+  sentence: string;
+}
+
+export interface IndustryBenchmarkResult {
+  sicCode: string;
+  sicDescription?: string;
+  metrics: IndustryBenchmarkMetric[];
+  asOf: string;
+  sourceIndex?: number;
 }
 
 // ── Founder V2 ────────────────────────────────────────────────────────────────

@@ -102,7 +102,7 @@ export function extractRevenueTimeSeries(
 
 // 연도순 정렬 후 인접 연도 간 YoY 성장률 배열을 계산 (분모 0/음수 매출 구간은 제외).
 // minBaseRevenue: 분모(전년 매출)가 이 미만인 구간도 제외 — 극소 매출 기준 왜곡 방지용(섹터 풀링 시에만 사용).
-function computeGrowthRates(revenueTimeSeries: RevenueYearPoint[], minBaseRevenue = 0): number[] {
+export function computeGrowthRates(revenueTimeSeries: RevenueYearPoint[], minBaseRevenue = 0): number[] {
   const sorted = [...revenueTimeSeries].sort((a, b) => a.year - b.year);
   const rates: number[] = [];
   for (let i = 1; i < sorted.length; i++) {
@@ -114,7 +114,7 @@ function computeGrowthRates(revenueTimeSeries: RevenueYearPoint[], minBaseRevenu
   return rates;
 }
 
-function meanStdDev(values: number[]): { mean: number; stdDev: number } {
+export function meanStdDev(values: number[]): { mean: number; stdDev: number } {
   const mean     = values.reduce((a, b) => a + b, 0) / values.length;
   const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - 1);
   return { mean, stdDev: Math.sqrt(variance) };
@@ -142,25 +142,25 @@ export interface SectorBenchmarkStats {
   sampleSize: number;
 }
 
-const MIN_SECTOR_SAMPLE_SIZE = 5;
+export const MIN_SECTOR_SAMPLE_SIZE = 5;
 const SECTOR_BENCHMARK_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 하루 1회
 
 // 셸/페니스톡 기업의 극소 매출 기준(분모)에서 나오는 비현실적 YoY(수만%대)가
-// 섹터 평균을 통째로 왜곡하는 걸 막기 위한 안전장치 — 실제 데이터에서 확인됨
+// 섹터 평균을 통째로 왜곡하는 걸 막는 안전장치 — 실제 데이터에서 확인됨
 // (예: 매출 $450 → $504,000, +111,900%). 두 단계로 방어:
 // 1) 성장률 계산 분모(전년 매출)가 이 미만이면 해당 구간 자체를 제외
 // 2) 그래도 남는 극단치는 윈저라이즈(구간 클리핑)
-const MIN_BASE_REVENUE_FOR_GROWTH_RATE = 1_000_000; // $1M / 10억원 상당
-const WINSORIZE_MIN = -0.9;  // -90%
-const WINSORIZE_MAX = 3.0;   // +300%
+export const MIN_BASE_REVENUE_FOR_GROWTH_RATE = 1_000_000; // $1M / 10억원 상당
+export const WINSORIZE_MIN = -0.9;  // -90%
+export const WINSORIZE_MAX = 3.0;   // +300%
 
-function chunk<T>(arr: T[], size: number): T[][] {
+export function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
-function clip(v: number, min: number, max: number): number {
+export function clip(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
 
