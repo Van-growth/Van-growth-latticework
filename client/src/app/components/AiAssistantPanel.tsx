@@ -45,7 +45,7 @@ function buildContext(data: AnalysisDetail): string {
     ?? '';
 
   const financials = fin
-    ? `${fin.narrative} | ROE: ${fin.munger_buffett_metrics.roe}, ROIC: ${fin.munger_buffett_metrics.roic}, FCF: ${fin.cash_flow.fcf}`
+    ? `${fin.narrative} | FCF: ${fin.cash_flow.fcf}`
     : data.financials || '';
 
   const businessModel = bm

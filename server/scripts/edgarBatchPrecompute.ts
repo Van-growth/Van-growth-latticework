@@ -141,6 +141,9 @@ async function processCompany(
     'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
   );
   const epsData  = pickConcept(g, 'EarningsPerShareBasic');
+  const opCFData  = pickConcept(g, 'NetCashProvidedByUsedInOperatingActivities');
+  const invCFData = pickConcept(g, 'NetCashProvidedByUsedInInvestingActivities');
+  const finCFData = pickConcept(g, 'NetCashProvidedByUsedInFinancingActivities');
 
   // 회계연도 기준: 매출 우선, 없으면 순이익
   const fiscalYears = revData.length > 0
@@ -164,6 +167,9 @@ async function processCompany(
   const liabilities     = align(lData);
   const equity          = align(eqData);
   const eps             = align(epsData);
+  const operatingCF     = align(opCFData);
+  const investingCF     = align(invCFData);
+  const financingCF     = align(finCFData);
 
   const rawEdgar = {
     ticker,
@@ -175,6 +181,9 @@ async function processCompany(
     liabilities,
     equity,
     eps,
+    operatingCF,
+    investingCF,
+    financingCF,
     fiscalYears,
     filedAt: new Date().toISOString(),
     source: 'EDGAR',
@@ -199,6 +208,11 @@ async function processCompany(
     `· Total Assets     ${fmtUsd(assets[0])}  (EDGAR)`,
     `· Total Liab.      ${fmtUsd(liabilities[0])}  (EDGAR)`,
     `· Stockholders Eq. ${fmtUsd(equity[0])}  (EDGAR)`,
+    ``,
+    `[현금흐름]`,
+    `· Operating CF     ${fmtUsdField(operatingCF[0], operatingCF)}  (EDGAR)`,
+    `· Investing CF     ${fmtUsdField(investingCF[0], investingCF)}  (EDGAR)`,
+    `· Financing CF     ${fmtUsdField(financingCF[0], financingCF)}  (EDGAR)`,
   ];
   if (fiscalYears.length > 1) {
     lines.push(``, `[다년도 매출 추이]`);

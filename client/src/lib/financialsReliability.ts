@@ -17,9 +17,6 @@ export function countFinancialsReliability(f: FinancialsV2): FinancialsReliabili
     ...f.income_statement.flatMap(row => [row.fy2021, row.fy2022, row.fy2023, row.fy2024, row.fy2025]),
     ...f.balance_sheet.flatMap(row => [row.fy2023, row.fy2024, row.fy2025]),
     f.cash_flow.operating, f.cash_flow.investing, f.cash_flow.financing, f.cash_flow.fcf,
-    f.munger_buffett_metrics.roe, f.munger_buffett_metrics.roic, f.munger_buffett_metrics.owner_earnings,
-    f.munger_buffett_metrics.debt_to_equity, f.munger_buffett_metrics.interest_coverage,
-    f.munger_buffett_metrics.reinvestment_rate,
   ];
   let estimatedCount = 0;
   let unknownCount = 0;

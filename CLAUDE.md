@@ -361,7 +361,9 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### 콘텐츠 원칙
 - 데이터 나열 금지 → 비즈니스 의사결정 직결 인사이트 우선
-- 투자자 전용 언어 금지 (밸류에이션/수익률/PER 단독 언급)
+- 투자자 전용 언어 금지 (밸류에이션/수익률/PER 단독 언급, ROE/ROIC/Owner Earnings 등
+  가치투자 프레임 지표 포함 — 2026-07-30 "Munger/Buffett Metrics" 섹션 위반 사례로 제거,
+  아래 백로그 완료 목록 참고)
 - Bull/Bear 금지 → 성장 모멘텀/핵심 리스크
 - "확인 필요" 남발 금지 → 추정값이라도 출처와 함께 제공
 
@@ -774,6 +776,31 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   **Windows Segoe UI Emoji가 국기 이모지를 코드 텍스트로 폴백하는 알려진 OS
   이슈일 가능성도 별도로 있어 이번 수정 후에도 PC에서 재발하면 SVG 국기 아이콘
   전환이 필요함 — 아직 미확정, 재현 테스트로 확인 필요.**
+- [x] 재무 탭 "Munger/Buffett Metrics" 섹션 제거 + 현금흐름 파이프라인 버그 수정
+  (2026-07-30) — **콘텐츠 원칙 위반 사례**: ROE/ROIC/Owner Earnings/D-E Ratio/Interest
+  Coverage/Reinvestment Rate 6개 지표는 가치투자 프레임 언어라 "투자자 전용 언어 금지"
+  원칙을 정면 위반한 채 남아있었음(웹 `FinancialsV2Tab` + PDF `AnalysisPdf.tsx` 양쪽에
+  각각 중복 렌더링 코드 존재) — 프롬프트 스키마/타입/기본값/AI비서 컨텍스트 문자열까지
+  전 레이어에서 제거. 같은 세션에서 "SEC EDGAR 배치 데이터 — 현금흐름 미포함"이라는
+  안내 문구가 실제 데이터 부재인지 확인 요청받아 조사 → **파이프라인 버그로 확정**:
+  SEC 라이브 API로 TSLA의 `NetCashProvidedByUsedInOperatingActivities`/`InvestingActivities`/
+  `FinancingActivities` 3개 concept을 직접 curl해 FY2025까지 정상 데이터 존재를 실측
+  확인했는데도 화면에 안 뜬 이유는 3중 드롭: (1) `edgar.ts`의 라이브 fetch가 이 3개
+  concept을 이미 가져와 단일연도 스냅샷(`financials.operatingCF` 등)에는 넣으면서
+  다년도 `rawSeries`/`EdgarRawSeries`에는 안 실음(같은 함수 안에서 6개 필드는 다
+  `align()`으로 넣으면서 CF 3개만 누락), (2) `financial_cache.raw_edgar`를 실제로
+  채우는 월간 배치 `edgarBatchPrecompute.ts`(별도 실행 컨텍스트라 `edgar.ts` 로직이
+  통째로 복제돼 있음)는 이 3개 concept을 애초에 한 번도 조회하지 않음, (3) raw 배치
+  데이터 → 화면 변환 함수 `buildFinancialsV2FromRaw`(`analyze.ts`)는 입력값과 무관하게
+  `cash_flow`를 무조건 하드코딩 — 셋 다 고쳐야 실제로 뜸. 세 곳 모두 수정(EdgarRawSeries에
+  operatingCF/investingCF/financingCF 필드 추가, 배치 스크립트에 concept 조회 +
+  context_text `[현금흐름]` 블록 추가, `buildFinancialsV2FromRaw`가 실제 값 있으면
+  표시하도록 조건부 처리) + 값이 정말 없는 경우의 안내 문구를 소스별로 정확하게 분리
+  (DART: "현금흐름 미지원", EDGAR인데 태깅 자체가 없는 기업: "현금흐름 태깅 없음" —
+  "배치 데이터라서 없다"는 부정확한 표현 제거). DB 마이그레이션 불필요(JSONB 신규 키).
+  교훈: 크론/배치 스크립트가 라이브 fetch 로직을 "별도 실행 컨텍스트"라는 이유로
+  복제해서 쓰는 패턴(2026-07-04 revenue concept 버그도 동일 구조)은 한쪽만 고치고
+  잊기 쉬움 — 필드 하나를 새로 추가할 때마다 두 파일 다 확인할 것.
 
 ## Security Principles (SSOT)
 

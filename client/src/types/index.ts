@@ -374,14 +374,6 @@ export interface FinancialsV2 {
     fcf: string;
     notes: string;
   };
-  munger_buffett_metrics: {
-    roe: string;
-    roic: string;
-    owner_earnings: string;
-    debt_to_equity: string;
-    interest_coverage: string;
-    reinvestment_rate: string;
-  };
   key_risks: string[];
   outlook: {
     shortTerm: string;

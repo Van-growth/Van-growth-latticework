@@ -245,14 +245,6 @@ export interface FinancialsV2 {
     fcf: string;
     notes: string;
   };
-  munger_buffett_metrics: {
-    roe: string;
-    roic: string;
-    owner_earnings: string;
-    debt_to_equity: string;
-    interest_coverage: string;
-    reinvestment_rate: string;
-  };
   key_risks: string[];
   outlook: {
     shortTerm: string;
@@ -345,7 +337,6 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     narrative: '',
     income_statement: [], balance_sheet: [],
     cash_flow: { operating: '', investing: '', financing: '', fcf: '', notes: '' },
-    munger_buffett_metrics: { roe: '', roic: '', owner_earnings: '', debt_to_equity: '', interest_coverage: '', reinvestment_rate: '' },
     key_risks: [],
     outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
     key_bullets: [], sources: [],
@@ -597,7 +588,7 @@ direct는 글로벌 직접 경쟁사 3~5개 필수. market_share는 공개 수�
 strategy_coherence·ten_year_durability 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
 
   financials_v2: `아래 스키마의 JSON 객체만 출력:
-{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요' or '해당없음'","fy2022":"공시값 or '확인 필요' or '해당없음'","fy2023":"공시값 or '확인 필요' or '해당없음'","fy2024":"공시값 or '확인 필요' or '해당없음'","fy2025":"공시값 or '수치 (추정)' or '확인 필요' or '해당없음'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요' or '해당없음'","fy2024":"공시값 or '확인 필요' or '해당없음'","fy2025":"공시값 or '수치 (추정)' or '확인 필요' or '해당없음'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"munger_buffett_metrics":{"roe":"공시값% or '수치% (추정)' or '확인 필요'","roic":"공시값% or '수치% (추정)' or '확인 필요'","owner_earnings":"공시값 or '확인 필요'","debt_to_equity":"공시값 or '확인 필요'","interest_coverage":"공시값 or '확인 필요'","reinvestment_rate":"공시값% or '수치% (추정)' or '확인 필요'"},"key_risks":["리스크 1줄 최대5개"],"outlook":{"shortTerm":"단기 전망 (3~6개월) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","midLongTerm":"중장기 전망 (1~3년) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","keyRisks":["핵심 리스크 1줄 최대3개"]},"key_bullets":["가장 주목할 재무 지표와 추세 20자이내","수익성·현금흐름 핵심 상태 20자이내","재무 구조상 가장 큰 위험 요인 20자이내"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요' or '해당없음'","fy2022":"공시값 or '확인 필요' or '해당없음'","fy2023":"공시값 or '확인 필요' or '해당없음'","fy2024":"공시값 or '확인 필요' or '해당없음'","fy2025":"공시값 or '수치 (추정)' or '확인 필요' or '해당없음'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요' or '해당없음'","fy2024":"공시값 or '확인 필요' or '해당없음'","fy2025":"공시값 or '수치 (추정)' or '확인 필요' or '해당없음'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"key_risks":["리스크 1줄 최대5개"],"outlook":{"shortTerm":"단기 전망 (3~6개월) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","midLongTerm":"중장기 전망 (1~3년) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","keyRisks":["핵심 리스크 1줄 최대3개"]},"key_bullets":["가장 주목할 재무 지표와 추세 20자이내","수익성·현금흐름 핵심 상태 20자이내","재무 구조상 가장 큰 위험 요인 20자이내"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 income_statement·balance_sheet 빈칸 절대 금지 — 공시 수치 없으면 반드시 '확인 필요'. 단, 컨텍스트의 [원천 데이터에 없는 연도] 섹션에 특정 연도가 "데이터 없음"으로 명시돼 있으면(원천 공시에 그 연도 재무제표 자체가 없음) 그 연도는 '확인 필요' 대신 '해당없음'으로 표기 — "확인 필요"는 "찾아봤지만 못 찾음", "해당없음"은 "애초에 그 연도 데이터가 존재하지 않음"이라는 뜻으로 구분해서 쓸 것. 추정값은 반드시 '숫자 (추정)' 형식.
 narrative 및 주요 수치에 [n] 형식으로 출처 번호 포함.
 outlook 규칙: 재무 데이터 기반으로 작성. 근거 없는 낙관 금지. shortTerm·midLongTerm 앞에 반드시 ○/△/▼ 심볼 명시.`,

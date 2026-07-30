@@ -223,6 +223,17 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
 
   const hasVal = (row: any) => Object.keys(row).some(k => k.startsWith('fy') && row[k] && row[k] !== '—');
 
+  // 현금흐름 — EDGAR는 이제 rawSeries에 operatingCF/investingCF/financingCF가 실려 오므로
+  // (2026-07-30 이전엔 edgar.ts/edgarBatchPrecompute.ts 양쪽에서 이 필드 자체가 누락돼 있었음)
+  // 실제 값이 있으면 그대로 표시. DART는 이 파이프라인이 현금흐름 concept을 아예 안 가져오므로
+  // 항상 미지원 — "배치 데이터라서 없다"는 부정확한 문구 대신 원인을 정확히 표기.
+  const cf = {
+    operating: fmt(series.operatingCF?.[0] ?? null),
+    investing: fmt(series.investingCF?.[0] ?? null),
+    financing: fmt(series.financingCF?.[0] ?? null),
+  };
+  const hasCf = cf.operating !== '—' || cf.investing !== '—' || cf.financing !== '—';
+
   return {
     key_bullets: ([
       `${srcLbl} 공식 데이터 (${yr}년 기준)`,
@@ -240,8 +251,12 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
       toBsRow(isKr ? '총부채'   : 'Total Liabilities',     series.liabilities),
       toBsRow(isKr ? '자본총계' : "Shareholders' Equity",  series.equity),
     ].filter(hasVal),
-    cash_flow: { operating: '—', investing: '—', financing: '—', fcf: '—', notes: `${srcLbl} 배치 데이터 — 현금흐름 미포함` },
-    munger_buffett_metrics: { roe: '—', roic: '—', owner_earnings: '—', debt_to_equity: '—', interest_coverage: '—', reinvestment_rate: '—' },
+    cash_flow: hasCf
+      ? { ...cf, fcf: '확인 필요', notes: '' }
+      : {
+          operating: '—', investing: '—', financing: '—', fcf: '—',
+          notes: isKr ? 'DART 배치 데이터 — 현금흐름 미지원' : 'SEC EDGAR 현금흐름 태깅 없음',
+        },
     key_risks: [],
     outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
     sources: [{

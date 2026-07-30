@@ -79,6 +79,9 @@ export interface EdgarRawSeries {
   liabilities: (number | null)[];
   equity: (number | null)[];
   eps: (number | null)[];
+  operatingCF: (number | null)[];
+  investingCF: (number | null)[];
+  financingCF: (number | null)[];
   fiscalYears: string[];
   filedAt: string;
   source: 'EDGAR';
@@ -415,6 +418,9 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
         liabilities: align(lData),
         equity: align(eqData),
         eps: align(epsData),
+        operatingCF: align(opCFData),
+        investingCF: align(invCFData),
+        financingCF: align(finCFData),
         fiscalYears,
         filedAt: new Date().toISOString(),
         source: 'EDGAR',

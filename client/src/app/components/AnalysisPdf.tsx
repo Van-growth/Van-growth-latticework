@@ -1165,7 +1165,6 @@ function BSTable({ rows }: { rows: FinancialsV2BSRow[] }) {
 }
 
 function FinancialsSection({ v }: { v: FinancialsV2 }) {
-  const mb = v.munger_buffett_metrics;
   const { estimatedCount, unknownCount } = countFinancialsReliability(v);
   return (
     <View style={s.section}>
@@ -1181,24 +1180,6 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
       )}
 
       {v.narrative && <Text style={[s.para, { marginBottom: 8 }]}>{v.narrative}</Text>}
-
-      {/* Munger-Buffett metrics */}
-      <SubHeader>Munger-Buffett 지표</SubHeader>
-      <View style={s.finGrid}>
-        {[
-          { label: 'ROE',         val: mb.roe },
-          { label: 'ROIC',        val: mb.roic },
-          { label: 'Owner Earnings', val: mb.owner_earnings },
-          { label: '부채비율',       val: mb.debt_to_equity },
-          { label: '이자보상배율',    val: mb.interest_coverage },
-          { label: '재투자율',       val: mb.reinvestment_rate },
-        ].filter(m => pdfVal(m.val) !== '—').map(({ label, val }, i) => (
-          <View key={i} style={s.finChip}>
-            <Text style={s.finChipLabel}>{label}</Text>
-            <Text style={s.finChipValue}>{pdfVal(val)}</Text>
-          </View>
-        ))}
-      </View>
 
       {/* Income statement */}
       <SubHeader>손익계산서</SubHeader>

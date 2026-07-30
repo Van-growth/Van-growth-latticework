@@ -1842,14 +1842,6 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
     return n.startsWith('▲') ? 'text-green-600 font-medium' : 'text-red-500 font-medium';
   };
 
-  const mbMetrics = [
-    { label: 'ROE',           value: f.munger_buffett_metrics.roe },
-    { label: 'ROIC',          value: f.munger_buffett_metrics.roic },
-    { label: 'Owner Earnings', value: f.munger_buffett_metrics.owner_earnings },
-    { label: 'D/E Ratio',     value: f.munger_buffett_metrics.debt_to_equity },
-    { label: 'Interest Coverage', value: f.munger_buffett_metrics.interest_coverage },
-    { label: 'Reinvestment Rate', value: f.munger_buffett_metrics.reinvestment_rate },
-  ].filter(m => m.value && m.value !== '추정 불가' && m.value !== '확인 필요' && m.value !== '해당없음' && !isPlaceholder(m.value));
 
   const cfDots: Record<string, string> = {
     'Operating CF':  'bg-blue-400',
@@ -1957,8 +1949,8 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
         </SectionCard>
       )}
 
-      {/* Below fold: Balance sheet, Cash flow, Munger metrics, Key risks */}
-      <ShowMore label="재무상태표 · 현금흐름 · Munger 지표 보기">
+      {/* Below fold: Balance sheet, Cash flow, Key risks */}
+      <ShowMore label="재무상태표 · 현금흐름 보기">
         <>
           {f.balance_sheet.length > 0 && (
             <SectionCard title="재무상태표 (B/S)" dotColor="bg-indigo-400">
@@ -2007,14 +1999,6 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
               {f.cash_flow.notes && (
                 <p className="mt-3 text-xs text-gray-500 leading-relaxed border-t border-gray-50 pt-3">{f.cash_flow.notes}</p>
               )}
-            </SectionCard>
-          )}
-
-          {mbMetrics.length > 0 && (
-            <SectionCard title="Munger / Buffett Metrics" dotColor="bg-amber-400">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {mbMetrics.map((m, i) => <MetricCard key={i} label={m.label} value={m.value} />)}
-              </div>
             </SectionCard>
           )}
 
