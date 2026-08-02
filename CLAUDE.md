@@ -10,17 +10,20 @@
 > git log/커밋 메시지를 참고할 것.
 
 **날짜**: 2026-08-02
-**커밋**: 없음 (HomeContent.tsx 수정은 아직 미커밋 — /done은 CLAUDE.md만 커밋)
+**커밋**: 없음 (전부 미커밋 — /done은 CLAUDE.md만 커밋, 코드 변경은 실브라우저 검증 후 커밋 여부 결정)
 **Render 배포**: 미확인 — 이번 세션 push 없음
 
 ### 완료
-- 모바일 분석 중 연결 끊김 시 자동 재연결/이어보기: SSE 스트림 에러 시 배치1 이상 완료돼 analysisId를 아는 경우 기존 `GET /api/analyses/:id`를 4초 간격·최대 5분 폴링해 이어감 + `visibilitychange`로 포그라운드 복귀 시 즉시 캐치업 조회(iOS Safari가 백그라운드에서 에러 없이 스트림만 멈추는 case 대응). 새 서버 엔드포인트 없이 기존 배치별 즉시 DB 저장 구조 재사용(`client/src/app/components/HomeContent.tsx`)
-- 빌드 게이트 확인: client `tsc --noEmit`/`next build`, server `tsc` 전부 클린(기존 경고 2건만 잔존, 신규 에러 없음)
-- prod DB 실제 완료 분석(삼성전자, `a55063fb-...`)으로 `GET /api/analyses/:id` 응답 필드가 새 로직 기대치와 일치함을 curl로 검증
+- (이전 세션 "발견 미처리" 항목이던) 산업역사/기술변화 탭 무한 스피너 + 체크마크↔콘텐츠 불일치 원인 규명 및 수정: 근본 원인 2개 — (1) `AnalysisCard.tsx`의 `TAB_BATCH` 매핑이 온디맨드 전환 이전 값(industry_history→2, tech_evolution→3) 그대로 남아 배치2/3 완료 즉시 미생성 탭에도 ✓ 표시 (2) `HomeContent.tsx`의 `handleReanalyzeTab`이 `result?.id`(전체 스트림 'done' 이후에만 채워짐)로 얼리 리턴해서, 체크마크 버그로 유저가 스트리밍 중 그 탭을 열면 온디맨드 생성이 조용히 no-op되고 `autoGenTriggered` ref가 "시도함"으로 영구 고정 — 새로고침 없이는 복구 불가했던 버그. `hasTabData()`(데이터 존재 기반 체크마크)로 교체 + `analysisIdRef` 기반 트리거로 전환 + 'done' 이벤트가 이미 받아둔 온디맨드 데이터를 null로 덮어쓰지 않게 병합 가드 추가 + 실패 시 1회 자동 재시도
+- 같은 계열의 추가 버그 발견 및 수정: `financialsV2Local`이 `useState(data.financials_v2)`로 마운트 시점 값만 캡처하고 이후 prop 갱신(프리뷰→확정본)에 재동기화 안 되던 버그(재무 탭이 프리뷰에 고착되거나 계속 비어있을 수 있었음) → `useEffect` 재동기화 추가
+- prod DB 표본(10건) 확인: tech_evolution_v2가 채워진 완료 건은 본문(stages 5~6개) 전부 정상 — "저장 필드 매핑 버그" 가설은 기각, 트리거 버그가 근본 원인으로 확정
+- CLAUDE.md Quality Gate 섹션에 "프론트 진행 상태 표시 원칙" 추가(체크마크=데이터존재 통일, prop파생 로컬state 재동기화, 스트리밍중 트리거는 이른 식별자 기준, 최종 이벤트의 null 덮어쓰기 방지)
+- (이전 세션) 모바일 분석 중 연결 끊김 시 자동 재연결/이어보기: SSE 에러 시 analysisId 알면 `GET /api/analyses/:id` 4초 간격·최대 5분 폴링 + `visibilitychange` 포그라운드 복귀 캐치업
+- 빌드 게이트 재확인: client `tsc --noEmit`/`next build`, server `tsc` 전부 클린(기존 경고만 잔존, 신규 에러 없음)
 
 ### 남음
-- 모바일 재연결 로직 실브라우저 검증(구글 로그인 + Chrome DevTools Offline 토글로 삼성전자/TSLA 재현) — 구글 OAuth라 이 세션에서 자동화 불가, 사용자 직접 확인 필요 → 다음 세션
-- 검증 통과 후 HomeContent.tsx 커밋 여부 결정 — 사용자 지시 대기
+- 이번 세션 수정 실브라우저 검증(구글 로그인 필요, 자동화 불가) — 삼성전자(DART)/TSLA(EDGAR) 신규 분석으로 (a) 체크마크 뜬 탭은 콘텐츠도 실제로 있는지 (b) 탭 클릭 시 온디맨드 생성이 즉시 반영되는지 (c) 새로고침 없이 끝까지 정상 표시되는지 (d) DevTools Offline 토글로 모바일 재연결까지 한 번에 확인 → 다음 세션 또는 사용자 직접 확인
+- 검증 통과 후 이번 세션 + 이전 세션(모바일 재연결) 변경사항 커밋 여부 결정 — 사용자 지시 대기
 - STEP 2 게이팅 해제: 성장시나리오/PDF를 상수 하나로 온오프 가능하게 로그인 유저 전원 개방 — 별도 세션(이전부터 이월)
 - STEP 3 웹/PDF 패리티 감사 + 성장시나리오 PDF 추가 — 별도 세션(사용자 지정)
 - Batch1 조용한 폴백 수정 여부/방식 결정 — 사용자가 "수정 계획은 다음에 결정"이라 보류, 결정 나면 착수
@@ -29,12 +32,11 @@
 - Batch1(summary_v2) 실패 시 DEFAULT_ANALYSIS_DATA로 조용히 폴백돼 "성공"처럼 저장됨: 원인 규명 완료 — prod 119건 중 6건 영향(Rocket Lab/Exxon Mobil/쎄트렉아이 3건은 동일 패턴, palantir 3건은 2026-05-02 초기 테스트 잔재로 별개 원인)
 - caee208 quality-gate 로깅이 이 전체 실패(Rule 2 콘텐츠 전무)는 못 잡음: 원인 규명 완료 — return null이 로깅 코드 도달 전에 실행돼 구조적으로 커버 불가
 - golden-set 검증이 summary_v2를 검사 대상에서 누락: 원인 규명 완료 — company 필드는 폴백이 직접 채워 위장, emptySectionCount 배열에 summary_v2 자체가 없음
-- 산업역사/기술변화 탭 무한 스피너(이전 세션 발견): 원인 미규명 — 온디맨드 생성 경로 전반 영향
 - financials_v2.outlook 웹 미노출(이전 세션 발견): PDF(관리자 전용)에만 렌더링 — 제품 판단 필요
 - SectionSource date/isEstimate 누락(이전 세션 발견): 웹 8개 탭 출처 목록 날짜/추정뱃지 미표시
 
 ### 다음 세션 우선순위
-1. 모바일 재연결 로직 실브라우저 검증(구글 로그인 + DevTools Offline, 삼성전자/TSLA) 후 커밋
+1. 이번 세션 수정(체크마크/온디맨드 트리거) + 이전 세션(모바일 재연결) 실브라우저 검증 후 커밋
 
 ## Vision & Mission
 
@@ -1234,6 +1236,26 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
 - financials에 최소 1개 이상의 실제 수치가 있는가?
 - sources 배열이 비어있지 않은가?
 - 모든 섹션이 "—" 또는 null이 아닌가? (전체 실패 감지)
+
+### 프론트 진행 상태 표시 원칙 (2026-08-02 추가 — 체크마크/온디맨드 트리거 통합 버그 수정 계기)
+- 탭 완료 체크마크(✓)는 반드시 "그 탭 데이터가 프론트 state에 실제로 존재하는가"만으로
+  판정한다 — 배치 번호(progress 이벤트)를 대리 신호로 쓰지 않는다. 온디맨드 섹션(배치에
+  속하지 않고 탭을 열 때 별도 생성되는 섹션, 예: industry_history_v2/tech_evolution_v2)이
+  생기면 배치 번호 매핑은 그 시점부터 stale해지는데 코드에는 남아있기 쉬워, 아직 생성되지도
+  않은 탭에 ✓가 뜨는 사고로 이어진다(`client/src/app/components/AnalysisCard.tsx`의
+  `hasTabData` — 예전 `TAB_BATCH` 배치번호 매핑 버그 참고).
+- prop에서 파생된 로컬 state(`useState(prop)`)는 prop이 이후 갱신돼도 자동 재동기화되지
+  않는다 — 스트리밍처럼 같은 필드가 여러 단계(프리뷰 → 확정본)로 갱신되는 경우 반드시
+  `useEffect(() => setLocal(prop), [prop])`로 재동기화할 것(`financialsV2Local` 버그 참고).
+- 스트리밍 도중에만 유효해야 하는 트리거(탭 오픈 시 온디맨드 생성 등)는 스트림 전체 완료를
+  나타내는 state(예: 최종 `result`)가 아니라, 훨씬 이른 시점(배치1)부터 채워지는 식별자
+  기준으로 판단할 것 — 안 그러면 최종 완료 이벤트 이전엔 조용히 no-op되는데, 그 사실이
+  "이미 시도함" ref 가드에 기록돼버려 이후 완료돼도 영구히 재시도가 막힐 수 있다(새로고침
+  없이는 복구 불가 — `HomeContent.tsx`의 `handleReanalyzeTab` 버그 참고).
+- 스트림의 최종 완료 페이로드가 서버의 in-memory 결과 객체(예: `analyzeCompany()` 반환값)에서
+  조립되는 구조라면, 그 객체가 애초에 모르는 필드(위 온디맨드 트리거로 스트리밍 도중 별도
+  요청을 통해 이미 채워진 값)를 null로 덮어쓰지 않는지 확인할 것 — 최종 이벤트 처리 시
+  이미 화면에 반영된 값이 있으면 그 값을 우선한다.
 ---
 
 ## 버전 히스토리
