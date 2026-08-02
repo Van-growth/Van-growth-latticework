@@ -14,16 +14,19 @@
 **Render 배포**: 미확인 — 이번 세션 push 없음
 
 ### 완료
-- (이전 세션 "발견 미처리" 항목이던) 산업역사/기술변화 탭 무한 스피너 + 체크마크↔콘텐츠 불일치 원인 규명 및 수정: 근본 원인 2개 — (1) `AnalysisCard.tsx`의 `TAB_BATCH` 매핑이 온디맨드 전환 이전 값(industry_history→2, tech_evolution→3) 그대로 남아 배치2/3 완료 즉시 미생성 탭에도 ✓ 표시 (2) `HomeContent.tsx`의 `handleReanalyzeTab`이 `result?.id`(전체 스트림 'done' 이후에만 채워짐)로 얼리 리턴해서, 체크마크 버그로 유저가 스트리밍 중 그 탭을 열면 온디맨드 생성이 조용히 no-op되고 `autoGenTriggered` ref가 "시도함"으로 영구 고정 — 새로고침 없이는 복구 불가했던 버그. `hasTabData()`(데이터 존재 기반 체크마크)로 교체 + `analysisIdRef` 기반 트리거로 전환 + 'done' 이벤트가 이미 받아둔 온디맨드 데이터를 null로 덮어쓰지 않게 병합 가드 추가 + 실패 시 1회 자동 재시도
-- 같은 계열의 추가 버그 발견 및 수정: `financialsV2Local`이 `useState(data.financials_v2)`로 마운트 시점 값만 캡처하고 이후 prop 갱신(프리뷰→확정본)에 재동기화 안 되던 버그(재무 탭이 프리뷰에 고착되거나 계속 비어있을 수 있었음) → `useEffect` 재동기화 추가
-- prod DB 표본(10건) 확인: tech_evolution_v2가 채워진 완료 건은 본문(stages 5~6개) 전부 정상 — "저장 필드 매핑 버그" 가설은 기각, 트리거 버그가 근본 원인으로 확정
-- CLAUDE.md Quality Gate 섹션에 "프론트 진행 상태 표시 원칙" 추가(체크마크=데이터존재 통일, prop파생 로컬state 재동기화, 스트리밍중 트리거는 이른 식별자 기준, 최종 이벤트의 null 덮어쓰기 방지)
-- (이전 세션) 모바일 분석 중 연결 끊김 시 자동 재연결/이어보기: SSE 에러 시 analysisId 알면 `GET /api/analyses/:id` 4초 간격·최대 5분 폴링 + `visibilitychange` 포그라운드 복귀 캐치업
-- 빌드 게이트 재확인: client `tsc --noEmit`/`next build`, server `tsc` 전부 클린(기존 경고만 잔존, 신규 에러 없음)
+- MSFT(및 EDGAR 전체) 재무 탭 데이터 빈약 버그 원인 규명 및 수정: 근본 원인 2개 — (1) `server/scripts/edgarBatchPrecompute.ts`(financial_cache를 채우는 배치, edgar.ts와 별도 실행 컨텍스트라 로직 복제)에 GrossProfit/Cash concept 자체가 통째로 빠져있었음 (2) 더 큰 원인: 이 스크립트의 context_text가 매출총이익/영업이익/순이익/총자산/총부채/자본총계/현금 전부 "최신 1개년치"만 노출하고 있었음(raw_edgar엔 이미 5개년이 있는데 프롬프트엔 1개년만 실려 Claude가 나머지 연도를 추측해 "(추정)"을 붙이거나 "확인 필요"를 반환). SEC API 직접 조회(MSFT CIK 0000789019)로 GrossProfit/Cash 태그 실존 확인, AAPL/GOOGL 표본으로 EDGAR 전체 구조적 문제임을 확정
+- 수정: `edgarBatchPrecompute.ts`에 GrossProfit/Cash concept 추가 + 다년도 context_text를 전 계정과목으로 확장. 라이브 조회 경로(`edgar.ts`/`financialContext.ts`)도 동일 클래스 문제(매출/영업이익/순이익만 다년도)라 `EdgarRawSeries`에 grossProfit/cash 필드 추가 + `buildEdgarContext` 다년도 블록도 동일 확장(배치-라이브 드리프트 방지)
+- 실측 검증: MSFT/AAPL 실제 SEC 재수집 → financial_cache 갱신 → `reanalyzeSingleSection('financials_v2')` 실제 Claude 호출까지 확인 — 둘 다 I/S(매출총이익/영업이익/순이익)·B/S(현금/총자산/총부채/자본총계) 전 연도가 실제 EDGAR 수치로 채워짐 확인(EBITDA만 D&A 데이터 미포함으로 "확인 필요" 잔존 — 별도 소규모 gap)
+- 성장 시나리오 차트 툴팁 순서 버그 원인 규명 및 수정: recharts 3.9.1 `<Tooltip>`의 기본 `itemSorter`가 `'name'`이라 항목을 이름 가나다순 정렬 — "낙관적"(ㄴ)→"보수적"(ㅂ)→"예상"(ㅇ) 순으로 값 크기와 무관하게 뒤죽박죽 표시되던 원인. `itemSorter={(item) => -Number(item.value)}`로 값 내림차순 지정해 낙관(최댓값)→예상(중간값)→보수(최솟값) 순 수정. PDF는 정적 테이블(오름차순)이라 툴팁과 무관 — 변경 안 함
+- CLAUDE.md Quality Gate에 "XBRL 다년도 컨텍스트 완전성 원칙" 추가(태그 누락 vs 연도범위 부족 구분, 배치/라이브 드리프트 재확인, 다년도 노출 시 전 계정과목 동일 연도수 원칙)
+- (이전 세션) 산업역사/기술변화 탭 체크마크↔콘텐츠 불일치 + 모바일 연결 끊김 자동 재연결 — 상세는 git 이전 커밋 참고
+- 빌드 게이트 재확인: client `tsc --noEmit`/`next build`, server `tsc` 전부 클린(기존 경고만 잔존)
 
 ### 남음
-- 이번 세션 수정 실브라우저 검증(구글 로그인 필요, 자동화 불가) — 삼성전자(DART)/TSLA(EDGAR) 신규 분석으로 (a) 체크마크 뜬 탭은 콘텐츠도 실제로 있는지 (b) 탭 클릭 시 온디맨드 생성이 즉시 반영되는지 (c) 새로고침 없이 끝까지 정상 표시되는지 (d) DevTools Offline 토글로 모바일 재연결까지 한 번에 확인 → 다음 세션 또는 사용자 직접 확인
-- 검증 통과 후 이번 세션 + 이전 세션(모바일 재연결) 변경사항 커밋 여부 결정 — 사용자 지시 대기
+- 이번 세션 3개(MSFT 재무탭/성장시나리오 툴팁) + 이전 세션 2개(체크마크·온디맨드, 모바일 재연결) 전부 실브라우저 검증 필요(구글 로그인 필요, 자동화 불가) — MSFT/TSLA 신규 분석으로 재무탭 전 연도 채움 + 성장시나리오 툴팁 순서 + 기존 체크마크/모바일 재연결 항목 한 번에 확인 → 다음 세션 또는 사용자 직접 확인
+- 검증 통과 후 최근 3세션 누적 변경사항 커밋 여부 결정 — 사용자 지시 대기
+- GOOGL 회계연도 비연속 신규 발견(fiscalYears가 [2025,2021,2020,2017,2016]처럼 건너뜀) — 원인 미규명, `pickConcept`의 revenue concept 선택 로직이 관련됐을 가능성, 이번 세션 범위 밖이라 미수정
+- EBITDA가 D&A 데이터 미노출로 항상 "확인 필요" — 별도 소규모 gap, 필요 시 DepreciationDepletionAndAmortization 다년도 노출 추가
 - STEP 2 게이팅 해제: 성장시나리오/PDF를 상수 하나로 온오프 가능하게 로그인 유저 전원 개방 — 별도 세션(이전부터 이월)
 - STEP 3 웹/PDF 패리티 감사 + 성장시나리오 PDF 추가 — 별도 세션(사용자 지정)
 - Batch1 조용한 폴백 수정 여부/방식 결정 — 사용자가 "수정 계획은 다음에 결정"이라 보류, 결정 나면 착수
@@ -34,9 +37,10 @@
 - golden-set 검증이 summary_v2를 검사 대상에서 누락: 원인 규명 완료 — company 필드는 폴백이 직접 채워 위장, emptySectionCount 배열에 summary_v2 자체가 없음
 - financials_v2.outlook 웹 미노출(이전 세션 발견): PDF(관리자 전용)에만 렌더링 — 제품 판단 필요
 - SectionSource date/isEstimate 누락(이전 세션 발견): 웹 8개 탭 출처 목록 날짜/추정뱃지 미표시
+- GOOGL 회계연도 비연속(위 "남음" 참고) — 원인 미규명
 
 ### 다음 세션 우선순위
-1. 이번 세션 수정(체크마크/온디맨드 트리거) + 이전 세션(모바일 재연결) 실브라우저 검증 후 커밋
+1. 최근 3세션 수정(MSFT 재무탭/성장시나리오 툴팁/체크마크·온디맨드/모바일 재연결) 실브라우저 검증 후 일괄 커밋
 
 ## Vision & Mission
 
@@ -1256,6 +1260,26 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
   조립되는 구조라면, 그 객체가 애초에 모르는 필드(위 온디맨드 트리거로 스트리밍 도중 별도
   요청을 통해 이미 채워진 값)를 null로 덮어쓰지 않는지 확인할 것 — 최종 이벤트 처리 시
   이미 화면에 반영된 값이 있으면 그 값을 우선한다.
+
+### XBRL 다년도 컨텍스트 완전성 원칙 (2026-08-02 추가 — MSFT 재무탭 빈약 버그 계기)
+- "concept(계정과목) 태그 자체가 후보 리스트에 없어서 못 찾는 것"과 "태그는 다 있고 원본
+  데이터도 다년치가 이미 있는데, Claude 프롬프트(context_text)엔 최신 1개년치만 노출되는
+  것"은 서로 다른 버그다 — 둘 다 결과적으로 "확인 필요"/근거 없는 "(추정)"으로 보여 증상이
+  똑같으므로, 원인 진단 시 반드시 둘 다 확인할 것(MSFT는 매출총이익/현금성자산은 전자,
+  영업이익/순이익/총자산/총부채/자본총계는 후자였음 — `financial_cache.raw_edgar`엔 이미
+  5개년 데이터가 있었는데 `context_text`엔 최신 연도만 실려 있었음).
+- 라이브 조회(`server/src/lib/edgar.ts`)와 배치 프리컴퓨트(`server/scripts/
+  edgarBatchPrecompute.ts`)는 별도 실행 컨텍스트라 로직이 복제돼 있다 — concept 후보
+  리스트든 다년도 context_text 생성 로직이든, 한쪽에 필드/연도를 추가하면 반드시 다른
+  쪽도 확인할 것(2026-07-30 현금흐름 버그, 2026-07-04 revenue concept 버그와 동일한
+  "배치가 라이브 로직을 복제해서 쓰다 한쪽만 고쳐지는" 패턴 반복 — Security Principles
+  실전 발견 이력 참고).
+- 다년도 시계열을 프롬프트에 노출할 때 계정과목마다 노출 연도 수가 다르면(예: 매출만
+  5개년, 나머지는 최신 1개년), Claude는 부족한 연도를 자체 지식으로 추측해 "(추정)"을
+  붙이거나 "확인 필요"를 반환한다 — 원본에 다년치가 있어도 결과는 똑같이 빈약해 보인다.
+  다년도 트렌드 섹션은 전 계정과목을 동일한 연도 수로 노출하고, "전부 EDGAR 공식 수치,
+  (추정) 표기 금지"처럼 명시적으로 지시할 것(`buildEdgarContext`/`edgarBatchPrecompute.ts`
+  다년도 블록 참고).
 ---
 
 ## 버전 히스토리
