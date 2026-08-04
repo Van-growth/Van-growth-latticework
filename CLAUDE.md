@@ -10,21 +10,25 @@
 > git log/커밋 메시지를 참고할 것.
 
 **날짜**: 2026-08-04
-**커밋**: 7d83ff5 (모바일 SSE 재연결 폴백 + 온디맨드 소요시간 안내 + MSFT 재무탭 다년도 컨텍스트 + 성장시나리오 툴팁 정렬, origin/main push 완료)
-**Render 배포**: 미확인 — 이 환경에 Render API 토큰/CLI 없어 자동 확인 불가. origin/main은 7d83ff5까지 push 완료(자동배포는 트리거됐을 것으로 추정)이나 실제 빌드 성공 여부는 대시보드에서 사용자가 직접 확인 필요
+**커밋**: a6fc3e6 (온디맨드 소요시간 안내 문구 보수적 상한으로 변경), 3e7585b (영어 단일화 1단계 — Claude 분석 프롬프트 영어 고정), origin/main push 완료
+**Render 배포**: 미확인 — 이 환경에 Render API 토큰/CLI 없어 자동 확인 불가. origin/main은 3e7585b까지 push 완료(자동배포는 트리거됐을 것으로 추정)이나 실제 빌드 성공 여부는 대시보드에서 사용자가 직접 확인 필요(7d83ff5부터 계속 이월 중인 미확인 항목)
 
 ### 완료
-- 지난 세션(2026-08-02)부터 코드에는 있었으나 미커밋 상태였던 5개 파일 전부 검증 후 커밋 7d83ff5로 origin/main push: 모바일 SSE 재연결 폴백(`pollUntilDone` — SSE 에러 시 4초 간격 폴링으로 상태 재조회, 최대 5분, `visibilitychange`로 백그라운드 복귀 시 캐치업), 온디맨드 탭(산업역사/기술변화) 로딩 스피너 소요시간 안내("약 1~2분 소요"), MSFT 등 EDGAR 재무탭 다년도 컨텍스트 확장(GrossProfit/Cash concept + 전 계정과목 동일 연도수), 성장시나리오 차트 툴팁 값 내림차순 정렬, 탭 체크마크 판정을 배치번호 대신 실제 데이터 존재 여부 기준으로 변경
-- 커밋 전 diff 전수 확인: 5개 파일 모두 하드코딩 시크릿/API 키 없음 확인
-- client `next build` + `tsc --noEmit`, server `tsc` 재검증 — 전부 클린(기존 lint 경고 2건만 잔존, 신규 에러 없음)
-- 임시 스크립트 없음 확인 — 전체 `git status`에 untracked 파일 전무, `server/scripts/` 전부 기존 추적 파일(배치/일회성 스크립트)
-- git 동기화 상태 확인: 이번 push 이전 origin/main이 로컬보다 5개 커밋(전부 이전 세션 `docs: session handoff` 문서 전용) 뒤처져 있었음 — 전부 이미 검토된 문서 커밋이라 코드 커밋과 함께 push, 그 외 "커밋됐는데 미push"인 별도 항목 없음. push 후 origin/main == local HEAD(7d83ff5) 확인
+- 온디맨드 섹션(산업역사/기술변화) 로딩 안내 문구 "(약 1~2분 소요)" → "(최대 5분 정도 소요될 수 있어요)" 교체 — `SectionGenerating` 컴포넌트 한 곳만 수정, 커밋 a6fc3e6
+- **영어 단일화 1단계**(다국어 토글 계획 취소, EN-only 확정, DART 예외): `server/src/lib/claude.ts`의 SECTION_SYSTEM + 9개 SECTION_SCHEMAS 전체(summary_v2~sources) + gatherResearch1/2 + founder/재무 리서치 + growth_scenario 내러티브 시스템 프롬프트를 전부 영어로 교체. JSON key 유지, few-shot 예시는 미국 B2B 실무자(Sales/BD/Strategy) 톤(Gong/HubSpot/Salesforce 블로그 톤, leverage/GTM motion/ICP/champion/ACV 등)으로 재작성, 투자자 언어 금지 원칙 유지. 커밋 3e7585b
+- `financialContext.ts`의 `buildEdgarContext`(라이브 조회)와 `edgarBatchPrecompute.ts`의 context_text 생성부(배치 프리컴퓨트) 양쪽 다 영어화 — 라이브/배치 드리프트 방지 원칙 준수. `buildDartContext`는 의도적으로 한국어 그대로 유지
+- 클라이언트 마커 문자열(`AnalysisCard.tsx`/`AnalysisPdf.tsx`/`financialsReliability.ts`/`types/index.ts`)을 "확인 필요"→"Not disclosed" 등 새 영어 마커와 OR 매칭되도록 갱신 — 기존 한국어 캐시 레코드도 그대로 정상 렌더링됨(변환 없음)
+- `routes/analyze.ts`의 fin_preview 부수 버그 발견·수정: `cash_flow.fcf` 플레이스홀더가 `isKr` 분기 없이 항상 한국어였음 → EDGAR 프리뷰 표시 시 영어로 통일
+- 검증: TSLA/Adobe로 `analyzeCompany()` 직접 호출(HTTP 인증 레이어는 실 구글 로그인 필요해 자동화 불가 — 동일 파이프라인 직접 호출로 우회) → 전체 결과 JSON 한글 문자 0건 확인, TSLA는 financial_cache가 구 한국어 라벨 상태였는데도 최종 출력은 깨끗한 영어로 나옴을 실측 확인
+- client `next build`+`tsc --noEmit`, server `tsc`, `edgarBatchPrecompute.ts` 단독 타입체크 전부 클린. 임시 검증 스크립트(`server/scripts/_tmpTestEnglishPrompts.ts` 등) 커밋 전 삭제 확인
+- CLAUDE.md 언어 정책 섹션 전면 교체 + 백로그/버전 히스토리(v2.2.0)의 EN/KR 토글 관련 서술 정리
 
 ### 남음
-- 이번 세션에 push한 5개 파일은 빌드·타입체크로만 검증됨 — 실제 모바일 기기에서 SSE 끊김 재연결, 온디맨드 탭 소요시간 문구 노출, MSFT 재무탭 다년도 표시는 실브라우저 검증 안 됨(자동화 불가, 구글 로그인 필요) — 다음 세션 또는 사용자 직접 확인
-- Render 실제 배포 성공/실패 여부 확인 — 대시보드 직접 확인 또는 Render API 토큰 필요(이 환경에 없음)
+- Render 대시보드에서 최신 배포(3e7585b, 이전 7d83ff5부터 이월) 성공 확인 — 대시보드 직접 확인 또는 Render API 토큰 필요(이 환경에 없음)
+- 모바일 SSE 재연결/온디맨드 소요시간 안내/MSFT 재무탭 다년도 표시 — 실브라우저 검증 여전히 안 됨(자동화 불가, 구글 로그인 필요), 2세션째 이월
+- 영어 단일화 **2단계**(미착수, 이번 세션 범위 밖으로 명시적으로 분리): 웹 UI 카피(탭 제목·버튼 등 `AnalysisCard.tsx` 전반)는 여전히 한국어 — 1단계는 Claude 프롬프트 출력만 영어화. 필요 시 별도 세션에서 착수
 - GOOGL 회계연도 비연속(fiscalYears가 [2025,2021,2020,2017,2016]처럼 건너뜀) — 원인 미규명, `pickConcept`의 revenue concept 선택 로직 관련 가능성, 이월
-- EBITDA가 D&A 데이터 미노출로 항상 "확인 필요" — 별도 소규모 gap, 필요 시 DepreciationDepletionAndAmortization 다년도 노출 추가, 이월
+- EBITDA가 D&A 데이터 미노출로 항상 "확인 필요"/"Not disclosed" — 별도 소규모 gap, 필요 시 DepreciationDepletionAndAmortization 다년도 노출 추가, 이월
 - STEP 2 게이팅 해제: 성장시나리오/PDF를 상수 하나로 온오프 가능하게 로그인 유저 전원 개방 — 별도 세션(이전부터 이월)
 - STEP 3 웹/PDF 패리티 감사 + 성장시나리오 PDF 추가 — 별도 세션(사용자 지정)
 - Batch1 조용한 폴백 수정 여부/방식 결정 — 사용자가 "수정 계획은 다음에 결정"이라 보류, 결정 나면 착수
@@ -38,7 +42,7 @@
 - GOOGL 회계연도 비연속(위 "남음" 참고) — 원인 미규명
 
 ### 다음 세션 우선순위
-1. Render 대시보드에서 7d83ff5 배포 성공 확인 + 가능하면 실브라우저로 모바일 재연결/온디맨드 안내/MSFT 재무탭 검증
+1. Render 대시보드에서 3e7585b(및 이전 7d83ff5) 배포 성공 확인 — 2세션째 이월 중인 최우선 미확인 항목
 
 ## Vision & Mission
 
