@@ -65,7 +65,9 @@ export interface SummaryV2 {
   key_markets: { country: string; revenue_share: number }[];
   trigger_events?: {
     date: string;
-    type: '투자유치' | '유상증자' | '대규모딜';
+    // 2026-08 영어 단일화 이전 캐시는 한국어 값, 이후 신규 분석은 영어 값 — 기존 레코드
+    // 변환 없이 유지하므로 유니온으로 둘 다 허용.
+    type: '투자유치' | '유상증자' | '대규모딜' | 'Funding' | 'Equity Offering' | 'Major Deal';
     amount: string;
     counterparty: string;
     description: string;
@@ -521,93 +523,107 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 // ── Section prompts ───────────────────────────────────────────────────────────
 
-const SECTION_SYSTEM = `당신은 전문 기업 분석가입니다. 제공된 리서치 데이터를 바탕으로 지정된 섹션만 분석합니다.
-규칙: 마크다운·코드블록·추가 설명 없이 순수 JSON만 출력. 모든 텍스트는 한국어 (기업명·기술명·티커는 원어 유지).
+const SECTION_SYSTEM = `You are an expert company analyst. Using the provided research data, analyze only the specified section.
+Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. Generate all content in English (keep company names, technology names, and tickers in their original form).
 
-[기업명 표기 규칙]
-- 일반적으로 알려진 브랜드명 사용. 법인 지주회사명 금지. 예: Google (Alphabet 아님), Meta (Facebook 아님)
-- 모회사·자회사 혼용 금지 — 같은 분석 내에서 동일 기업은 하나의 이름으로 통일
-- 자회사는 자회사명 그대로 표기 가능. 예: Google DeepMind, Instagram (단, 모회사는 항상 Meta)
-- 한국 기업은 공식 한국어 명칭 사용. 예: 삼성전자, 카카오, 네이버
+[Company naming]
+- Use the commonly known brand name. Never use the legal holding-company name. Example: Google (not Alphabet), Meta (not Facebook).
+- Never mix parent and subsidiary names — use one consistent name for the same company throughout the analysis.
+- Subsidiaries can keep their own name. Example: Google DeepMind, Instagram (the parent is always Meta).
+- For Korean companies, use the standard English name used in English-language business press. Example: Samsung Electronics, Kakao, Naver.
 
-[key_bullets 원칙]
-각 섹션의 key_bullets 3개는 반드시 해당 섹션에서만 말할 수 있는 고유한 내용이어야 함.
-다른 섹션에서 이미 다루는 내용 금지 (예: 재무 수치를 요약 탭 bullets에 넣지 말 것).
-투자자·주가·밸류에이션·수익률 언어 금지. 비즈니스 실무 담당자 관점으로 작성.
-각 섹션의 bullets 가이드를 따를 것.
+[key_bullets principles]
+Each section's 3 key_bullets must say something only that section can say.
+Don't repeat content another section already covers (e.g., don't put financial figures in the summary tab's bullets).
+No investor/stock-price/valuation/return language. Write from a business practitioner's point of view.
+Follow each section's own bullets guidance.
 
-[데이터 신뢰성 원칙]
-1. 확인된 데이터만 수치로 제시. 출처(10-K, IR, DART 등) 확인 가능한 것만.
-2. 추정·추론한 수치는 반드시 값 끝에 "(추정)" 레이블 명시. 예: "15.2% (추정)"
-3. 데이터가 없는 항목은 "확인 필요"로 반환. 절대 임의로 채우지 말 것.
-   단, 제공된 컨텍스트에 특정 지표가 "해당없음"·"구조적 미보고"라고 명시돼 있으면
-   (예: 지주회사·보험사 등 복합 사업구조라 SEC 재무제표에 영업이익을 아예 태깅하지 않는 경우)
-   그 지표는 "확인 필요" 대신 반드시 "해당없음"으로 반환 — "확인 필요"는 "찾아봤지만 못 찾음",
-   "해당없음"은 "이 기업 구조상 애초에 존재하지 않는 항목"이라는 뜻으로 구분해서 쓸 것.
-4. 지역별 매출 비중·고객사명 등 구체적 수치는 공시 데이터 기반이 아니면 제시 금지.
-5. 소규모·비상장 기업은 데이터 공백이 많을 수 있음 — 없으면 없다고 명시.`;
+[Data reliability principles]
+1. Only state numbers you can actually confirm — from a traceable source (10-K, IR materials, DART, etc.).
+2. Any estimated or inferred number must end with the label "(estimated)". Example: "15.2% (estimated)".
+3. If a data point isn't available, return "Not disclosed." Never make one up.
+   Exception: if the provided context explicitly marks a metric as "Not applicable" / "structurally not
+   reported" (e.g., a holding company or insurer whose SEC filings never tag operating income because of its
+   segment structure), return "Not applicable" for that metric instead of "Not disclosed" — "Not disclosed"
+   means "we looked but couldn't confirm it"; "Not applicable" means "this line item doesn't structurally
+   exist for this company." Keep that distinction.
+4. Don't state specific figures like regional revenue mix or named customers unless they're grounded in
+   disclosed data.
+5. Small or private companies can have real data gaps — say so plainly instead of filling the gap.
+
+[Tone & voice]
+Write like a sharp US B2B practitioner — Sales, BD, or Strategy — briefing a peer, not like an equity
+research report. Aim for Gong / HubSpot / Salesforce blog voice, not McKinsey deck voice.
+- Use real sales/BD vocabulary where it fits naturally: leverage, GTM motion, land-and-expand, ICP, champion,
+  buying committee, deal cycle, pipeline, ACV, renewal risk. Use it where a practitioner actually would —
+  don't force it into every sentence.
+- Investor vocabulary stays banned: no "valuation multiple," no "P/E," no ROE/ROIC/owner-earnings framing,
+  no stock-price talk.
+- No academic or overly formal tone. Skip hedges like "it can be argued that" or "it is worth noting that."
+- Keep sentences short and direct. Every sentence should connect to a business decision — cut anything that's
+  just describing, not informing a decision.`;
 
 const SECTION_SCHEMAS: Record<string, string> = {
-  summary_v2: `아래 스키마의 JSON 객체만 출력:
-{"company":"기업명","ticker":"TradingView 형식 티커 or null","industry":"산업분류","hq":"본사 도시, 국가","value_chain_position":"upstream|midstream|downstream","products":[{"name":"제품명","revenue_share":숫자}],"key_metrics":[{"label":"매출","value":"수치 — 공시 미확인 시 '확인 필요'","trend":"up|down|flat"},{"label":"영업이익률","value":"수치% — 추정 시 '수치% (추정)'","trend":"up|down|flat"},{"label":"시가총액","value":"수치","trend":"up|down|flat"},{"label":"YoY 성장률","value":"수치%","trend":"up|down|flat"}],"top_customers":["공시 확인된 고객사명만. 불확실 시 빈 배열 []"],"customer_concentration":{"customers":[{"name":"고객사명","revenue_share":공시 확인된 숫자}],"top_n":숫자,"top_n_share":숫자,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"국가","revenue_share":공시 확인된 숫자만. 없으면 항목 제외}],"trigger_events":[{"date":"YYYY-MM-DD 또는 YYYY-MM","type":"투자유치|유상증자|대규모딜","amount":"금액 — 확인 안되면 빈 문자열","counterparty":"상대방(투자사/파트너사명) — 확인 안되면 빈 문자열","description":"1줄 설명, [n] 출처 표기 포함","source_index":숫자}],"key_bullets":["이 기업이 이 시장에서 독특한 이유 — 포지셔닝 핵심 20자이내","이 기업의 핵심 성장 드라이버 20자이내","이 기업의 가장 큰 실행 리스크 20자이내"],"bull_case":"성장 모멘텀: 시장 확장·파트너십 기회·경쟁 우위 관점 2줄이내","bear_case":"핵심 리스크: 실행 리스크·경쟁 위협·규제/시장 변수 관점 2줄이내","oneLiner":"이 기업의 현재 상황을 전략·실무 담당자가 바로 이해할 수 있는 1~2문장 핵심 해석","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-top_customers: IR·공시에서 확인된 것만. 추정이면 빈 배열. key_markets.revenue_share: 공시 수치 없으면 해당 국가 항목 자체를 제외.
-ticker 필드는 반드시 TradingView 형식으로 반환: 미국 NASDAQ 상장 → "NASDAQ:심볼" (예: NASDAQ:NVDA), 미국 NYSE 상장 → "NYSE:심볼" (예: NYSE:PLTR), 한국 코스피 → "KRX:종목코드" (예: KRX:005930), 한국 코스닥 → "KOSDAQ:종목코드" (예: KOSDAQ:388130), 비상장 또는 불확실하면 null.
-bull_case/bear_case: 전략·실무 담당자 관점으로 작성. 주가·밸류에이션·투자 수익률 언급 금지.
-customer_concentration: 고객별 매출 비중을 공시·IR에서 확인할 수 없으면 반드시 null로 반환. 0%나 추정 불가 수치 절대 금지. customers 배열도 공시 확인된 수치만 포함, 불확실하면 빈 배열 []. top_n_share: 상위 N개 고객 합산 비중 (공시 미확인 시 null 전체 반환). is_concentrated: top_n_share >= 30이면 true.
-trigger_events: 컨텍스트의 [최근 트리거 이벤트 후보] 섹션(EDGAR 8-K 원문 발췌 또는 DART 주요사항보고서)과 웹 리서치의 최근 투자유치·펀딩·파트너십 정보를 근거로만 작성 — 추측 절대 금지. 최근 12개월 이내 이벤트만, 최신순 최대 3개. 근거 있는 이벤트가 없으면 반드시 빈 배열 []. amount/counterparty는 원문에서 확인 안 되면 빈 문자열로 두되 date/type/description은 항상 채울 것.
-oneLiner 규칙: 숫자 나열 금지. "왜 이 숫자가 의미있는가"를 서사로 설명. 예시 스타일: "매출은 늘었는데 이익은 줄었다 — 글로벌 인프라에 돈을 쏟아붓는 투자 시즌".`,
+  summary_v2: `Output only a JSON object matching this schema:
+{"company":"Company name","ticker":"TradingView-format ticker or null","industry":"Industry classification","hq":"HQ city, country","value_chain_position":"upstream|midstream|downstream","products":[{"name":"Product name","revenue_share":number}],"key_metrics":[{"label":"Revenue","value":"figure — 'Not disclosed' if unconfirmed","trend":"up|down|flat"},{"label":"Operating margin","value":"figure% — 'figure% (estimated)' if estimated","trend":"up|down|flat"},{"label":"Market cap","value":"figure","trend":"up|down|flat"},{"label":"YoY growth","value":"figure%","trend":"up|down|flat"}],"top_customers":["Only customer names confirmed by disclosure. Empty array [] if uncertain"],"customer_concentration":{"customers":[{"name":"Customer name","revenue_share":number confirmed by disclosure}],"top_n":number,"top_n_share":number,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"Country","revenue_share":number confirmed by disclosure only — omit the entry if unavailable}],"trigger_events":[{"date":"YYYY-MM-DD or YYYY-MM","type":"Funding|Equity Offering|Major Deal","amount":"amount — empty string if unconfirmed","counterparty":"counterparty (investor/partner name) — empty string if unconfirmed","description":"1-line description, include [n] source markers","source_index":number}],"key_bullets":["Why this company is distinct in this market — core positioning, 8 words or fewer","This company's core growth driver, 8 words or fewer","This company's biggest execution risk, 8 words or fewer"],"bull_case":"Growth momentum: market expansion / partnership opportunity / competitive edge, 2 sentences max","bear_case":"Key risk: execution risk / competitive threat / regulatory or market variable, 2 sentences max","oneLiner":"1-2 sentence read on where this company stands right now, written so a strategy or sales practitioner gets it immediately","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+top_customers: only names confirmed via IR or disclosure. Empty array if it's a guess. key_markets.revenue_share: if there's no disclosed figure, drop that country's entry entirely.
+ticker must be returned in TradingView format: US NASDAQ → "NASDAQ:SYMBOL" (e.g. NASDAQ:NVDA), US NYSE → "NYSE:SYMBOL" (e.g. NYSE:PLTR), Korea KOSPI → "KRX:code" (e.g. KRX:005930), Korea KOSDAQ → "KOSDAQ:code" (e.g. KOSDAQ:388130), null if private or uncertain.
+bull_case/bear_case: write from a strategy/practitioner point of view. No stock price, valuation, or investment-return language.
+customer_concentration: return null outright if per-customer revenue share can't be confirmed from disclosure or IR. Never use 0% or an unconfirmable number. The customers array also only includes disclosure-confirmed figures — empty array [] if uncertain. top_n_share: combined share of the top N customers (return the whole object as null if not disclosed). is_concentrated: true if top_n_share >= 30.
+trigger_events: base this only on the context's [Recent trigger event candidates] section (EDGAR 8-K excerpts or DART material-event filings) and recent funding/partnership info from web research — never speculate. Only events within the last 12 months, most recent first, max 3. If there's no evidence-backed event, return an empty array []. Leave amount/counterparty as an empty string if the source doesn't confirm them, but always fill date/type/description.
+oneLiner rule: don't just list numbers — explain in narrative form why the number matters. Style example: "Revenue's up, margins aren't — this is a company mid-buildout, pouring cash into infrastructure before it pays off."`,
 
-  industry_history_v2: `아래 스키마의 JSON 객체만 출력:
-{"industry_name":"산업명","timeline":[{"period":"시기","title":"시대제목 15자이내","technology":"핵심기술 1줄","market_need":"시장수요 1줄","key_players":["기업명(국가)"],"significance":"중요성 1줄"}],"why_durable":"지속가능이유 2줄이내","chasm_points":["캐즘시점과이유 1줄 최대3개"],"key_bullets":["이 산업의 가장 결정적인 역사적 변곡점 20자이내","현재 산업이 놓인 발전 단계 20자이내","이 산업 고유의 구조적 리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-timeline은 연대순 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.
-각 타임라인 항목은 산업 전체의 기술·시장·규제 변곡점만 포함. 특정 기업의 펀딩·투자유치·VC 라운드·M&A 이벤트 절대 금지 — 그 기업이 이 산업을 바꿔놓은 기술/제품 출시라면 포함 가능.
-key_players는 해당 시기에 시장에서 실제 활동한 기업만 나열. VC·벤처캐피탈·사모펀드·재무적투자자·액셀러레이터 절대 포함 금지.`,
+  industry_history_v2: `Output only a JSON object matching this schema:
+{"industry_name":"Industry name","timeline":[{"period":"Time period","title":"Era title, 5 words or fewer","technology":"Core technology, 1 line","market_need":"Market need, 1 line","key_players":["Company name (country)"],"significance":"Why it matters, 1 line"}],"why_durable":"Why this industry endures, 2 sentences max","chasm_points":["Chasm moment and why, 1 line each, max 3"],"key_bullets":["This industry's single most decisive historical turning point, 8 words or fewer","What stage of development the industry is at now, 8 words or fewer","A structural risk unique to this industry, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+timeline: 4-6 entries in chronological order. Tag important facts in the body with [n] source markers.
+Each timeline entry covers only industry-wide technology, market, or regulatory turning points. Never include a single company's funding round, VC raise, or M&A event — unless that company's tech/product launch itself reshaped the industry.
+key_players: list only companies that were actually active in the market at that time. Never include VCs, private equity, financial investors, or accelerators.`,
 
-  tech_evolution_v2: `아래 스키마의 JSON 객체만 출력:
-{"tech_name":"핵심기술명","stages":[{"stage":1,"period":"시기","title":"단계제목 15자이내","description":"설명 2줄이내","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["핵심요인 최대3개"],"key_players":["기업명 최대4개"]}],"current_stage":"현재단계 1줄","next_inflection":"다음변곡점 1줄","key_bullets":["현재 기술 성숙도 단계 — Hype Cycle 기준 20자이내","다음 기술 변곡점의 핵심 촉발 요인 20자이내","기술 확산을 막는 핵심 장벽 20자이내"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-stages는 4~6개. 본문 내 중요 사실에는 [n] 형식으로 출처 번호 포함.`,
+  tech_evolution_v2: `Output only a JSON object matching this schema:
+{"tech_name":"Core technology name","stages":[{"stage":1,"period":"Time period","title":"Stage title, 5 words or fewer","description":"Description, 2 sentences max","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["Key enabler, max 3"],"key_players":["Company name, max 4"]}],"current_stage":"Current stage, 1 line","next_inflection":"Next inflection point, 1 line","key_bullets":["Current maturity stage on the Hype Cycle, 8 words or fewer","The key trigger for the next inflection point, 8 words or fewer","The main barrier blocking wider adoption, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+stages: 4-6 entries. Tag important facts in the body with [n] source markers.`,
 
-  value_chain_v2: `아래 스키마의 JSON 객체만 출력:
-{"industry":"산업명","layers":[{"name":"레이어명","description":"설명 1줄","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"buyer":false,"global_leaders":[{"name":"기업명","country":"국가","why_leader":"선도이유 1줄"}]}],"value_flow":"가격전가메커니즘 2줄이내","subject_position":"분석기업 포지션 2줄이내","key_bullets":["이 기업이 밸류체인 내 어디서 가장 강한가 20자이내","이 기업의 가격 전가력/협상력 근거 20자이내","밸류체인 구조에서 오는 가장 큰 리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-layers는 4~6개. 분석 대상 기업이 속한 레이어에 is_subject:true 설정.
-최종 소비자·구매자 레이어(예: 소비자, 엔터프라이즈 고객, 정부 등)는 buyer:true로 설정하고 pricing_power 필드는 생략.
-공급자·제조·유통 레이어만 pricing_power:"high"|"medium"|"low" 설정.
-value_flow·subject_position 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
+  value_chain_v2: `Output only a JSON object matching this schema:
+{"industry":"Industry name","layers":[{"name":"Layer name","description":"Description, 1 line","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"buyer":false,"global_leaders":[{"name":"Company name","country":"Country","why_leader":"Why it leads, 1 line"}]}],"value_flow":"Pricing pass-through mechanism, 2 sentences max","subject_position":"The analyzed company's position, 2 sentences max","key_bullets":["Where this company is strongest in the value chain, 8 words or fewer","The basis for its pricing power / negotiating leverage, 8 words or fewer","The biggest risk that comes from this value-chain structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+layers: 4-6 entries. Set is_subject:true on the layer the analyzed company belongs to.
+For end-consumer/buyer layers (e.g. consumers, enterprise customers, government), set buyer:true and omit the pricing_power field.
+Only set pricing_power:"high"|"medium"|"low" on supplier, manufacturing, or distribution layers.
+Tag important facts in value_flow/subject_position with [n] source markers. Any URL confirmed via web search must go in sources[].url.`,
 
-  business_model_v2: `아래 스키마의 JSON 객체만 출력:
-{"revenue_streams":[{"name":"수익원","type":"subscription|transaction|service|license|other","revenue_share":숫자,"operating_margin":숫자,"growth_rate":숫자}],"segments":[{"name":"세그먼트명","revenue_share":숫자,"characteristics":"특성 1줄"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"성장방식 2줄이내","unit_economics":{"gross_margin":숫자,"operating_margin":숫자,"net_margin":숫자,"fcf_margin":숫자,"nrr":숫자},"moat":[{"type":"해자유형","strength":"strong|medium|weak","description":"해자설명 1줄"}],"key_bullets":["이 기업 수익 구조의 핵심 — 왜 돈을 버는가 20자이내","BM을 지탱하는 핵심 해자 20자이내","BM의 구조적 약점 또는 붕괴 리스크 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-growth_motion_detail·moat.description 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.
-operating_margin·growth_rate(revenue_streams 내)와 unit_economics의 gross_margin·operating_margin·net_margin·fcf_margin·nrr은 숫자 타입 필드 — 확인 불가 시 반드시 0 반환. "확인 필요"·"N/A" 등 텍스트나 -999 같은 센티널 값 절대 금지 (유효하지 않은 JSON이 됨). revenue_share는 확인 불가해도 0을 쓰지 말고 합리적 추정치를 반드시 채울 것.`,
+  business_model_v2: `Output only a JSON object matching this schema:
+{"revenue_streams":[{"name":"Revenue stream","type":"subscription|transaction|service|license|other","revenue_share":number,"operating_margin":number,"growth_rate":number}],"segments":[{"name":"Segment name","revenue_share":number,"characteristics":"Characteristics, 1 line"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"How growth works, 2 sentences max","unit_economics":{"gross_margin":number,"operating_margin":number,"net_margin":number,"fcf_margin":number,"nrr":number},"moat":[{"type":"Moat type","strength":"strong|medium|weak","description":"Moat description, 1 line"}],"key_bullets":["The core of this company's revenue engine — why it makes money, 8 words or fewer","The core moat holding up the business model, 8 words or fewer","A structural weakness or collapse risk in the business model, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+Tag important facts in growth_motion_detail/moat.description with [n] source markers. Any URL confirmed via web search must go in sources[].url.
+operating_margin/growth_rate (inside revenue_streams) and unit_economics' gross_margin/operating_margin/net_margin/fcf_margin/nrr are numeric fields — return 0 if unconfirmable. Never use text like "Not disclosed"/"N/A" or a sentinel like -999 (that produces invalid JSON). For revenue_share, don't default to 0 if unconfirmable — always fill in a reasonable estimate.`,
 
-  competitors_v2: `아래 스키마의 JSON 객체만 출력:
-{"direct":[{"name":"경쟁사명","country":"국가","market_share":"점유율%(추정 가능)","strengths":["강점 1줄 최대3개 — 전략·기술·시장지배력 중심"],"weaknesses":["약점 1줄 최대2개 — 구조적 약점 중심"],"vs_subject":"분석대상 대비 포지셔닝 차이 1줄 — '~보다 ~에서 강하나 ~에서 취약' 형식"}],"indirect":[{"name":"간접경쟁사","threat":"위협 1줄"}],"substitutes":[{"name":"대체재","threat":"위협 1줄"}],"competitive_position":"leader|challenger|niche|follower","key_bullets":["이 기업의 경쟁 포지션 — 누구보다 강하고 어디서 약한가 20자이내","경쟁사 대비 가장 뚜렷한 전략적 차별점 20자이내","가장 위협적인 경쟁 리스크 — 어디서 뒤집힐 수 있나 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-direct는 글로벌 직접 경쟁사 3~5개 필수. market_share는 공개 수치가 없으면 추정치+(추정) 표기; 아예 파악 불가일 때만 "-". vs_subject는 단순 나열 금지 — 전략적 포지셔닝 차이(가격·채널·기술·고객층 등)를 구체적으로 1줄로. 본문 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
+  competitors_v2: `Output only a JSON object matching this schema:
+{"direct":[{"name":"Competitor name","country":"Country","market_share":"share% (estimates OK)","strengths":["Strength, 1 line, max 3 — strategy/technology/market-power focused"],"weaknesses":["Weakness, 1 line, max 2 — structural weaknesses"],"vs_subject":"1-line positioning gap vs. the analyzed company — format like 'stronger on X, weaker on Y'"}],"indirect":[{"name":"Indirect competitor","threat":"Threat, 1 line"}],"substitutes":[{"name":"Substitute","threat":"Threat, 1 line"}],"competitive_position":"leader|challenger|niche|follower","key_bullets":["This company's competitive position — where it's strongest and weakest, 8 words or fewer","The clearest strategic differentiator versus competitors, 8 words or fewer","The most threatening competitive risk — where it could get flipped, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+direct: 3-5 global direct competitors required. If there's no public market_share figure, give an estimate tagged "(estimated)"; use "-" only when it's genuinely unknowable. vs_subject must not be a plain list — write one specific line on the strategic positioning gap (price, channel, technology, customer base, etc.). Tag important facts in the body with [n] source markers. Any URL confirmed via web search must go in sources[].url.`,
 
-  strategy_v2: `아래 스키마의 JSON 객체만 출력:
-{"corporate":{"direction":"기업전략 한줄","portfolio":"포트폴리오방향 1줄","ma_partnerships":["M&A사례 1줄 최대3개"],"geographic":"지역확장 1줄"},"business":{"direction":"사업전략 한줄","competitive_advantage":"경쟁우위 1줄","go_to_market":"GTM전략 1줄","product_roadmap":["로드맵항목 1줄 최대4개"]},"financial":{"direction":"재무전략 한줄","capital_allocation":"자본배분 1줄","investment_priority":"투자우선순위 1줄","return_target":"목표수익지표 1줄"},"strategy_coherence":"3전략 수렴방향 2줄이내","ten_year_durability":"10년 지속가능성 2줄이내","key_bullets":["기업 전략의 핵심 방향 한마디 20자이내","사업 전략 — 어떻게 이길 것인가 20자이내","재무 전략 — 어디에 베팅하는가 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-strategy_coherence·ten_year_durability 본문에 중요 사실 출처는 [n] 형식으로 번호 삽입. 웹 검색에서 확인한 URL은 sources[].url에 반드시 포함.`,
+  strategy_v2: `Output only a JSON object matching this schema:
+{"corporate":{"direction":"Corporate strategy, 1 line","portfolio":"Portfolio direction, 1 line","ma_partnerships":["M&A example, 1 line, max 3"],"geographic":"Geographic expansion, 1 line"},"business":{"direction":"Business strategy, 1 line","competitive_advantage":"Competitive edge, 1 line","go_to_market":"GTM strategy, 1 line","product_roadmap":["Roadmap item, 1 line, max 4"]},"financial":{"direction":"Financial strategy, 1 line","capital_allocation":"Capital allocation, 1 line","investment_priority":"Investment priority, 1 line","return_target":"Target return metric, 1 line"},"strategy_coherence":"How the 3 strategies converge, 2 sentences max","ten_year_durability":"10-year durability, 2 sentences max","key_bullets":["The core direction of corporate strategy in one line, 8 words or fewer","Business strategy — how it wins, 8 words or fewer","Financial strategy — where it's betting, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+Tag important facts in strategy_coherence/ten_year_durability with [n] source markers. Any URL confirmed via web search must go in sources[].url.`,
 
-  financials_v2: `아래 스키마의 JSON 객체만 출력:
-{"narrative":"재무서사 3줄이내","income_statement":[{"item":"매출","fy2021":"공시값 or '확인 필요' or '해당없음'","fy2022":"공시값 or '확인 필요' or '해당없음'","fy2023":"공시값 or '확인 필요' or '해당없음'","fy2024":"공시값 or '확인 필요' or '해당없음'","fy2025":"공시값 or '수치 (추정)' or '확인 필요' or '해당없음'","yoy":"▲N% or ▼N% or —"},{"item":"매출총이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"영업이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"순이익","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"현금·현금성자산","fy2023":"공시값 or '확인 필요' or '해당없음'","fy2024":"공시값 or '확인 필요' or '해당없음'","fy2025":"공시값 or '수치 (추정)' or '확인 필요' or '해당없음'"},{"item":"총자산","fy2023":"","fy2024":"","fy2025":""},{"item":"총부채","fy2023":"","fy2024":"","fy2025":""},{"item":"자본총계","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"공시값 or '확인 필요'","investing":"공시값 or '확인 필요'","financing":"공시값 or '확인 필요'","fcf":"공시값 or '수치 (추정)' or '확인 필요'","notes":"특이사항 or 빈문자"},"key_risks":["리스크 1줄 최대5개"],"outlook":{"shortTerm":"단기 전망 (3~6개월) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","midLongTerm":"중장기 전망 (1~3년) — 심볼 포함: ○ 긍정 / △ 중립 / ▼ 부정","keyRisks":["핵심 리스크 1줄 최대3개"]},"key_bullets":["가장 주목할 재무 지표와 추세 20자이내","수익성·현금흐름 핵심 상태 20자이내","재무 구조상 가장 큰 위험 요인 20자이내"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-income_statement·balance_sheet 빈칸 절대 금지 — 공시 수치 없으면 반드시 '확인 필요'. 단, 컨텍스트의 [원천 데이터에 없는 연도] 섹션에 특정 연도가 "데이터 없음"으로 명시돼 있으면(원천 공시에 그 연도 재무제표 자체가 없음) 그 연도는 '확인 필요' 대신 '해당없음'으로 표기 — "확인 필요"는 "찾아봤지만 못 찾음", "해당없음"은 "애초에 그 연도 데이터가 존재하지 않음"이라는 뜻으로 구분해서 쓸 것. 추정값은 반드시 '숫자 (추정)' 형식.
-narrative 및 주요 수치에 [n] 형식으로 출처 번호 포함.
-outlook 규칙: 재무 데이터 기반으로 작성. 근거 없는 낙관 금지. shortTerm·midLongTerm 앞에 반드시 ○/△/▼ 심볼 명시.`,
+  financials_v2: `Output only a JSON object matching this schema:
+{"narrative":"Financial narrative, 3 sentences max","income_statement":[{"item":"Revenue","fy2021":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2022":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'","yoy":"▲N% or ▼N% or —"},{"item":"Gross Profit","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Operating Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Net Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"Cash & Equivalents","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'"},{"item":"Total Assets","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Liabilities","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Equity","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"disclosed figure or 'Not disclosed'","investing":"disclosed figure or 'Not disclosed'","financing":"disclosed figure or 'Not disclosed'","fcf":"disclosed figure or 'figure (estimated)' or 'Not disclosed'","notes":"anything notable, or an empty string"},"key_risks":["Risk, 1 line, max 5"],"outlook":{"shortTerm":"Short-term outlook (3-6 months) — include a symbol: ○ positive / △ neutral / ▼ negative","midLongTerm":"Mid/long-term outlook (1-3 years) — include a symbol: ○ positive / △ neutral / ▼ negative","keyRisks":["Key risk, 1 line, max 3"]},"key_bullets":["The financial metric and trend most worth flagging, 8 words or fewer","Core state of profitability and cash flow, 8 words or fewer","The single biggest risk in the financial structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+income_statement/balance_sheet: never leave a cell blank — if there's no disclosed figure, it must be 'Not disclosed'. Exception: if the context's [Years missing from source data] section explicitly marks a given year as having no data (the source filing has no financial statement at all for that year), label that year 'Not applicable' instead of 'Not disclosed' — "Not disclosed" means "we looked but couldn't confirm it," "Not applicable" means "that year's data doesn't exist in the first place." Keep the distinction. Estimated values must always use the 'number (estimated)' format.
+Tag the narrative and key figures with [n] source markers.
+outlook rules: base it on the financial data. No baseless optimism. shortTerm/midLongTerm must always be prefixed with a ○/△/▼ symbol.`,
 
-  sources: `아래 스키마의 JSON 객체만 출력. 리서치에서 실제로 참조한 출처를 탭별로 정리:
-{"summary":[{"index":1,"level":"L1","organization":"기관명","date":"Mon YYYY","content":"핵심 내용 1줄","isEstimate":false,"url":"https://... or null"}],"industry_history":[...],"tech_evolution":[...],"value_chain":[...],"business_model":[...],"competitors":[...],"strategy":[...],"financials":[...]}
+  sources: `Output only a JSON object matching this schema. Organize the sources actually referenced during research, by tab:
+{"summary":[{"index":1,"level":"L1","organization":"Org name","date":"Mon YYYY","content":"Key point, 1 line","isEstimate":false,"url":"https://... or null"}],"industry_history":[...],"tech_evolution":[...],"value_chain":[...],"business_model":[...],"competitors":[...],"strategy":[...],"financials":[...]}
 
-신뢰 등급 기준:
-- L1: 기업 공식 발표, CFO/CEO 블로그, SEC 10-K/10-Q, DART 공시, 기업 IR 자료
+Reliability tier criteria:
+- L1: Company official statements, CFO/CEO blog posts, SEC 10-K/10-Q, DART filings, company IR materials
 - L2: Bloomberg, Reuters, WSJ, Fortune, CNBC, Financial Times, HSBC, Sacra, Menlo Ventures, CB Insights, Gartner
-- L3: 기관 추정치, 2차 분석, 일반 뉴스/블로그 — 반드시 isEstimate:true
+- L3: Institutional estimates, secondary analysis, general news/blogs — always isEstimate:true
 
-규칙:
-- 각 탭당 1~5개 출처. 실제로 참조한 출처만 포함 (없으면 빈 배열 []).
-- organization은 출처 기관명만 (예: "Bloomberg", "OpenAI 공식", "SEC EDGAR", "DART").
-- date는 "Mar 2026" 형식.
-- content는 해당 출처에서 가져온 핵심 내용 1줄 (수치·사실 중심).
-- url은 실제 검색에서 확인된 URL만. 없으면 null.
-- L3 항목은 반드시 isEstimate:true.`,
+Rules:
+- 1-5 sources per tab. Include only sources actually referenced (empty array [] if none).
+- organization is just the source org's name (e.g. "Bloomberg", "OpenAI (official)", "SEC EDGAR", "DART").
+- date uses "Mar 2026" format.
+- content is one line pulled from that source — figures and facts, not commentary.
+- url only if actually confirmed via search. null if not.
+- L3 entries must always be isEstimate:true.`,
 };
 
 // ── Quality Gate: 섹션별 "콘텐츠 있음" 판정 필드 ────────────────────────────────
@@ -667,33 +683,33 @@ function sanitizePlaceholderNumbers(value: any, sectionKey: string, path = ''): 
 
 // Phase 1: 기업 기본 정보 + 최신 현황 (2 rounds) → batch1(summary) 즉시 가능
 async function gatherResearch1(companyName: string): Promise<string> {
-  const systemPrompt = `당신은 기업 분석 리서처입니다. 빠른 웹 검색으로 기업 기본 정보와 최신 현황만 수집하세요.
+  const systemPrompt = `You are a company research analyst. Use quick web searches to gather only basic company info and the latest status.
 
-[규칙]
-- fetch_url 최대 1회. IR 뉴스릴리즈·Yahoo Finance·StockAnalysis만 허용.
-- 스니펫에 수치 있으면 fetch_url 없이 사용.
-- SEC Archives 원문·대형 PDF 절대 금지.
+[Rules]
+- fetch_url at most once. Only IR press releases, Yahoo Finance, or StockAnalysis allowed.
+- If the snippet already has the number, use it without fetch_url.
+- Never fetch raw SEC Archives filings or large PDFs.
 
-[검색 순서 — 2회 이내]
+[Search order — 2 searches max]
 1. web_search: "${companyName} overview products services revenue business model 2024 2025"
 2. web_search: "${companyName} news strategy funding investment partnership deal recent 2025"
 
-[수집 항목]
-1. 기업 개요 (사업영역, 주요 제품/서비스, 설립연도, 본사, 티커)
-2. 매출 규모 대략 수치 (출처 병기, 없으면 생략)
-3. 사업 모델 요약 (수익 구조, 핵심 고객)
-4. 최신 뉴스 / 주요 동향 (2025)
-5. 성장 모멘텀 / 핵심 리스크
-6. 최근 12개월 이내 투자유치·펀딩라운드·대규모 파트너십/계약 (날짜·금액·상대방·출처 — 없으면 생략)
+[What to collect]
+1. Company overview (business areas, key products/services, founding year, HQ, ticker)
+2. Rough revenue figure (cite the source, skip if unavailable)
+3. Business model summary (revenue structure, key customers)
+4. Latest news / major developments (2025)
+5. Growth momentum / key risks
+6. Funding rounds or major partnerships/deals in the last 12 months (date, amount, counterparty, source — skip if unavailable)
 
-추정값은 "(추정)" 명시.`;
+Label any estimated figure "(estimated)".`;
 
   // analyzeCompany에서 runBatch 밖에서 직접 await하는 호출이라, 여기서 예외가 새면
   // 배치 격리 없이 전체 분석이 죽는다 (2026-07-06 삼성전기 사고) — 반드시 자체 방어.
   try {
     return await runWithWebSearch(
       systemPrompt,
-      `기업명: ${companyName}\n\n2회 검색으로 기업 기본 정보를 빠르게 수집해주세요.`,
+      `Company: ${companyName}\n\nGather basic company info quickly with 2 searches.`,
       'claude-sonnet-4-6',
       2,
       4000,
@@ -707,31 +723,31 @@ async function gatherResearch1(companyName: string): Promise<string> {
 
 // Phase 2: 경쟁사·재무 상세·산업 심층 (2 rounds) → batch2-4에 사용
 async function gatherResearch2(companyName: string): Promise<string> {
-  const systemPrompt = `당신은 기업 분석 리서처입니다. 경쟁사·재무 상세·산업 심층 정보를 수집하세요.
+  const systemPrompt = `You are a company research analyst. Gather competitor, financial-detail, and industry-depth information.
 
-[규칙]
-- fetch_url 최대 1회. Yahoo Finance·Macrotrends·StockAnalysis·IR 뉴스릴리즈만 허용.
-- 스니펫에 수치 있으면 fetch_url 없이 사용.
-- SEC Archives 원문·대형 PDF 절대 금지.
+[Rules]
+- fetch_url at most once. Only Yahoo Finance, Macrotrends, StockAnalysis, or IR press releases allowed.
+- If the snippet already has the number, use it without fetch_url.
+- Never fetch raw SEC Archives filings or large PDFs.
 
-[검색 순서 — 2회 이내]
+[Search order — 2 searches max]
 1. web_search: "${companyName} competitors market share industry trends value chain 2024 2025"
 2. web_search: "${companyName} annual revenue net income financials technology 2023 2024 2025"
 
-[수집 항목]
-1. 주요 경쟁사 + 시장점유율 추정 (출처 병기)
-2. 재무 수치 상세 (매출·영업이익·순이익, 최근 3년, 출처 병기)
-3. 산업 트렌드 / 기술 변화 동향
-4. 밸류체인 내 위치 / 공급망 구조
-5. 전략 방향 (M&A, 신규 사업, 지역 확장)
+[What to collect]
+1. Key competitors + estimated market share (cite the source)
+2. Financial detail (revenue, operating income, net income — last 3 years, cite the source)
+3. Industry trends / technology shifts
+4. Position in the value chain / supply-chain structure
+5. Strategic direction (M&A, new businesses, geographic expansion)
 
-추정값은 "(추정)" 명시. 출처 병기 필수.`;
+Label any estimated figure "(estimated)". Source citation is required.`;
 
   // gatherResearch1과 동일한 이유로 자체 방어 필요 (runBatch 밖에서 직접 await됨).
   try {
     return await runWithWebSearch(
       systemPrompt,
-      `기업명: ${companyName}\n\n2회 검색으로 경쟁사·재무·산업 상세 정보를 수집해주세요.`,
+      `Company: ${companyName}\n\nGather detailed competitor/financial/industry info with 2 searches.`,
       'claude-sonnet-4-6',
       2,
       4000,
@@ -814,17 +830,17 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
 async function callFounderSection(companyName: string): Promise<FounderV2 | null> {
   const t0 = Date.now();
   try {
-    const systemPrompt = [{ type: 'text' as const, text: `당신은 기업 창업자 분석 전문가입니다. 웹 검색으로 창업자/CEO 정보를 수집한 뒤 지정된 JSON 스키마로만 반환합니다.
-규칙: 마크다운·코드블록·추가 설명 없이 순수 JSON만 출력. 모든 텍스트는 한국어 (인명·기업명은 원어 유지).
-정보가 없는 항목은 반드시 "-" 표시. 비상장사일 경우 재무보다 이 섹션 분량을 더 깊게 조사.`, cache_control: { type: 'ephemeral' as const } }];
+    const systemPrompt = [{ type: 'text' as const, text: `You are an expert on company founders. Use web search to gather founder/CEO information, then return only the specified JSON schema.
+Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. Generate all content in English (keep names and company names in their original form).
+Mark any item you can't find as "-". For a private company, research this section more deeply than the financials.`, cache_control: { type: 'ephemeral' as const } }];
 
-    const schema = `아래 스키마의 JSON 객체만 출력:
-{"founders":[{"name":"이름","title":"직책","education":"출신학교 또는 '-'","major":"전공 또는 '-'"}],"career_trajectory":[{"period":"기간(예: 2018–현재)","company":"기업명","role":"직책/역할"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"기업명","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"SNS 스타일 1줄 또는 '-'","media_exposure":"주요 미디어 노출 1줄 또는 '-'","blind_glassdoor":"Blind/Glassdoor 평판 요약 1줄 또는 '-'"},"network":{"investors":["투자자 이름/기관 최대 5개"],"advisors_board":["어드바이저/보드 최대 5개"],"cofounders":["공동창업자 이름 최대 5개"]},"key_bullets":["창업자의 핵심 강점 — 왜 이 사람이 이 사업을 해야 하나 20자이내","창업자 네트워크/실적 중 가장 주목할 것 20자이내","창업자 리스크 — 가장 우려되는 약점 20자이내"],"sources":[{"index":1,"level":"L1","organization":"출처기관명","content":"핵심내용 1줄","url":"https://... 또는 null"}]}
-career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventures가 없으면 빈 배열 []. 검색에서 확인한 LinkedIn·뉴스·Crunchbase URL은 sources[].url에 반드시 포함.`;
+    const schema = `Output only a JSON object matching this schema:
+{"founders":[{"name":"Name","title":"Title","education":"School or '-'","major":"Major or '-'"}],"career_trajectory":[{"period":"Period (e.g. 2018-present)","company":"Company name","role":"Title/role"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"Company name","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"Social media style, 1 line, or '-'","media_exposure":"Notable media exposure, 1 line, or '-'","blind_glassdoor":"Blind/Glassdoor reputation summary, 1 line, or '-'"},"network":{"investors":["Investor name/firm, max 5"],"advisors_board":["Advisor/board member, max 5"],"cofounders":["Co-founder name, max 5"]},"key_bullets":["This founder's core strength — why they're the right person for this business, 8 words or fewer","The most notable thing in the founder's network/track record, 8 words or fewer","Founder risk — the biggest concern, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+career_trajectory: sort most recent first. Empty array [] if founding_history.previous_ventures has none. Any LinkedIn/news/Crunchbase URL confirmed via search must go in sources[].url.`;
 
     const raw = await runWithWebSearch(
       systemPrompt,
-      `기업명: ${companyName}\n\n아래 순서로 웹 검색하여 창업자/CEO 정보를 수집하세요:\n1. "${companyName} 창업자 CEO 이름 학력 경력" (또는 영문: "${companyName} founder CEO background education")\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} 투자자 investor board advisor"\n\n수집 후 아래 스키마로 반환:\n${schema}`,
+      `Company: ${companyName}\n\nGather founder/CEO information using this search order:\n1. "${companyName} founder CEO name background education"\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} investor board advisor"\n\nThen return the data using this schema:\n${schema}`,
       'claude-sonnet-4-6',
       3,
       6000,
@@ -842,23 +858,23 @@ career_trajectory는 최신→과거 순 정렬. founding_history.previous_ventu
 // ── Financial refresh (own web-search pass) ───────────────────────────────────
 
 async function gatherFinancialResearch(companyName: string): Promise<string> {
-  const systemPrompt = `당신은 기업 재무 분석 전문가입니다. 아래 기업의 최신 재무 데이터만 수집하세요.
+  const systemPrompt = `You are a company financial analyst. Gather only the latest financial data for the company below.
 
-[소스 신뢰도]
-1순위 — 공식 공시: SEC 10-K/10-Q, DART, 기업 IR
-2순위 — Bloomberg, Reuters, Yahoo Finance, Macrotrends
-3순위 이하 수치는 반드시 "(추정)" 레이블 필수.
+[Source reliability]
+Tier 1 — official disclosure: SEC 10-K/10-Q, DART, company IR
+Tier 2 — Bloomberg, Reuters, Yahoo Finance, Macrotrends
+Anything below tier 2 must be labeled "(estimated)".
 
-[검색 순서]
+[Search order]
 1. web_search: "${companyName} annual report revenue operating income net income 2023 2024 2025"
-2. web_search: "${companyName} SEC 10-K OR DART 재무제표 2024 2025"
-3. 결과 중 SEC EDGAR / DART / IR URL → fetch_url로 전체 읽기
+2. web_search: "${companyName} SEC 10-K OR DART financial statements 2024 2025"
+3. For any SEC EDGAR / DART / IR URL in the results → fetch_url to read it in full
 
-수치에 출처 병기. 찾을 수 없는 항목은 "확인 필요".`;
+Cite the source for every figure. Mark anything you can't find "Not disclosed".`;
 
   return runWithWebSearch(
     systemPrompt,
-    `기업명: ${companyName}\n\n최신 재무 데이터를 수집해주세요.`,
+    `Company: ${companyName}\n\nGather the latest financial data.`,
     'claude-sonnet-4-6',
     6,
     4000,
@@ -873,9 +889,9 @@ export async function refreshFinancials(companyName: string): Promise<Financials
   ]);
 
   const context = [
-    `기업명: ${companyName}`,
-    contextText ? `\n[공시 데이터 — 재무수치 우선 반영]\n${contextText}` : null,
-    `\n[웹 리서치]\n${researchText}`,
+    `Company: ${companyName}`,
+    contextText ? `\n[Disclosed data — prioritize these figures]\n${contextText}` : null,
+    `\n[Web research]\n${researchText}`,
   ].filter(Boolean).join('\n');
 
   const result = await callSection<FinancialsV2>(context, 'financials_v2');
@@ -929,9 +945,9 @@ export async function analyzeCompany(
   console.log(`[claude] gatherResearch1 done ${Date.now() - t0}ms`);
 
   const phase1Context = [
-    `기업명: ${companyName}`,
-    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
-    `\n[웹 리서치 — 기본 정보]\n${research1}`,
+    `Company: ${companyName}`,
+    financialContext ? `\n[Disclosed data — prioritize these figures]\n${financialContext}` : null,
+    `\n[Web research — basic info]\n${research1}`,
   ].filter(Boolean).join('\n');
 
   // ── Batch 1 (summary) + Phase 2 research 병렬 실행 ────────────────────────────
@@ -949,10 +965,10 @@ export async function analyzeCompany(
 
   // ── Phase 2 컨텍스트 (1+2 합산) → batch2-4 공유 ──────────────────────────────
   const sharedContext = [
-    `기업명: ${companyName}`,
-    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
-    `\n[웹 리서치 — 기본 정보]\n${research1}`,
-    `\n[웹 리서치 — 상세 정보]\n${research2}`,
+    `Company: ${companyName}`,
+    financialContext ? `\n[Disclosed data — prioritize these figures]\n${financialContext}` : null,
+    `\n[Web research — basic info]\n${research1}`,
+    `\n[Web research — detailed info]\n${research2}`,
   ].filter(Boolean).join('\n');
 
   // Batch 2-4 병렬 실행 — sharedContext 공유, 완료 순서대로 즉시 SSE 전송
@@ -993,11 +1009,13 @@ export async function analyzeCompany(
           for (const row of f.income_statement) {
             const pct = row.yoy?.match(/[▲▼](\d+(?:\.\d+)?)%/);
             if (pct && parseFloat(pct[1]) >= 900) {
+              const isNoData = (v: string | undefined) =>
+                !v || ['확인 필요', '해당없음', 'Not disclosed', 'Not applicable'].includes(v);
               const yr = (['fy2025', 'fy2024', 'fy2023', 'fy2022', 'fy2021'] as const)
-                .find(y => row[y] && row[y] !== '확인 필요' && row[y] !== '해당없음');
-              if (yr && !row[yr]!.includes('추정')) {
-                row[yr] = row[yr] + ' (추정)';
-                console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} (추정) 강제 적용`);
+                .find(y => !isNoData(row[y]));
+              if (yr && !row[yr]!.includes('추정') && !row[yr]!.includes('estimated')) {
+                row[yr] = row[yr] + ' (estimated)';
+                console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} (estimated) 강제 적용`);
               }
             }
           }
@@ -1067,10 +1085,10 @@ export async function reanalyzeSingleSection(
     gatherResearch2(companyName),
   ]);
   const context = [
-    `기업명: ${companyName}`,
-    financialContext ? `\n[공시 데이터 — 재무수치 우선 반영]\n${financialContext}` : null,
-    `\n[웹 리서치 — 기본 정보]\n${research1}`,
-    `\n[웹 리서치 — 상세 정보]\n${research2}`,
+    `Company: ${companyName}`,
+    financialContext ? `\n[Disclosed data — prioritize these figures]\n${financialContext}` : null,
+    `\n[Web research — basic info]\n${research1}`,
+    `\n[Web research — detailed info]\n${research2}`,
   ].filter(Boolean).join('\n');
   return callSection(context, sectionKey);
 }
@@ -1084,21 +1102,21 @@ export interface GrowthScenarioForNarrative {
   sectorTag?: string;
 }
 
-const GROWTH_SCENARIO_NARRATIVE_SYSTEM = `당신은 BD·세일즈·전략 담당자를 위한 기업 분석가입니다.
-아래 몬테카를로 매출 성장 시뮬레이션 결과를 바탕으로 1~2문장의 핵심 해석을 작성하세요.
+const GROWTH_SCENARIO_NARRATIVE_SYSTEM = `You are a company analyst writing for BD, Sales, and Strategy practitioners.
+Based on the Monte Carlo revenue growth simulation results below, write a 1-2 sentence core interpretation.
 
-규칙:
-- "기업가치", "밸류에이션", "투자 수익률", "주가" 등 투자자 언어 절대 금지.
-- 파트너십·거래·영업 의사결정 관점에서 서술 (예: "이 기업과 거래 시 예상되는 매출 성장 범위는...").
-- 신뢰도가 낮은(low) 경우 "동종업계 벤치마크 기반 추정치"라는 뉘앙스를 문장에 반드시 포함할 것 —
-  이 기업 자체의 공식 재무 데이터가 아니라는 점을 숨기지 말 것.
-- 마크다운·따옴표·불릿 없이 순수 텍스트 1~2문장만 출력.`;
+Rules:
+- No investor language — never say "valuation," "enterprise value," "investment return," "stock price."
+- Write from a partnership/deal/sales-decision point of view (e.g. "the expected revenue growth range if you partner with this company is...").
+- If confidence is low, the sentence must convey that this is "an estimate based on industry benchmarks" —
+  don't hide the fact that it isn't this company's own official financial data.
+- Output pure text only, 1-2 sentences — no markdown, no quotes, no bullets.`;
 
 function formatScenarioForPrompt(currency: 'KRW' | 'USD', simulation: GrowthScenarioForNarrative['simulation']): string {
   const fmt = (v: number) =>
     currency === 'KRW' ? `${(v / 100_000_000).toFixed(0)}억원` : `${(v / 1_000_000).toFixed(0)}M USD`;
   return simulation.p50
-    .map((_, y) => `Year+${y + 1}: 보수적 ${fmt(simulation.p10[y])} / 예상 ${fmt(simulation.p50[y])} / 낙관 ${fmt(simulation.p90[y])}`)
+    .map((_, y) => `Year+${y + 1}: conservative ${fmt(simulation.p10[y])} / expected ${fmt(simulation.p50[y])} / optimistic ${fmt(simulation.p90[y])}`)
     .join('\n');
 }
 
@@ -1108,8 +1126,8 @@ export async function generateGrowthScenarioNarrative(
 ): Promise<string | null> {
   const { simulation, confidenceLevel, currency, sectorTag } = scenario;
 
-  const userPrompt = `기업명: ${companyName}
-신뢰도: ${confidenceLevel === 'high' ? '자체 공식 재무 시계열 기반' : `동종업계(${sectorTag ?? '섹터'}) 벤치마크 기반 추정`}
+  const userPrompt = `Company: ${companyName}
+Confidence: ${confidenceLevel === 'high' ? "based on the company's own official financial time series" : `estimated from industry (${sectorTag ?? 'sector'}) benchmarks`}
 ${formatScenarioForPrompt(currency, simulation)}`;
 
   try {

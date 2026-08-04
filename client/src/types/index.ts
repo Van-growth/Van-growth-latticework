@@ -176,7 +176,8 @@ export interface SummaryV2 {
   key_markets: { country: string; revenue_share: number }[];
   trigger_events?: {
     date: string;
-    type: '투자유치' | '유상증자' | '대규모딜';
+    // 2026-08 프롬프트 영어 단일화 이전 캐시는 한국어 값, 이후 신규 분석은 영어 값
+    type: '투자유치' | '유상증자' | '대규모딜' | 'Funding' | 'Equity Offering' | 'Major Deal';
     amount: string;
     counterparty: string;
     description: string;

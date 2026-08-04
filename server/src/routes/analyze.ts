@@ -252,7 +252,7 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
       toBsRow(isKr ? '자본총계' : "Shareholders' Equity",  series.equity),
     ].filter(hasVal),
     cash_flow: hasCf
-      ? { ...cf, fcf: '확인 필요', notes: '' }
+      ? { ...cf, fcf: isKr ? '확인 필요' : 'Not disclosed', notes: '' }
       : {
           operating: '—', investing: '—', financing: '—', fcf: '—',
           notes: isKr ? 'DART 배치 데이터 — 현금흐름 미지원' : 'SEC EDGAR 현금흐름 태깅 없음',

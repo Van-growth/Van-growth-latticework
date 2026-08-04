@@ -51,10 +51,10 @@ const TARGET_FISCAL_YEARS = ['2021', '2022', '2023', '2024', '2025'];
 function missingYearsNote(presentYears: string[]): string | null {
   const missing = TARGET_FISCAL_YEARS.filter(y => !presentYears.includes(y));
   if (missing.length === 0) return null;
-  return '\n[원천 데이터에 없는 연도]\n' + missing.map(y =>
-    `· ${y}: 데이터 없음 — 원천 공시에 해당 연도 재무제표 자체가 존재하지 않음(설립/상장 이전이거나 ` +
-    `그 해 공시가 없음). 조회 실패가 아니므로 이 연도의 매출/영업이익/순이익 등은 "확인 필요" 대신 ` +
-    `"해당없음"으로 표기하세요.`
+  return '\n[Years missing from source data]\n' + missing.map(y =>
+    `· ${y}: no data — the source filing has no financial statement at all for this year (before ` +
+    `founding/listing, or simply not filed that year). This isn't a lookup failure, so label revenue/` +
+    `operating income/net income etc. for this year "Not applicable" instead of "Not disclosed."`
   ).join('\n');
 }
 
@@ -145,9 +145,10 @@ function fmpUsd(n: number | undefined | null): string | undefined {
 function structurallyAbsentNote(label: string, rawSeries: EdgarRawSeries | undefined, key: keyof EdgarRawSeries): string | null {
   const arr = rawSeries?.[key];
   if (!Array.isArray(arr) || arr.length === 0 || !arr.every(v => v == null)) return null;
-  return `· ${label.padEnd(14)} 해당없음 — 이 기업은 SEC 재무제표에 이 항목을 전 연도에 걸쳐 ` +
-    `별도 태깅하지 않음(지주회사/보험/복합 사업구조 등으로 구조적 미보고 가능성 높음). ` +
-    `데이터 조회 실패가 아니므로 요약 KPI 등에서 "확인 필요" 대신 "해당없음"으로 표기하세요.`;
+  return `· ${label.padEnd(14)} Not applicable — this company never tags this line item in its SEC ` +
+    `filings across any year (likely a holding company, insurer, or other complex segment structure ` +
+    `that structurally doesn't report it). This isn't a lookup failure, so label it "Not applicable" ` +
+    `instead of "Not disclosed" in summary KPIs etc.`;
 }
 
 function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
@@ -165,13 +166,13 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
   };
 
   const lines: string[] = [
-    '=== SEC EDGAR / FMP 재무 데이터 ===',
-    `기업: ${e.companyName}  (CIK: ${e.cik}${e.ticker ? `  ticker: ${e.ticker}` : ''})`,
+    '=== SEC EDGAR / FMP financial data ===',
+    `Company: ${e.companyName}  (CIK: ${e.cik}${e.ticker ? `  ticker: ${e.ticker}` : ''})`,
   ];
 
   const year = ef.year ?? fi?.date?.slice(0, 4);
   if (year) {
-    lines.push(`\n[${year} 연간 손익계산서]`);
+    lines.push(`\n[${year} annual income statement]`);
     const r: (string | null)[] = [
       row('Revenue',        ef.revenue,          fi?.revenue),
       row('Gross Profit',   ef.grossProfit,       fi?.grossProfit),
@@ -182,7 +183,7 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     ];
     r.filter(Boolean).forEach(l => lines.push(l!));
 
-    lines.push(`\n[재무상태표]`);
+    lines.push(`\n[Balance sheet]`);
     const b: (string | null)[] = [
       row('Cash',           ef.cash,              fb?.cashAndEquivalents),
       row('Total Assets',   ef.totalAssets,       fb?.totalAssets),
@@ -191,7 +192,7 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     ];
     b.filter(Boolean).forEach(l => lines.push(l!));
 
-    lines.push(`\n[현금흐름]`);
+    lines.push(`\n[Cash flow]`);
     const cf: (string | null)[] = [
       row('Operating CF',   ef.operatingCF,       fc?.operatingCashFlow),
       row('Investing CF',   ef.investingCF,       fc?.capitalExpenditure != null ? -Math.abs(fc.capitalExpenditure) : undefined),
@@ -199,7 +200,7 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     ];
     cf.filter(Boolean).forEach(l => lines.push(l!));
 
-    lines.push('→ 재무 섹션에 이 수치들을 사용하고 각 출처((EDGAR) 또는 (FMP))를 명시하세요.');
+    lines.push('→ Use these figures in the financials section and cite each source ((EDGAR) or (FMP)).');
   }
 
   if (e.rawSeries) {
@@ -215,9 +216,9 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
       const niAbsent = absent(e.rawSeries.netIncome);
       const gpAbsent = absent(e.rawSeries.grossProfit);
       const cashAbsent = absent(e.rawSeries.cash);
-      const naLabel = (fieldAbsent: boolean) => fieldAbsent ? '해당없음' : '확인 필요';
+      const naLabel = (fieldAbsent: boolean) => fieldAbsent ? 'Not applicable' : 'Not disclosed';
       const fmt = (v: number | null, fieldAbsent: boolean) => v != null ? fmpUsd(v) : naLabel(fieldAbsent);
-      lines.push('\n[다년도 손익·재무상태 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]');
+      lines.push('\n[Multi-year income statement / balance sheet trend — all official EDGAR figures, do not label "(estimated)"]');
       e.rawSeries.fiscalYears.forEach((fy, i) => {
         lines.push(
           `· ${fy}: Revenue ${fmt(e.rawSeries!.revenue[i], false)}` +
@@ -248,16 +249,17 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
   }
 
   if (e.filings.length) {
-    lines.push('\n[최근 공시 목록]');
+    lines.push('\n[Recent filings]');
     e.filings.slice(0, 5).forEach((f) => {
       lines.push(`· ${f.filingDate}  ${f.form}`);
     });
   }
 
   if (e.triggerEvents?.length) {
-    lines.push('\n[최근 트리거 이벤트 후보 — 8-K 원문 발췌, 최근 12개월]');
-    lines.push('아이템 코드: 1.01 중요계약체결 / 2.01 인수·매각완료 / 3.02 지분매각(자금조달). ' +
-      'summary_v2의 trigger_events 스키마 참고해 날짜·금액·상대방·유형을 원문에서 구조화.');
+    lines.push('\n[Recent trigger event candidates — 8-K excerpts, last 12 months]');
+    lines.push('Item codes: 1.01 material agreement / 2.01 acquisition or disposal completed / ' +
+      '3.02 unregistered equity sale (fundraising). Use the summary_v2 trigger_events schema to ' +
+      'structure date/amount/counterparty/type from the source text.');
     e.triggerEvents.forEach((t) => {
       lines.push(`· [${t.date}, item ${t.itemCodes}] ${t.text}`);
     });

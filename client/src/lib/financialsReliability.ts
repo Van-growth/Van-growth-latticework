@@ -22,8 +22,8 @@ export function countFinancialsReliability(f: FinancialsV2): FinancialsReliabili
   let unknownCount = 0;
   for (const v of values) {
     if (!v) continue;
-    if (v.includes('(추정)')) estimatedCount++;
-    else if (isPlaceholder(v) || v === '확인 필요' || v === '공개 없음') unknownCount++;
+    if (v.includes('(추정)') || v.includes('(estimated)')) estimatedCount++;
+    else if (isPlaceholder(v) || v === '확인 필요' || v === '공개 없음' || v === 'Not disclosed') unknownCount++;
   }
   return { estimatedCount, unknownCount };
 }

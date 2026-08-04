@@ -91,7 +91,7 @@ function pickConcept(
 }
 
 function fmtUsd(val: number | null): string {
-  if (val == null) return '확인 필요';
+  if (val == null) return 'Not disclosed';
   const sign = val < 0 ? '-' : '';
   const abs  = Math.abs(val);
   return abs >= 1_000_000_000
@@ -105,8 +105,8 @@ function fmtUsd(val: number | null): string {
 // "확인 필요"(=파싱/조회 실패로 보임) 대신 "해당없음"으로 명시해 Claude가 오인하지 않게 한다.
 function fmtUsdField(val: number | null, series: (number | null)[]): string {
   if (val != null) return fmtUsd(val);
-  if (series.length > 0 && series.every(v => v == null)) return '해당없음(구조적 미보고)';
-  return '확인 필요';
+  if (series.length > 0 && series.every(v => v == null)) return 'Not applicable (not structurally reported)';
+  return 'Not disclosed';
 }
 
 async function processCompany(
@@ -203,27 +203,28 @@ async function processCompany(
 
   // Claude 프롬프트에서 읽을 수 있는 context_text도 같이 저장 (기존 financialContext.ts 호환)
   const lines = [
-    `=== SEC EDGAR 재무 데이터 (배치 프리컴퓨트) ===`,
-    `기업: ${data.entityName ?? ticker}  (CIK: CIK${cikPad}  ticker: ${ticker})`,
+    `=== SEC EDGAR financial data (batch precompute) ===`,
+    `Company: ${data.entityName ?? ticker}  (CIK: CIK${cikPad}  ticker: ${ticker})`,
     ``,
-    `[${fiscalYears[0]} 손익계산서]`,
+    `[${fiscalYears[0]} income statement]`,
     `· Revenue          ${fmtUsd(revenue[0])}  (EDGAR)`,
     `· Gross Profit     ${fmtUsdField(grossProfit[0], grossProfit)}  (EDGAR)`,
     `· Operating Income ${fmtUsdField(operatingIncome[0], operatingIncome)}  (EDGAR)`,
     `· Net Income       ${fmtUsd(netIncome[0])}  (EDGAR)`,
     ...(operatingIncome.every(v => v == null)
-      ? [`  (참고: 이 기업은 SEC 재무제표에 영업이익을 전 연도 별도 태깅하지 않음 — ` +
-         `지주회사/보험 등 복합 사업구조로 구조적 미보고 가능성. 데이터 조회 실패 아님 — ` +
-         `요약 KPI 등에서 "확인 필요" 대신 "해당없음"으로 표기할 것)`]
+      ? [`  (Note: this company never tags operating income in its SEC financial statements across ` +
+         `any year — likely a holding company, insurer, or other complex segment structure that ` +
+         `structurally doesn't report it. This isn't a lookup failure — label it "Not applicable" ` +
+         `instead of "Not disclosed" in summary KPIs etc.)`]
       : []),
     ``,
-    `[재무상태표]`,
+    `[Balance sheet]`,
     `· Cash             ${fmtUsdField(cash[0], cash)}  (EDGAR)`,
     `· Total Assets     ${fmtUsd(assets[0])}  (EDGAR)`,
     `· Total Liab.      ${fmtUsd(liabilities[0])}  (EDGAR)`,
     `· Stockholders Eq. ${fmtUsd(equity[0])}  (EDGAR)`,
     ``,
-    `[현금흐름]`,
+    `[Cash flow]`,
     `· Operating CF     ${fmtUsdField(operatingCF[0], operatingCF)}  (EDGAR)`,
     `· Investing CF     ${fmtUsdField(investingCF[0], investingCF)}  (EDGAR)`,
     `· Financing CF     ${fmtUsdField(financingCF[0], financingCF)}  (EDGAR)`,
@@ -233,7 +234,7 @@ async function processCompany(
     // "(추정)"을 붙이거나 아예 "확인 필요"로 반환함 — 실제로는 EDGAR 다년치 원본이 이미
     // 있는데 프롬프트에 1개년치만 실려서 벌어지는 문제(2026-08 MSFT 재무탭 빈약 사고 원인).
     // 전 계정과목을 연도별로 명시해 Claude가 추측하지 않도록 한다.
-    lines.push(``, `[다년도 손익·재무상태 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]`);
+    lines.push(``, `[Multi-year income statement / balance sheet trend — all official EDGAR figures, do not label "(estimated)"]`);
     fiscalYears.forEach((fy, i) => lines.push(
       `· ${fy}: Revenue ${fmtUsd(revenue[i])}` +
       `, Gross Profit ${fmtUsdField(grossProfit[i], grossProfit)}` +
@@ -245,7 +246,7 @@ async function processCompany(
       `, Cash ${fmtUsdField(cash[i], cash)}`,
     ));
   }
-  lines.push(`→ 재무 섹션에 이 수치들을 사용하고 (EDGAR) 출처를 명시하세요.`);
+  lines.push(`→ Use these figures in the financials section and cite the (EDGAR) source.`);
 
   const contextText = lines.join('\n');
   const expiresAt   = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();

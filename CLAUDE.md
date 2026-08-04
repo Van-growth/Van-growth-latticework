@@ -417,13 +417,37 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 국가 표시: 국기 이모지
 - 모바일 반응형 유지
 
-### 언어 정책
-- 기본값: 브라우저 언어 감지 (ko → KR, 그 외 → EN)
-- 우측 상단 EN/KR 토글로 변경 가능, localStorage에 저장
-- 분석 시 선택 언어로 Claude 프롬프트 분기
-- DB: analyses.language 컬럼으로 KR/EN 캐시 분리
-- KR 캐시 ≠ EN 캐시 (동일 기업이라도 언어별 별개 저장)
-- Claude 프롬프트에 언어 명시: "Generate all content in Korean/English"
+### 언어 정책 (2026-08 개정 — 다국어 토글 계획 취소, 영어 단일 고정)
+- 언어: 영어 단일 고정. 토글 없음. 모든 신규 분석은 영어로 생성.
+- (구) "브라우저 언어 감지 + EN/KR 토글 + analyses.language 컬럼으로 캐시 분리" 계획은 실제로는
+  한 번도 구현되지 않았음(DB에 language 컬럼 자체가 존재한 적 없음) — 실행 전에 계획 자체를 취소.
+- Claude 분석 프롬프트(`server/src/lib/claude.ts`의 SECTION_SYSTEM/SECTION_SCHEMAS 등 전체
+  스키마 프롬프트, gatherResearch1/2, founder/재무 리서치, growth_scenario_v2 내러티브,
+  `financialContext.ts`의 EDGAR 컨텍스트 빌더, `edgarBatchPrecompute.ts`의 context_text)를
+  전부 영어로 통일(2026-08). 톤은 미국 B2B 실무자(Sales/BD/Strategy) 어조 — leverage/GTM
+  motion/ICP/champion/buying committee/ACV 등 실무 용어 자연스럽게 사용, 투자자 언어(밸류에이션/
+  PER/ROE 단독 언급)는 계속 금지, McKinsey 리포트체 아닌 Gong/HubSpot/Salesforce 블로그 톤.
+- **DART는 이 개정에서 의도적으로 제외** — `buildDartContext`(financialContext.ts)는 한국어
+  라벨을 그대로 유지(기존 테스트용, 신규 개발 제외 원칙). DART 소스 기업도 SECTION_SYSTEM이
+  전역으로 영어 출력을 지시하므로 최종 산출물(summary_v2 등)은 영어로 나가지만, DART 컨텍스트
+  자체(매출액/영업이익 등 라벨)는 한국어로 Claude에게 전달됨 — 문제 없이 동작 확인함(Claude가
+  한국어 인풋을 읽고 영어로 요약).
+- **플레이스홀더/추정 마커도 영어로 변경**: "확인 필요"→"Not disclosed", "해당없음"→"Not
+  applicable", "(추정)"→"(estimated)", financials_v2.income_statement/balance_sheet의 item
+  라벨(매출→Revenue, 영업이익→Operating Income 등), summary_v2.trigger_events.type(투자유치→
+  Funding, 유상증자→Equity Offering, 대규모딜→Major Deal). 이 마커들은 클라이언트가 배지/볼드
+  스타일링을 위해 문자열로 매칭하는 값이라(`AnalysisCard.tsx`의 DataValue/isNoData/isUnknown/
+  IS_BOLD_ITEMS, `financialsReliability.ts`, `AnalysisPdf.tsx`) 프롬프트만 바꾸면 신규 영어
+  분석의 배지가 안 뜨는 회귀가 생김 — 클라이언트 쪽은 기존 한국어 마커 옆에 영어 마커를
+  **추가**하는 방식(OR 매칭)으로 갱신, 기존 한국어 캐시 레코드는 변환하지 않고 그대로 두되
+  계속 정상 렌더링되도록 함.
+- 기존 한국어로 저장된 analyses 레코드는 삭제/변환하지 않음 — 신규 분석·강제 재분석 요청부터만
+  영어로 생성됨(캐시 자연 교체). 캐시 없이 저장된 남은 항목의 마이그레이션 계획은 없음.
+- 검증(2026-08): TSLA·Adobe로 `analyzeCompany()` 직접 호출(HTTP 인증 레이어는 실 구글 로그인
+  세션이 필요해 이 환경에서 자동화 불가 — 코드는 동일 파이프라인이라 우회 검증으로 충분히 신뢰
+  가능) → 전체 결과 JSON에 한글 문자 0건 확인. TSLA는 재무 캐시가 갱신 전 상태(구 한국어 라벨)였
+  는데도 최종 출력은 깨끗한 영어로 나옴 — SECTION_SYSTEM 지시가 구식 한국어 컨텍스트를 덮어씀을
+  실측 확인.
 
 ### 브랜딩
 - 제품명: 1min (Latticework는 내부 코드명)
@@ -655,7 +679,6 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### 🟢 3순위 (GTM)
 - [ ] Framer 랜딩페이지
-- [ ] 영문화 (EN/KR 토글)
 - [ ] Reddit 포스팅 (r/sales, r/BusinessDevelopment, r/startups)
 - [ ] Crisp 라이브 채팅
 - [ ] Stripe 결제 연동
@@ -1304,5 +1327,6 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
 | v2.1.1 | 2026-07-16 — companies/company_listings 스키마 분리(지연 생성), 검색-캐시 조회
   흐름(typeahead + 서버사이드 캐시 조건부 렌더링), 다중상장 재무 우선순위(EDGAR>DART),
   다중상장 대응(SK하이닉스 등) |
-| v2.2.0 | 영문화 (언어 토글 EN/KR) |
+| v2.2.0 | 2026-08 — 영어 단일화 1단계: Claude 분석 프롬프트 전체 영어 고정(EN/KR 토글 계획은 취소,
+  DART 컨텍스트만 예외적으로 한국어 유지). 상세는 위 "언어 정책" 섹션 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

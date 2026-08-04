@@ -459,7 +459,7 @@ const s = StyleSheet.create({
 function pdfVal(v: string | number | null | undefined): string {
   if (v == null) return '—';
   const s = String(v).trim();
-  if (!s || s === '-' || s === '확인 필요' || s === '공개 없음') return '—';
+  if (!s || s === '-' || s === '확인 필요' || s === '공개 없음' || s === 'Not disclosed') return '—';
   if (/^-999([.,]\d+)?([%\s]|$)/.test(s)) return '—';
   return s;
 }

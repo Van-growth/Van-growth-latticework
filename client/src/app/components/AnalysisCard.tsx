@@ -124,20 +124,23 @@ function DataValue({ text, className = '' }: { text: string | null | undefined; 
   if (isPlaceholder(str)) {
     return <span className={`text-gray-400 ${className}`}>—</span>;
   }
-  if (str === '확인 필요' || str === '공개 없음') {
+  if (str === '확인 필요' || str === '공개 없음' || str === 'Not disclosed') {
     return <span className={`text-gray-400 italic ${className}`}>{str}</span>;
   }
-  // "해당없음" — 조회 실패("확인 필요")가 아니라 애초에 존재하지 않는 데이터. 지표 자체가
-  // 구조상 미보고(예: 지주회사·보험사의 영업이익)이거나, 그 연도의 재무제표 자체가 원천 공시에
-  // 없는 경우(예: 설립/상장 이전 연도) 둘 다 포함. 기울임 없이 구분 표시.
-  if (str === '해당없음') {
+  // "해당없음"/"Not applicable" — 조회 실패("확인 필요"/"Not disclosed")가 아니라 애초에 존재하지
+  // 않는 데이터. 지표 자체가 구조상 미보고(예: 지주회사·보험사의 영업이익)이거나, 그 연도의
+  // 재무제표 자체가 원천 공시에 없는 경우(예: 설립/상장 이전 연도) 둘 다 포함. 기울임 없이 구분
+  // 표시. 2026-08 프롬프트 영어 단일화 이후 신규 분석은 영어 마커, 기존 캐시는 한국어 마커를
+  // 그대로 유지하므로 둘 다 매칭한다.
+  if (str === '해당없음' || str === 'Not applicable') {
     return <span className={`text-gray-400 ${className}`} title="이 지표 또는 연도의 데이터가 원천 공시에 존재하지 않음">{str}</span>;
   }
-  if (str.includes('(추정)')) {
-    const idx = str.indexOf('(추정)');
+  const estimateMarker = str.includes('(estimated)') ? '(estimated)' : str.includes('(추정)') ? '(추정)' : null;
+  if (estimateMarker) {
+    const idx = str.indexOf(estimateMarker);
     return (
       <span className={className}>
-        {str.slice(0, idx)}<span className="text-amber-500">(추정)</span>{str.slice(idx + 4)}
+        {str.slice(0, idx)}<span className="text-amber-500">{estimateMarker}</span>{str.slice(idx + estimateMarker.length)}
       </span>
     );
   }
@@ -163,7 +166,7 @@ function FinancialValue({ text, dataSource }: { text: string | null | undefined;
   const tagIsDart  = !tagIsEdgar && tag.includes('DART');
   // 데이터가 없는 셀("확인 필요" 등 placeholder)에는 탭 레벨 dataSource로 폴백하지 않음 —
   // 값이 없는데 공식 출처 배지가 붙으면 실제로 확인된 값처럼 오인됨
-  const isNoData = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || isPlaceholder(cleaned);
+  const isNoData = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || cleaned === 'Not disclosed' || cleaned === 'Not applicable' || isPlaceholder(cleaned);
   // If value has no explicit tag, fall back to the tab-level dataSource
   const isEdgar = tagIsEdgar || (!match && !isNoData && dataSource === 'edgar');
   const isDart  = tagIsDart  || (!match && !isNoData && dataSource === 'dart');
@@ -183,7 +186,7 @@ function FinancialValue({ text, dataSource }: { text: string | null | undefined;
 
 function MetricCard({ value, label, trend }: { value: string; label: string; trend?: 'up' | 'down' | 'flat' }) {
   const cleaned = cleanMetricValue(value);
-  const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || isPlaceholder(cleaned);
+  const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || cleaned === 'Not disclosed' || cleaned === 'Not applicable' || isPlaceholder(cleaned);
   const displayValue = isPlaceholder(cleaned) ? '—' : cleaned;
   const trendEl = trend === 'up'
     ? <span className="text-green-500 text-sm font-bold ml-1 leading-none shrink-0">▲</span>
@@ -1820,7 +1823,9 @@ function VirtualTable({
 const IS_COLS_V2: Array<keyof Omit<FinancialsV2Row, 'item' | 'yoy'>> =
   ['fy2021', 'fy2022', 'fy2023', 'fy2024', 'fy2025'];
 
-const IS_BOLD_ITEMS = ['매출', '영업이익', '순이익'];
+// 2026-08 프롬프트 영어 단일화 이후 신규 분석은 영어 item 라벨, 기존 캐시는 한국어 라벨을
+// 그대로 유지하므로 둘 다 매칭한다.
+const IS_BOLD_ITEMS = ['매출', '영업이익', '순이익', 'Revenue', 'Operating Income', 'Net Income'];
 
 // YoY 값 정규화 — ▲/▼로 시작하지 않는 값(확인 필요%, 확인 필요% YoY 등)은 em dash로 표시
 function normalizeYoy(v: string | undefined): string {
@@ -1970,7 +1975,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                   </>
                 }
                 renderRow={(row: FinancialsV2Row) => {
-                  const isBold = ['총자산', '총부채', '자본총계'].includes(row.item);
+                  const isBold = ['총자산', '총부채', '자본총계', 'Total Assets', 'Total Liabilities', 'Total Equity'].includes(row.item);
                   return (
                     <>
                       <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
