@@ -134,6 +134,14 @@ async function processCompany(
   );
   const niData   = pickConcept(g, 'NetIncomeLoss', 'ProfitLoss');
   const oiData   = pickConcept(g, 'OperatingIncomeLoss');
+  // GrossProfit/Cash — server/src/lib/edgar.ts의 pickConceptSeries에는 이미 있던 후보인데
+  // 이 배치 스크립트(별도 실행 컨텍스트라 로직이 복제돼 있음)엔 통째로 빠져있었음(2026-08
+  // 발견 — MSFT 등 EDGAR 전체 기업의 매출총이익/현금성자산이 항상 "확인 필요"로 비던 원인).
+  const gpData   = pickConcept(g, 'GrossProfit');
+  const cashData = pickConcept(g,
+    'CashAndCashEquivalentsAtCarryingValue',
+    'CashCashEquivalentsAndShortTermInvestments',
+  );
   const aData    = pickConcept(g, 'Assets');
   const lData    = pickConcept(g, 'Liabilities');
   const eqData   = pickConcept(g,
@@ -161,11 +169,13 @@ async function processCompany(
   };
 
   const revenue         = align(revData);
+  const grossProfit     = align(gpData);
   const netIncome       = align(niData);
   const operatingIncome = align(oiData);
   const assets          = align(aData);
   const liabilities     = align(lData);
   const equity          = align(eqData);
+  const cash            = align(cashData);
   const eps             = align(epsData);
   const operatingCF     = align(opCFData);
   const investingCF     = align(invCFData);
@@ -175,11 +185,13 @@ async function processCompany(
     ticker,
     cik: `CIK${cikPad}`,
     revenue,
+    grossProfit,
     netIncome,
     operatingIncome,
     assets,
     liabilities,
     equity,
+    cash,
     eps,
     operatingCF,
     investingCF,
@@ -196,6 +208,7 @@ async function processCompany(
     ``,
     `[${fiscalYears[0]} 손익계산서]`,
     `· Revenue          ${fmtUsd(revenue[0])}  (EDGAR)`,
+    `· Gross Profit     ${fmtUsdField(grossProfit[0], grossProfit)}  (EDGAR)`,
     `· Operating Income ${fmtUsdField(operatingIncome[0], operatingIncome)}  (EDGAR)`,
     `· Net Income       ${fmtUsd(netIncome[0])}  (EDGAR)`,
     ...(operatingIncome.every(v => v == null)
@@ -205,6 +218,7 @@ async function processCompany(
       : []),
     ``,
     `[재무상태표]`,
+    `· Cash             ${fmtUsdField(cash[0], cash)}  (EDGAR)`,
     `· Total Assets     ${fmtUsd(assets[0])}  (EDGAR)`,
     `· Total Liab.      ${fmtUsd(liabilities[0])}  (EDGAR)`,
     `· Stockholders Eq. ${fmtUsd(equity[0])}  (EDGAR)`,
@@ -215,8 +229,21 @@ async function processCompany(
     `· Financing CF     ${fmtUsdField(financingCF[0], financingCF)}  (EDGAR)`,
   ];
   if (fiscalYears.length > 1) {
-    lines.push(``, `[다년도 매출 추이]`);
-    fiscalYears.forEach((fy, i) => lines.push(`· ${fy}: ${fmtUsd(revenue[i])}`));
+    // 매출만 다년도로 주면 Claude가 나머지 계정과목의 과거 연도는 일반 지식으로 추측해
+    // "(추정)"을 붙이거나 아예 "확인 필요"로 반환함 — 실제로는 EDGAR 다년치 원본이 이미
+    // 있는데 프롬프트에 1개년치만 실려서 벌어지는 문제(2026-08 MSFT 재무탭 빈약 사고 원인).
+    // 전 계정과목을 연도별로 명시해 Claude가 추측하지 않도록 한다.
+    lines.push(``, `[다년도 손익·재무상태 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]`);
+    fiscalYears.forEach((fy, i) => lines.push(
+      `· ${fy}: Revenue ${fmtUsd(revenue[i])}` +
+      `, Gross Profit ${fmtUsdField(grossProfit[i], grossProfit)}` +
+      `, Operating Inc. ${fmtUsdField(operatingIncome[i], operatingIncome)}` +
+      `, Net Income ${fmtUsd(netIncome[i])}` +
+      `, Total Assets ${fmtUsd(assets[i])}` +
+      `, Total Liab. ${fmtUsd(liabilities[i])}` +
+      `, Equity ${fmtUsd(equity[i])}` +
+      `, Cash ${fmtUsdField(cash[i], cash)}`,
+    ));
   }
   lines.push(`→ 재무 섹션에 이 수치들을 사용하고 (EDGAR) 출처를 명시하세요.`);
 

@@ -204,20 +204,30 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
 
   if (e.rawSeries) {
     if (e.rawSeries.fiscalYears.length > 1) {
-      // 매출만 다년도로 주면 Claude가 영업이익/순이익의 과거 연도는 추세로 추측해 "(추정)"을
-      // 붙이게 됨 — 실제 EDGAR 수치인데 추정으로 오분류되는 원인. 세 지표 모두 연도별로 명시.
-      const oiAbsent = e.rawSeries.operatingIncome.every(v => v == null);
-      const niAbsent = e.rawSeries.netIncome.every(v => v == null);
+      // 매출만 다년도로 주면 Claude가 나머지 계정과목의 과거 연도는 추세로 추측해 "(추정)"을
+      // 붙이거나 "확인 필요"로 반환함 — 실제 EDGAR 다년치 원본은 이미 있는데 프롬프트엔
+      // 최근 1개년치만 실려서 벌어지는 문제(2026-08 MSFT 재무탭 빈약 사고 원인 — 이 문제는
+      // 배치 프리컴퓨트(edgarBatchPrecompute.ts) 쪽이 원본이었지만, 라이브 조회 경로도
+      // 매출/영업이익/순이익만 다년도였고 매출총이익/총자산/총부채/자본총계/현금은 최근
+      // 1개년치뿐이라 동일 클래스 문제라 함께 확장). 전 계정과목을 연도별로 명시.
+      const absent = (arr: (number | null)[]) => arr.every(v => v == null);
+      const oiAbsent = absent(e.rawSeries.operatingIncome);
+      const niAbsent = absent(e.rawSeries.netIncome);
+      const gpAbsent = absent(e.rawSeries.grossProfit);
+      const cashAbsent = absent(e.rawSeries.cash);
       const naLabel = (fieldAbsent: boolean) => fieldAbsent ? '해당없음' : '확인 필요';
-      lines.push('\n[다년도 손익 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]');
+      const fmt = (v: number | null, fieldAbsent: boolean) => v != null ? fmpUsd(v) : naLabel(fieldAbsent);
+      lines.push('\n[다년도 손익·재무상태 추이 — 전부 EDGAR 공식 수치, "(추정)" 표기 금지]');
       e.rawSeries.fiscalYears.forEach((fy, i) => {
-        const rev = e.rawSeries!.revenue[i];
-        const oi  = e.rawSeries!.operatingIncome[i];
-        const ni  = e.rawSeries!.netIncome[i];
         lines.push(
-          `· ${fy}: Revenue ${rev != null ? fmpUsd(rev) : '확인 필요'}` +
-          `, Operating Inc. ${oi != null ? fmpUsd(oi) : naLabel(oiAbsent)}` +
-          `, Net Income ${ni != null ? fmpUsd(ni) : naLabel(niAbsent)}`
+          `· ${fy}: Revenue ${fmt(e.rawSeries!.revenue[i], false)}` +
+          `, Gross Profit ${fmt(e.rawSeries!.grossProfit[i], gpAbsent)}` +
+          `, Operating Inc. ${fmt(e.rawSeries!.operatingIncome[i], oiAbsent)}` +
+          `, Net Income ${fmt(e.rawSeries!.netIncome[i], niAbsent)}` +
+          `, Total Assets ${fmt(e.rawSeries!.assets[i], false)}` +
+          `, Total Liab. ${fmt(e.rawSeries!.liabilities[i], false)}` +
+          `, Equity ${fmt(e.rawSeries!.equity[i], false)}` +
+          `, Cash ${fmt(e.rawSeries!.cash[i], cashAbsent)}`,
         );
       });
     }

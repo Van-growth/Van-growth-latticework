@@ -173,6 +173,12 @@ export default function HomeContent() {
 
   const loadedIdRef = useRef<string | null>(null);
   const streamingRef = useRef<AnalysisDetail | null>(null);
+  // 배치1 완료 시점에 SSE로 받는 analysisId — 스트림 연결이 끊겨도 이 값만 있으면
+  // GET /api/analyses/:id 폴링으로 진행 상황을 이어볼 수 있다(배치별 즉시 DB 저장 재사용).
+  const analysisIdRef = useRef<string | null>(null);
+  // 'done' 처리(정상 스트림 또는 폴링/포그라운드 복귀 캐치업 중 어느 경로로든)가
+  // 한 번 끝났음을 표시 — 중복 완료 처리 및 이미 끝난 뒤의 불필요한 폴링을 막는다.
+  const analysisDoneRef = useRef(false);
 
   async function refreshUsage() {
     // 무료 분석 카운트는 로그인 유저 기준으로만 동작 — 비로그인 상태면 조회 자체를 스킵.
@@ -216,6 +222,25 @@ export default function HomeContent() {
       setShareToken(result.share_token ?? null);
     }
   }, [result]);
+
+  // 모바일 백그라운드 복귀 시 진행 중인 분석 상태를 즉시 재조회 — iOS Safari 등 모바일
+  // 브라우저는 백그라운드 전환 시 fetch 스트림을 명시적 에러 없이 그냥 멈춰버리는 경우가
+  // 있어(연결이 끊겼다는 신호 자체가 안 옴), 에러/타임아웃을 기다리는 대신 포그라운드
+  // 복귀 이벤트를 감지해 능동적으로 한 번 캐치업한다.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      if (!loading || analysisDoneRef.current) return;
+      const id = analysisIdRef.current;
+      if (!id) return;
+      fetchAndMergeStatus(id, companyName.trim()).catch(() => {
+        // 캐치업 실패는 조용히 무시 — 원래 스트림이나 이후 폴링이 계속 시도한다
+      });
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -302,28 +327,111 @@ export default function HomeContent() {
   };
 
   async function handleReanalyzeTab(tab: string) {
-    if (!result?.id) return;
+    // result(전체 스트림의 최종 'done' 이벤트에서만 채워짐) 대신 analysisIdRef를 우선 사용 —
+    // 배치1 완료 시점부터 이미 채워져 있어, 스트리밍 도중(아직 result가 null인 상태)에
+    // 산업역사/기술변화 탭을 열어 온디맨드 생성이 트리거돼도 여기서 조용히 no-op되지 않는다.
+    // 예전엔 result?.id로만 체크해서, 스트리밍 중 자동생성이 씹히면 AnalysisCard의
+    // autoGenTriggered ref가 이미 "시도함"으로 기록돼버려 새로고침 전까진 영구히 재시도가
+    // 안 됐다(체크마크가 잘못된 배치 번호로 일찍 ✓ 떠서 유저가 스트리밍 중에 클릭하기 쉬웠던
+    // 것과 맞물린 버그 — AnalysisCard.tsx hasTabData 수정과 짝을 이루는 수정).
+    const targetId = analysisIdRef.current ?? result?.id;
+    const targetName = result?.companyName || companyName.trim();
+    if (!targetId || !targetName) return;
     if (!session) { signInWithGoogle(); return; }
     setReanalyzingTabs(prev => new Set([...prev, tab]));
     try {
-      const resp = await fetch(`${API_URL}/api/analyze/reanalyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(null, session.access_token) },
-        body: JSON.stringify({ analysisId: result.id, companyName: result.companyName, section: tab }),
-      });
-      if (!resp.ok) throw new Error(`${resp.status}`);
-      const { data } = await resp.json();
+      // 생성 실패(웹서치 일시 오류 등) 시 한 번만 재시도 — 그래도 실패하면 기존 수동
+      // "↻ 다시 분석" 버튼으로 유저가 다시 시도할 수 있다(이 함수를 그대로 재호출하는 별도 경로).
+      let data: unknown = null;
+      for (let attempt = 0; attempt < 2 && !data; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+        const resp = await fetch(`${API_URL}/api/analyze/reanalyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(null, session.access_token) },
+          body: JSON.stringify({ analysisId: targetId, companyName: targetName, section: tab }),
+        });
+        if (resp.ok) {
+          ({ data } = await resp.json());
+        }
+      }
       const field = REANALYZE_FIELD[tab];
       if (field && data) {
-        const updated = { ...result, [field]: data };
-        setResult(updated);
-        setAnalysisData(updated);
-        setDisplayData(updated);
+        // 스트리밍 도중이면 result가 아직 null일 수 있음 — streamingRef/displayData에 먼저
+        // 반영해 즉시 화면에 뜨게 하고, result가 이미 있으면(스트리밍 종료 후) 그것도 갱신.
+        streamingRef.current = { ...(streamingRef.current ?? emptyBase(targetName)), [field]: data };
+        setDisplayData({ ...streamingRef.current });
+        if (result) {
+          const updated = { ...result, [field]: data };
+          setResult(updated);
+          setAnalysisData(updated);
+        }
       }
     } catch (err) {
       console.error('[reanalyze]', tab, err);
     } finally {
       setReanalyzingTabs(prev => { const s = new Set(prev); s.delete(tab); return s; });
+    }
+  }
+
+  // 배치별로 즉시 DB 저장되는 기존 구조를 그대로 활용 — 이미 있는 GET /api/analyses/:id로
+  // 현재까지 완료된 배치를 가져와 화면 상태에 병합한다. 완료 여부(b1~b5 모두 참)를 반환.
+  async function fetchAndMergeStatus(analysisId: string, name: string): Promise<boolean> {
+    const clientId = getClientId();
+    const res = await fetch(`${API_URL}/api/analyses/${analysisId}`, {
+      headers: buildAuthHeaders(clientId, session?.access_token),
+    });
+    if (!res.ok) return false;
+    const data = await res.json() as AnalysisDetail;
+
+    streamingRef.current = { ...(streamingRef.current ?? emptyBase(name)), ...data };
+    setDisplayData({ ...streamingRef.current });
+
+    const b1 = !!data.summary_v2;
+    const b2 = !!(data.business_model_v2 && data.competitors_v2);
+    const b3 = !!(data.value_chain_v2 && data.strategy_v2);
+    const b4 = !!data.financials_v2;
+    const b5 = !!data.founder_v2;
+    const allDone = b1 && b2 && b3 && b4 && b5;
+
+    const next = new Set<number>([-1]);
+    if (b1) next.add(1);
+    if (b2) next.add(2);
+    if (b3) next.add(3);
+    if (b4) { next.add(4); next.add(40); }
+    if (b5) next.add(5);
+    if (data.growth_scenario_v2) next.add(6);
+    setCompletedBatches(prev => new Set([...prev, ...next]));
+    setProgress({ completed: [b1, b2, b3, b4, b5].filter(Boolean).length, total: 5 });
+
+    if (allDone && !analysisDoneRef.current) {
+      analysisDoneRef.current = true;
+      setIsCached(false);
+      loadedIdRef.current = data.id;
+      setResult(data);
+      setAnalysisData(data);
+      setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40]));
+      if (data.id) router.replace(`/?id=${data.id}`);
+      refreshUsage();
+    }
+    return allDone;
+  }
+
+  // SSE 연결이 끊긴 뒤(모바일 백그라운드 전환/네트워크 전환 등) 서버는 배치 처리를 계속
+  // 진행하므로, 에러로 끝내는 대신 3~5초 간격으로 상태를 다시 조회해 이어본다.
+  // 최대 5분까지만 재시도 — 그래도 안 끝나면 그때는 실제 에러로 표시.
+  async function pollUntilDone(analysisId: string, name: string) {
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (!analysisDoneRef.current && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const done = await fetchAndMergeStatus(analysisId, name);
+        if (done) return;
+      } catch {
+        // 아직 네트워크가 불안정 — 다음 라운드에서 재시도
+      }
+    }
+    if (!analysisDoneRef.current) {
+      setError('연결이 불안정해 분석 완료를 확인하지 못했어요. 잠시 후 히스토리에서 다시 확인해주세요.');
     }
   }
 
@@ -341,6 +449,8 @@ export default function HomeContent() {
     setResolveResult(null);
     setCompletedBatches(new Set([-1])); // sentinel: streaming started, no batch done yet → all tabs show skeleton
     streamingRef.current = null;
+    analysisIdRef.current = null;
+    analysisDoneRef.current = false;
 
     try {
       const clientId = getClientId();
@@ -405,6 +515,7 @@ export default function HomeContent() {
             } else if (eventType === 'batch') {
               const batchNum = payload.batch as number;
               const batchData = payload.data as Partial<AnalysisDetail>;
+              if (payload.analysisId) analysisIdRef.current = payload.analysisId as string;
               if (!streamingRef.current) {
                 streamingRef.current = Object.assign(emptyBase(name), batchData);
               } else {
@@ -419,14 +530,25 @@ export default function HomeContent() {
 
             } else if (eventType === 'done') {
               const normalized = normalizeResponse(payload as AnalyzeResponse);
+              // industry_history_v2/tech_evolution_v2는 온디맨드라 서버의 analyzeCompany()
+              // 자체는 이 값을 모르고 항상 null로 채워 보낸다 — 스트리밍 도중 유저가 그 탭을
+              // 열어 별도 /api/analyze/reanalyze 호출로 이미 받아둔 데이터가 있다면(streamingRef
+              // 에 반영돼 있음), 최종 'done' 페이로드의 null로 덮어써서 사라지는 걸 막는다.
+              const merged: AnalysisDetail = {
+                ...normalized,
+                industry_history_v2: normalized.industry_history_v2 ?? streamingRef.current?.industry_history_v2 ?? undefined,
+                tech_evolution_v2:   normalized.tech_evolution_v2   ?? streamingRef.current?.tech_evolution_v2   ?? undefined,
+              };
+              analysisDoneRef.current = true;
               setIsCached(payload.cached === true);
-              loadedIdRef.current = normalized.id;
-              setResult(normalized);
-              setAnalysisData(normalized);
+              loadedIdRef.current = merged.id;
+              setResult(merged);
+              setAnalysisData(merged);
+              streamingRef.current = merged;
               setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
-              if (normalized.id) router.replace(`/?id=${normalized.id}`);
+              if (merged.id) router.replace(`/?id=${merged.id}`);
               refreshUsage();
-              trackEvent('report_generated', { companyName: normalized.companyName, cached: payload.cached === true });
+              trackEvent('report_generated', { companyName: merged.companyName, cached: payload.cached === true });
 
             } else if (eventType === 'error') {
               setError(payload.message || '분석 중 오류가 발생했습니다.');
@@ -436,8 +558,17 @@ export default function HomeContent() {
           }
         }
       }
-    } catch {
-      setError('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
+    } catch (err) {
+      // 모바일 백그라운드 전환/네트워크 전환 등으로 연결이 끊긴 경우 — 서버는 배치별로
+      // 이미 DB에 저장하며 계속 진행 중이므로, analysisId를 안다면(배치1 이상 완료됨)
+      // 즉시 에러 대신 상태 폴링으로 이어본다. analysisId를 아예 모르면(배치1 이전에
+      // 끊김) 이어볼 방법이 없어 기존처럼 에러 처리.
+      console.error('[analyze/stream] connection lost', err);
+      if (!analysisDoneRef.current && analysisIdRef.current) {
+        await pollUntilDone(analysisIdRef.current, name);
+      } else if (!analysisDoneRef.current) {
+        setError('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
+      }
     } finally {
       setLoading(false);
       setProgress(null);

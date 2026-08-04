@@ -2397,11 +2397,15 @@ function CardsSkeleton({ count = 3 }: { count?: number }) {
 
 // 온디맨드 섹션 생성 중 표시 — 배치 스트리밍 스켈레톤(TimelineSkeleton 등)과 달리
 // "지금 이 요청으로 생성 중"임을 명시적으로 알림 (financials 새로고침과 동일한 패턴).
+// 예상 소요시간 안내 — 웹서치 2회 + Claude 생성이 포함돼 실제로 90~106초(3개 기업 실측
+// 평균 industry_history 103s/tech_evolution 95s) 걸림. 안내 없이 스피너만 있으면 실패한
+// 것처럼 보여 "로딩만 계속 돈다"는 오인으로 이어지기 쉬움 — 진짜 버그는 아니었지만 UX상
+// 예상 시간을 명시해 체감 대기감을 줄인다.
 function SectionGenerating({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
       <RefreshCw size={20} className="animate-spin" />
-      <span className="text-sm">{label} 생성 중...</span>
+      <span className="text-sm">{label} 생성 중... (약 1~2분 소요)</span>
     </div>
   );
 }
@@ -2510,7 +2514,14 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="year" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis domain={['auto', 'auto']} tickFormatter={(v: number) => fmtGrowthRevenue(v, g.currency)} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={70} />
-              <Tooltip formatter={(value) => fmtGrowthRevenue(Number(value), g.currency)} />
+              {/* recharts Tooltip은 기본 itemSorter가 'name'이라 항목을 이름 알파벳/가나다순으로
+                  정렬한다 — "낙관적"(ㄴ) → "보수적"(ㅂ) → "예상"(ㅇ) 순으로 값 크기와 무관하게
+                  뒤죽박죽 표시되던 원인. 값(value) 내림차순으로 명시해 낙관(최댓값) → 예상(중간값)
+                  → 보수(최솟값) 순 — 차트에 그려지는 선의 상하 위치와 일치시킨다. */}
+              <Tooltip
+                formatter={(value) => fmtGrowthRevenue(Number(value), g.currency)}
+                itemSorter={(item) => -Number(item.value)}
+              />
               <Line type="monotone" dataKey="p90" stroke="#93c5fd" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3, fill: '#93c5fd' }} name={SCENARIO_LABEL.p90} />
               <Line type="monotone" dataKey="p50" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4, fill: '#2563eb' }} name={SCENARIO_LABEL.p50} />
               <Line type="monotone" dataKey="p10" stroke="#93c5fd" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3, fill: '#93c5fd' }} name={SCENARIO_LABEL.p10} />
@@ -2817,6 +2828,19 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
+// 콘텐츠 패널의 초기 스켈레톤(TimelineSkeleton/CardsSkeleton 등) 표시 여부 판정 전용
+// (아래 batchDone()에서만 사용). 탭 바 체크마크(✓)는 이 값을 안 쓰고 hasTabData()로
+// 판정한다 — 혼동 금지.
+//
+// industry_history/tech_evolution의 2/3은 실제 배치 번호가 아니다 — 이 두 섹션은
+// 온디맨드 전환(2026-07) 이후 어떤 배치로도 생성되지 않고 탭을 열 때 별도
+// /api/analyze/reanalyze 호출로 생성된다. 여기 적힌 2/3은 그 배치가 완료될 때까지
+// "아직 스트리밍 초반"이라고 보고 스켈레톤을 잠깐 보여주는 대략적인 타이머 용도일
+// 뿐 — 실제 데이터 도착이나 완료 순서와는 무관하다(진짜 도착 여부는 스켈레톤이 걷힌
+// 뒤 data.industry_history_v2/data.tech_evolution_v2 존재 여부로 별도 판정). 나머지
+// 탭(business_model/competitors/value_chain/strategy/financials/founder/
+// growth_scenario)은 실제로 그 배치가 해당 탭 데이터를 배달하므로 숫자가 그대로
+// 유효하다.
 const TAB_BATCH: Record<TabKey, number> = {
   summary:          1,
   industry_history: 2,
@@ -2829,6 +2853,26 @@ const TAB_BATCH: Record<TabKey, number> = {
   founder:          5,
   growth_scenario:  6,
 };
+
+// 탭 바 체크마크(✓) 전용 — TAB_BATCH(위 주석 참고, 스켈레톤 표시용일 뿐 실제 완료 순서와
+// 무관)와는 완전히 별개 판정 경로다. 체크마크는 반드시 "그 탭 데이터가 실제로
+// 존재하는가"만으로 판정한다 — 예전엔 TAB_BATCH를 재사용해서 industry_history/
+// tech_evolution 탭이 아직 생성되지도 않았는데 배치2/3 완료 즉시 ✓가 뜨는 버그가 있었다.
+function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV2 | undefined): boolean {
+  switch (key) {
+    case 'summary':          return !!data.summary_v2;
+    case 'industry_history': return !!data.industry_history_v2;
+    case 'tech_evolution':   return !!data.tech_evolution_v2;
+    case 'value_chain':      return !!data.value_chain_v2;
+    case 'business_model':   return !!data.business_model_v2;
+    case 'competitors':      return !!data.competitors_v2;
+    case 'strategy':         return !!data.strategy_v2;
+    case 'financials':       return !!financialsV2;
+    case 'founder':          return !!data.founder_v2;
+    case 'growth_scenario':  return !!data.growth_scenario_v2;
+    default:                 return false;
+  }
+}
 
 // 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
 const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
@@ -2885,6 +2929,16 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
 
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
+
+  // data.financials_v2는 스트리밍 도중 fin_preview(프리뷰) → batch4(확정본) 순으로 갱신되는데,
+  // useState 초기값은 마운트 시점 한 번만 캡처되고 이후 prop 변경엔 재동기화되지 않는 게
+  // 기본 React 동작이다 — 이 로컬 state를 그대로 두면 재무 탭이 프리뷰에 고착되거나(마운트
+  // 시점에 fin_preview가 이미 왔던 경우), fin_preview가 없는 기업은 batch4가 와도 계속
+  // undefined로 남는다(마운트 시점 값 그대로). prop이 갱신될 때마다 재동기화해서 반영한다 —
+  // handleRefreshFinancials의 수동 새로고침은 prop을 건드리지 않으므로 이 effect와 충돌 없음.
+  useEffect(() => {
+    setFinancialsV2Local(data.financials_v2);
+  }, [data.financials_v2]);
 
   const handleRefreshFinancials = useCallback(async () => {
     if (!session) { signInWithGoogle(); return; }
@@ -2955,7 +3009,9 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
           const active = tab === t.key;
           const isStreaming = completedBatches.has(-1);
           const batch1Done = completedBatches.has(1);
-          const tabDone = completedBatches.has(TAB_BATCH[t.key]);
+          // tabDone: 배치 번호가 아니라 해당 탭 데이터가 실제로 존재하는지로만 판정 —
+          // industry_history/tech_evolution은 온디맨드라 배치 번호 자체가 없다.
+          const tabDone = hasTabData(t.key, data, financialsV2Local);
           // waiting: streaming, batch1 not done, non-summary tab (batches haven't notified yet)
           const isWaiting    = isStreaming && !batch1Done && t.key !== 'summary';
           // in-progress: streaming, batch1 done (or is summary tab), this tab not done

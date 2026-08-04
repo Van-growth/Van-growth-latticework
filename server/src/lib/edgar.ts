@@ -73,11 +73,13 @@ export interface EdgarRawSeries {
   ticker: string | null;
   cik: string;
   revenue: (number | null)[];
+  grossProfit: (number | null)[];
   netIncome: (number | null)[];
   operatingIncome: (number | null)[];
   assets: (number | null)[];
   liabilities: (number | null)[];
   equity: (number | null)[];
+  cash: (number | null)[];
   eps: (number | null)[];
   operatingCF: (number | null)[];
   investingCF: (number | null)[];
@@ -412,11 +414,13 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
         ticker,
         cik: `CIK${cik}`,
         revenue: align(revData),
+        grossProfit: align(gpData),
         netIncome: align(niData),
         operatingIncome: align(oiData),
         assets: align(aData),
         liabilities: align(lData),
         equity: align(eqData),
+        cash: align(cashData),
         eps: align(epsData),
         operatingCF: align(opCFData),
         investingCF: align(invCFData),
