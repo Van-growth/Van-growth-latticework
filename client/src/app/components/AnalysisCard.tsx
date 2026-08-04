@@ -2405,7 +2405,7 @@ function SectionGenerating({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
       <RefreshCw size={20} className="animate-spin" />
-      <span className="text-sm">{label} 생성 중... (약 1~2분 소요)</span>
+      <span className="text-sm">{label} 생성 중... (최대 5분 정도 소요될 수 있어요)</span>
     </div>
   );
 }
