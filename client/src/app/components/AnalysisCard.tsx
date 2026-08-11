@@ -156,8 +156,6 @@ function cleanMetricValue(v: string): string {
 
 // 재무 수치 옆 "(EDGAR)"/"(DART)" 텍스트 → 컬러 점 치환
 const FINANCIAL_SOURCE_RE = /\s*\((EDGAR|DART|FMP|DART 공시|EDGAR 공시|SEC EDGAR)\)/gi;
-// 서사 텍스트 내 "[SEC EDGAR] …" 형식 앞 태그 제거
-const BRACKET_SOURCE_RE = /^\[(?:SEC EDGAR|DART 공시|EDGAR|DART)\]\s*/;
 
 function FinancialValue({ text, dataSource }: { text: string | null | undefined; dataSource?: DataSource }) {
   const str = text ?? '—';
@@ -359,6 +357,42 @@ function CitedText({ text, className = '' }: { text: string | null | undefined; 
         return <span key={i}>{part}</span>;
       })}
     </span>
+  );
+}
+
+// ── Bullet list (콘텐츠 포맷 원칙 — 종합 해석은 기본이 불릿, 문단은 예외) ────────────
+
+function BulletList({ items, dotCls = 'bg-gray-400', textCls = 'text-sm text-gray-700' }: {
+  items: string[] | undefined | null;
+  dotCls?: string;
+  textCls?: string;
+}) {
+  if (!items?.length) return null;
+  return (
+    <div className="space-y-1.5">
+      {items.map((item, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <span className={`mt-[6px] w-1.5 h-1.5 rounded-full shrink-0 ${dotCls}`} />
+          <CitedText text={item} className={`${textCls} leading-relaxed`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BulletCallout({ title, items, boxCls, titleCls, dotCls }: {
+  title: string;
+  items: string[] | undefined | null;
+  boxCls: string;
+  titleCls: string;
+  dotCls: string;
+}) {
+  if (!items?.length) return null;
+  return (
+    <div className={`rounded-xl p-4 ${boxCls}`}>
+      <div className={`text-[11px] font-semibold uppercase tracking-widest mb-2 ${titleCls}`}>{title}</div>
+      <BulletList items={items} dotCls={dotCls} />
+    </div>
   );
 }
 
@@ -572,22 +606,12 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
       )}
 
       {/* 성장 모멘텀 / 핵심 리스크 — 둘 다 없으면 섹션 자체 미노출 */}
-      {(s.bull_case || s.bear_case) && (
+      {(s.bull_case?.length || s.bear_case?.length) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {s.bull_case && (
-            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">성장 모멘텀</div>
-              <p className="text-sm text-gray-700 leading-relaxed">{s.bull_case}</p>
-            </div>
-          )}
-          {s.bear_case && (
-            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-widest text-red-500 mb-2">핵심 리스크</div>
-              <p className="text-sm text-gray-700 leading-relaxed">{s.bear_case}</p>
-            </div>
-          )}
+          <BulletCallout title="성장 모멘텀" items={s.bull_case} boxCls="bg-green-50 border border-green-100" titleCls="text-green-600" dotCls="bg-green-400" />
+          <BulletCallout title="핵심 리스크" items={s.bear_case} boxCls="bg-red-50 border border-red-100" titleCls="text-red-500" dotCls="bg-red-400" />
         </div>
-      )}
+      ) : null}
 
       {/* 최근 트리거 이벤트 — 이벤트 없으면 섹션 자체 미노출 */}
       {s.trigger_events && s.trigger_events.length > 0 && (
@@ -744,12 +768,7 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {h.why_durable && (
-          <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">지속 가능성</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{h.why_durable}</p>
-          </div>
-        )}
+        <BulletCallout title="지속 가능성" items={h.why_durable} boxCls="bg-green-50 border border-green-100" titleCls="text-green-600" dotCls="bg-green-400" />
         {h.chasm_points.length > 0 && (
           <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
             <div className="text-[11px] font-semibold uppercase tracking-widest text-orange-600 mb-2">캐즘 포인트</div>
@@ -779,16 +798,18 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
 
       {/* Above fold: current stage + next inflection */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {t.current_stage && (
+        {t.current_stage?.label && (
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
             <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600 mb-2">현재 단계</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{t.current_stage}</p>
+            <div className="text-sm font-semibold text-gray-800 mb-1">{t.current_stage.label}</div>
+            {t.current_stage.detail && <p className="text-xs text-gray-600 leading-relaxed">{t.current_stage.detail}</p>}
           </div>
         )}
-        {t.next_inflection && (
+        {t.next_inflection?.label && (
           <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
             <div className="text-[11px] font-semibold uppercase tracking-widest text-amber-600 mb-2">다음 변곡점</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{t.next_inflection}</p>
+            <div className="text-sm font-semibold text-gray-800 mb-1">{t.next_inflection.label}</div>
+            {t.next_inflection.detail && <p className="text-xs text-gray-600 leading-relaxed">{t.next_inflection.detail}</p>}
           </div>
         )}
       </div>
@@ -902,18 +923,8 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
       {/* Below fold: 가격 전가 메커니즘 + 분석 기업 포지션 */}
       <ShowMore label="포지션 상세 보기">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {vc.value_flow && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600 mb-2">가격 전가 메커니즘</div>
-              <p className="text-sm text-gray-700 leading-relaxed">{vc.value_flow}</p>
-            </div>
-          )}
-          {vc.subject_position && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-widest text-indigo-600 mb-2">분석 기업 포지션</div>
-              <p className="text-sm text-gray-700 leading-relaxed">{vc.subject_position}</p>
-            </div>
-          )}
+          <BulletCallout title="가격 전가 메커니즘" items={vc.value_flow} boxCls="bg-blue-50 border border-blue-100" titleCls="text-blue-600" dotCls="bg-blue-400" />
+          <BulletCallout title="분석 기업 포지션" items={vc.subject_position} boxCls="bg-indigo-50 border border-indigo-100" titleCls="text-indigo-600" dotCls="bg-indigo-400" />
         </div>
       </ShowMore>
 
@@ -1475,7 +1486,9 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
 
       <SectionCard title="업종 공통 Pain" dotColor="bg-amber-400">
         <div className="text-sm font-semibold text-gray-800 mb-1.5">{n.industry_pain.title}</div>
-        <CitedText text={n.industry_pain.description} className="text-sm text-gray-600 leading-relaxed block mb-2" />
+        <div className="mb-2">
+          <BulletList items={n.industry_pain.description} textCls="text-sm text-gray-600" dotCls="bg-amber-400" />
+        </div>
         {n.industry_pain.financial_impact_question && (
           <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-800 leading-relaxed">
             {n.industry_pain.financial_impact_question}
@@ -1574,7 +1587,7 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
         ))}
       </div>
 
-      {(s.strategy_coherence || s.ten_year_durability) && (
+      {(s.strategy_coherence || s.ten_year_durability?.length) ? (
         <ShowMore label="전략 수렴 · 지속가능성 보기">
           <div className="space-y-3 pb-1">
             {s.strategy_coherence && (
@@ -1583,15 +1596,10 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
                 <p className="text-sm text-gray-700 leading-relaxed">{s.strategy_coherence}</p>
               </div>
             )}
-            {s.ten_year_durability && (
-              <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-green-600 mb-2">10년 지속 가능성</div>
-                <p className="text-sm text-gray-700 leading-relaxed">{s.ten_year_durability}</p>
-              </div>
-            )}
+            <BulletCallout title="10년 지속 가능성" items={s.ten_year_durability} boxCls="bg-green-50 border border-green-100" titleCls="text-green-600" dotCls="bg-green-400" />
           </div>
         </ShowMore>
-      )}
+      ) : null}
 
       <div className="pt-2">
         <SourcesList sources={sources} />
@@ -1888,19 +1896,6 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
           서버가 이미 걸러서 넘김(sec_benchmark_comparison null이면 아예 렌더링 안 됨) */}
       {dataSource === 'edgar' && f.sec_benchmark_comparison && (
         <SecBenchmarkComparisonBlock comparison={f.sec_benchmark_comparison} />
-      )}
-
-      {/* Narrative */}
-      {f.narrative && (
-        <SectionCard title="재무 서사" dotColor="bg-emerald-400">
-          <div className="space-y-1.5">
-            {splitLines(f.narrative).map((l, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed">
-                <CitedText text={l.replace(BRACKET_SOURCE_RE, '')} />
-              </p>
-            ))}
-          </div>
-        </SectionCard>
       )}
 
       {/* Income statement */}
@@ -2611,8 +2606,8 @@ function summaryToMd(s: SummaryV2, sources: Source[] | undefined): string {
     s.key_markets.length ? `**주요 시장**\n${mdList(s.key_markets.map(m => `${m.country} — ${m.revenue_share}%`))}` : '',
     s.top_customers.length ? `**주요 고객사**: ${s.top_customers.join(', ')}` : '',
     cc && cc.top_n_share > 0 ? `상위 ${cc.top_n}개 고객이 매출 ${cc.top_n_share}% 차지${cc.trend === 'diversifying' ? ' (다변화 진행 중)' : cc.trend === 'concentrating' ? ' (집중도 심화)' : ''}` : '',
-    s.bull_case ? `**성장 모멘텀**: ${s.bull_case}` : '',
-    s.bear_case ? `**핵심 리스크**: ${s.bear_case}` : '',
+    s.bull_case?.length ? `**성장 모멘텀**\n${mdList(s.bull_case)}` : '',
+    s.bear_case?.length ? `**핵심 리스크**\n${mdList(s.bear_case)}` : '',
     s.trigger_events?.length ? `**최근 트리거 이벤트**\n${mdList(s.trigger_events.map(ev =>
       `${ev.date} [${ev.type}]${ev.amount ? ` ${ev.amount}` : ''}${ev.counterparty ? ` · ${ev.counterparty}` : ''} — ${ev.description}`
     ))}` : '',
@@ -2627,7 +2622,7 @@ function industryHistoryToMd(h: IndustryHistoryV2, sources: Source[] | undefined
     h.timeline.length ? `**타임라인**\n${mdList(h.timeline.map(t =>
       `${t.period} — ${t.title}: ${t.significance}${t.key_players.length ? ` (${t.key_players.join(', ')})` : ''}`
     ))}` : '',
-    h.why_durable ? `**지속 가능성**: ${h.why_durable}` : '',
+    h.why_durable?.length ? `**지속 가능성**\n${mdList(h.why_durable)}` : '',
     h.chasm_points.length ? `**캐즘 포인트**\n${mdList(h.chasm_points)}` : '',
     mdSourcesBlock(sources),
   ]);
@@ -2637,8 +2632,8 @@ function industryHistoryToMd(h: IndustryHistoryV2, sources: Source[] | undefined
 function techEvolutionToMd(t: TechEvolutionV2, sources: Source[] | undefined): string {
   const body = mdJoin([
     t.key_bullets?.length ? `**핵심 요약**\n${mdList(t.key_bullets)}` : '',
-    t.current_stage ? `**현재 단계**: ${t.current_stage}` : '',
-    t.next_inflection ? `**다음 변곡점**: ${t.next_inflection}` : '',
+    t.current_stage?.label ? `**현재 단계**: ${t.current_stage.label}${t.current_stage.detail ? ' — ' + t.current_stage.detail : ''}` : '',
+    t.next_inflection?.label ? `**다음 변곡점**: ${t.next_inflection.label}${t.next_inflection.detail ? ' — ' + t.next_inflection.detail : ''}` : '',
     t.stages.length ? `**단계별 흐름**\n${mdList(t.stages.map(s => `${s.period} — ${s.title}: ${s.description}`))}` : '',
     mdSourcesBlock(sources),
   ]);
@@ -2651,8 +2646,8 @@ function valueChainToMd(vc: ValueChainV2, sources: Source[] | undefined): string
     vc.layers.length ? `**밸류체인 레이어**\n${mdList(vc.layers.map(l =>
       `${l.name}${l.is_subject ? ' (분석 대상)' : ''}${l.buyer ? ' [구매자]' : l.pricing_power ? ` [가격결정력: ${l.pricing_power}]` : ''}${l.bottleneck ? ' [Bottleneck]' : ''} — ${l.description}`
     ))}` : '',
-    vc.value_flow ? `**가격 전가 메커니즘**: ${vc.value_flow}` : '',
-    vc.subject_position ? `**분석 기업 포지션**: ${vc.subject_position}` : '',
+    vc.value_flow?.length ? `**가격 전가 메커니즘**\n${mdList(vc.value_flow)}` : '',
+    vc.subject_position?.length ? `**분석 기업 포지션**\n${mdList(vc.subject_position)}` : '',
     mdSourcesBlock(sources),
   ]);
   return body ? `## 밸류체인\n\n${body}` : '';
@@ -2699,7 +2694,7 @@ function strategyToMd(st: StrategyV2, sources: Source[] | undefined): string {
     st.business.direction ? `**사업 전략**: ${st.business.direction}` : '',
     st.financial.direction ? `**재무 전략**: ${st.financial.direction}` : '',
     st.strategy_coherence ? `**전략 수렴**: ${st.strategy_coherence}` : '',
-    st.ten_year_durability ? `**10년 지속 가능성**: ${st.ten_year_durability}` : '',
+    st.ten_year_durability?.length ? `**10년 지속 가능성**\n${mdList(st.ten_year_durability)}` : '',
     mdSourcesBlock(sources),
   ]);
   return body ? `## 전략\n\n${body}` : '';
@@ -2710,7 +2705,6 @@ function financialsToMd(f: FinancialsV2, sources: Source[] | undefined): string 
   const bsRows = f.balance_sheet.filter(r => r.fy2023 || r.fy2024 || r.fy2025);
   const body = mdJoin([
     f.key_bullets?.length ? `**핵심 요약**\n${mdList(f.key_bullets)}` : '',
-    f.narrative ? `**재무 서사**: ${f.narrative}` : '',
     isRows.length ? `**손익계산서 (I/S)**\n| 항목 | FY2021 | FY2022 | FY2023 | FY2024 | FY2025 | YoY |\n|---|---|---|---|---|---|---|\n${
       isRows.map(r => `| ${r.item} | ${r.fy2021 ?? '—'} | ${r.fy2022 ?? '—'} | ${r.fy2023 ?? '—'} | ${r.fy2024 ?? '—'} | ${r.fy2025 ?? '—'} | ${r.yoy ?? '—'} |`).join('\n')
     }` : '',

@@ -184,8 +184,8 @@ export interface SummaryV2 {
     source_index: number;
   }[];
   key_bullets: string[];
-  bull_case: string;
-  bear_case: string;
+  bull_case: string[];
+  bear_case: string[];
   oneLiner: string;
   sources?: Source[];
 }
@@ -200,7 +200,7 @@ export interface IndustryHistoryV2 {
     key_players: string[];
     significance: string;
   }[];
-  why_durable: string;
+  why_durable: string[];
   chasm_points: string[];
   key_bullets?: string[];
   sources?: Source[];
@@ -217,8 +217,8 @@ export interface TechEvolutionV2 {
     key_enablers: string[];
     key_players: string[];
   }[];
-  current_stage: string;
-  next_inflection: string;
+  current_stage: { label: string; detail: string };
+  next_inflection: { label: string; detail: string };
   key_bullets?: string[];
   sources?: Source[];
 }
@@ -242,8 +242,8 @@ export interface ValueChainLayer {
 export interface ValueChainV2 {
   industry: string;
   layers: ValueChainLayer[];
-  value_flow: string;
-  subject_position: string;
+  value_flow: string[];
+  subject_position: string[];
   key_bullets?: string[];
   sources?: Source[];
 }
@@ -325,7 +325,7 @@ export interface CompetitorsV2 {
 export interface CrossIndustryNudgeV1 {
   industry_pain: {
     title: string;
-    description: string;
+    description: string[];
     financial_impact_question: string;
   };
   cross_industry_example: {
@@ -357,7 +357,7 @@ export interface StrategyV2 {
     return_target: string;
   };
   strategy_coherence: string;
-  ten_year_durability: string;
+  ten_year_durability: string[];
   key_bullets?: string[];
   sources?: Source[];
 }
@@ -380,7 +380,6 @@ export interface FinancialsV2BSRow {
 }
 
 export interface FinancialsV2 {
-  narrative: string;
   income_statement: FinancialsV2Row[];
   balance_sheet: FinancialsV2BSRow[];
   cash_flow: {

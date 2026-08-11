@@ -501,6 +501,16 @@ function FieldRow({ label, value }: { label: string; value: string | number | nu
   );
 }
 
+function LabelDetailField({ label, item }: { label: string; item: { label: string; detail: string } | undefined | null }) {
+  if (!item?.label) return null;
+  return (
+    <View style={{ marginBottom: 4 }}>
+      <Text style={s.cardTitle}>{label}: {sp(item.label)}</Text>
+      {item.detail && <Text style={s.cardText}>{sp(item.detail)}</Text>}
+    </View>
+  );
+}
+
 function SubHeader({ children }: { children: string }) {
   return <Text style={s.subHeader}>{children}</Text>;
 }
@@ -749,16 +759,16 @@ function SummarySection({ v }: { v: SummaryV2 }) {
 
       {/* 성장 모멘텀 / 핵심 리스크 */}
       <View style={s.grid2}>
-        {v.bull_case && (
+        {v.bull_case?.length > 0 && (
           <View style={[s.gridLeft, s.card, { borderLeftColor: C.green }]}>
             <Text style={s.cardTitle}>성장 모멘텀</Text>
-            <Text style={s.cardText}>{v.bull_case}</Text>
+            {v.bull_case.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
           </View>
         )}
-        {v.bear_case && (
+        {v.bear_case?.length > 0 && (
           <View style={[s.gridRight, s.card, { borderLeftColor: C.red }]}>
             <Text style={s.cardTitle}>핵심 리스크</Text>
-            <Text style={s.cardText}>{v.bear_case}</Text>
+            {v.bear_case.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
           </View>
         )}
       </View>
@@ -775,10 +785,10 @@ function IndustryHistorySection({ v }: { v: IndustryHistoryV2 }) {
       <SectionHeader num={2} title={`산업 역사 — ${v.industry_name}`} id="sec-2" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
-      {v.why_durable && (
+      {v.why_durable?.length > 0 && (
         <>
           <SubHeader>산업 내구성</SubHeader>
-          <Text style={s.para}>{sp(v.why_durable)}</Text>
+          {v.why_durable.map((w, i) => <Bullet key={i}>{sp(w)}</Bullet>)}
         </>
       )}
 
@@ -825,8 +835,8 @@ function TechEvolutionSection({ v }: { v: TechEvolutionV2 }) {
     <View style={s.section}>
       <SectionHeader num={3} title={`기술 진화 — ${v.tech_name}`} id="sec-3" />
       <KeyBulletsPdf bullets={v.key_bullets} />
-      <FieldRow label="현재 단계" value={v.current_stage} />
-      <FieldRow label="다음 변곡점" value={v.next_inflection} />
+      <LabelDetailField label="현재 단계" item={v.current_stage} />
+      <LabelDetailField label="다음 변곡점" item={v.next_inflection} />
 
       <SubHeader>기술 발전 단계</SubHeader>
       {v.stages?.map((st, i) => (
@@ -864,8 +874,18 @@ function ValueChainSection({ v }: { v: ValueChainV2 }) {
     <View style={s.section}>
       <SectionHeader num={4} title={`밸류체인 — ${v.industry}`} id="sec-4" />
       <KeyBulletsPdf bullets={v.key_bullets} />
-      <FieldRow label="가치 흐름" value={v.value_flow} />
-      <FieldRow label="분석 기업 위치" value={v.subject_position} />
+      {v.value_flow?.length > 0 && (
+        <View style={{ marginBottom: 4 }}>
+          <Text style={s.cardTitle}>가치 흐름</Text>
+          {v.value_flow.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
+        </View>
+      )}
+      {v.subject_position?.length > 0 && (
+        <View style={{ marginBottom: 4 }}>
+          <Text style={s.cardTitle}>분석 기업 위치</Text>
+          {v.subject_position.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
+        </View>
+      )}
 
       <SubHeader>레이어 구조</SubHeader>
       {v.layers?.map((layer, i) => (
@@ -1095,7 +1115,7 @@ function StrategySection({ v }: { v: StrategyV2 }) {
   ];
 
   const hasAny = pdfSections.some(sec => sec.direction || sec.items.length > 0);
-  if (!hasAny && !v.strategy_coherence && !v.ten_year_durability) return null;
+  if (!hasAny && !v.strategy_coherence && !v.ten_year_durability?.length) return null;
 
   return (
     <View style={s.section}>
@@ -1118,10 +1138,10 @@ function StrategySection({ v }: { v: StrategyV2 }) {
           <Text style={s.para}>{v.strategy_coherence}</Text>
         </>
       )}
-      {v.ten_year_durability && (
+      {v.ten_year_durability?.length > 0 && (
         <>
           <SubHeader>10년 지속 가능성</SubHeader>
-          <Text style={s.para}>{v.ten_year_durability}</Text>
+          {v.ten_year_durability.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
         </>
       )}
       <SectionSources sources={v.sources} />
@@ -1200,8 +1220,6 @@ function FinancialsSection({ v }: { v: FinancialsV2 }) {
           </Text>
         </View>
       )}
-
-      {v.narrative && <Text style={[s.para, { marginBottom: 8 }]}>{v.narrative}</Text>}
 
       {/* Income statement */}
       <SubHeader>손익계산서</SubHeader>

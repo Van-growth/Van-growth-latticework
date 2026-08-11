@@ -74,8 +74,8 @@ export interface SummaryV2 {
     source_index: number;
   }[];
   key_bullets: string[];
-  bull_case: string;
-  bear_case: string;
+  bull_case: string[];
+  bear_case: string[];
   oneLiner: string;
   sources?: SectionSource[];
 }
@@ -90,7 +90,7 @@ export interface IndustryHistoryV2 {
     key_players: string[];
     significance: string;
   }[];
-  why_durable: string;
+  why_durable: string[];
   chasm_points: string[];
   key_bullets: string[];
   sources: SectionSource[];
@@ -107,8 +107,8 @@ export interface TechEvolutionV2 {
     key_enablers: string[];
     key_players: string[];
   }[];
-  current_stage: string;
-  next_inflection: string;
+  current_stage: { label: string; detail: string };
+  next_inflection: { label: string; detail: string };
   key_bullets: string[];
   sources: SectionSource[];
 }
@@ -131,8 +131,8 @@ export interface ValueChainLayer {
 export interface ValueChainV2 {
   industry: string;
   layers: ValueChainLayer[];
-  value_flow: string;
-  subject_position: string;
+  value_flow: string[];
+  subject_position: string[];
   key_bullets: string[];
   sources: SectionSource[];
 }
@@ -214,7 +214,7 @@ export interface StrategyV2 {
     return_target: string;
   };
   strategy_coherence: string;
-  ten_year_durability: string;
+  ten_year_durability: string[];
   key_bullets: string[];
   sources: SectionSource[];
 }
@@ -258,7 +258,6 @@ export interface SecBenchmarkComparison {
 }
 
 export interface FinancialsV2 {
-  narrative: string;
   income_statement: FinancialsV2Row[];
   balance_sheet: FinancialsV2BSRow[];
   cash_flow: {
@@ -319,7 +318,7 @@ export interface FounderV2 {
 export interface CrossIndustryNudgeV1 {
   industry_pain: {
     title: string;
-    description: string;
+    description: string[];
     financial_impact_question: string;
   };
   cross_industry_example: {
@@ -358,11 +357,11 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     company: '', ticker: null, industry: '', hq: '',
     value_chain_position: 'midstream',
     products: [], key_metrics: [], top_customers: [], key_markets: [],
-    key_bullets: [], bull_case: '', bear_case: '', oneLiner: '', sources: [],
+    key_bullets: [], bull_case: [], bear_case: [], oneLiner: '', sources: [],
   },
-  industry_history_v2: { industry_name: '', timeline: [], why_durable: '', chasm_points: [], key_bullets: [], sources: [] },
-  tech_evolution_v2: { tech_name: '', stages: [], current_stage: '', next_inflection: '', key_bullets: [], sources: [] },
-  value_chain_v2: { industry: '', layers: [], value_flow: '', subject_position: '', key_bullets: [], sources: [] },
+  industry_history_v2: { industry_name: '', timeline: [], why_durable: [], chasm_points: [], key_bullets: [], sources: [] },
+  tech_evolution_v2: { tech_name: '', stages: [], current_stage: { label: '', detail: '' }, next_inflection: { label: '', detail: '' }, key_bullets: [], sources: [] },
+  value_chain_v2: { industry: '', layers: [], value_flow: [], subject_position: [], key_bullets: [], sources: [] },
   business_model_v2: {
     revenue_streams: [], segments: [],
     growth_motion: 'hybrid', growth_motion_detail: '',
@@ -372,7 +371,7 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
   },
   competitors_v2: { direct: [], indirect: [], substitutes: [], competitive_position: 'niche', key_bullets: [], sources: [] },
   cross_industry_nudge_v1: {
-    industry_pain: { title: '', description: '', financial_impact_question: '' },
+    industry_pain: { title: '', description: [], financial_impact_question: '' },
     cross_industry_example: { source_industry: '', case_name: '', solution_description: '' },
     key_bullets: [], sources: [],
   },
@@ -380,10 +379,9 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     corporate: { direction: '', portfolio: '', ma_partnerships: [], geographic: '' },
     business: { direction: '', competitive_advantage: '', go_to_market: '', product_roadmap: [] },
     financial: { direction: '', capital_allocation: '', investment_priority: '', return_target: '' },
-    strategy_coherence: '', ten_year_durability: '', key_bullets: [], sources: [],
+    strategy_coherence: '', ten_year_durability: [], key_bullets: [], sources: [],
   },
   financials_v2: {
-    narrative: '',
     income_statement: [], balance_sheet: [],
     cash_flow: { operating: '', investing: '', financing: '', fcf: '', notes: '' },
     key_risks: [],
@@ -624,18 +622,19 @@ research report. Aim for Gong / HubSpot / Salesforce blog voice, not McKinsey de
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `Output only a JSON object matching this schema:
-{"company":"Company name","ticker":"TradingView-format ticker or null","industry":"Industry classification","hq":"HQ city, country","value_chain_position":"upstream|midstream|downstream","products":[{"name":"Product name","revenue_share":number}],"key_metrics":[{"label":"Revenue","value":"figure — 'Not disclosed' if unconfirmed","trend":"up|down|flat","source_index":number or null},{"label":"Operating margin","value":"figure% — 'figure% (estimated)' if estimated","trend":"up|down|flat","source_index":number or null},{"label":"Market cap","value":"figure","trend":"up|down|flat","source_index":number or null},{"label":"YoY growth","value":"figure%","trend":"up|down|flat","source_index":number or null}],"top_customers":["Only customer names confirmed by disclosure. Empty array [] if uncertain"],"customer_concentration":{"customers":[{"name":"Customer name","revenue_share":number confirmed by disclosure}],"top_n":number,"top_n_share":number,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"Country","revenue_share":number confirmed by disclosure only — omit the entry if unavailable}],"trigger_events":[{"date":"YYYY-MM-DD or YYYY-MM","type":"Funding|Equity Offering|Major Deal","amount":"amount — empty string if unconfirmed","counterparty":"counterparty (investor/partner name) — empty string if unconfirmed","description":"1-line description, include [n] source markers","source_index":number}],"key_bullets":["Why this company is distinct in this market — core positioning, 8 words or fewer","This company's core growth driver, 8 words or fewer","This company's biggest execution risk, 8 words or fewer"],"bull_case":"Growth momentum: market expansion / partnership opportunity / competitive edge, 2 sentences max","bear_case":"Key risk: execution risk / competitive threat / regulatory or market variable, 2 sentences max","oneLiner":"1-2 sentence read on where this company stands right now, written so a strategy or sales practitioner gets it immediately","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"company":"Company name","ticker":"TradingView-format ticker or null","industry":"Industry classification","hq":"HQ city, country","value_chain_position":"upstream|midstream|downstream","products":[{"name":"Product name","revenue_share":number}],"key_metrics":[{"label":"Revenue","value":"figure — 'Not disclosed' if unconfirmed","trend":"up|down|flat","source_index":number or null},{"label":"Operating margin","value":"figure% — 'figure% (estimated)' if estimated","trend":"up|down|flat","source_index":number or null},{"label":"Market cap","value":"figure","trend":"up|down|flat","source_index":number or null},{"label":"YoY growth","value":"figure%","trend":"up|down|flat","source_index":number or null}],"top_customers":["Only customer names confirmed by disclosure. Empty array [] if uncertain"],"customer_concentration":{"customers":[{"name":"Customer name","revenue_share":number confirmed by disclosure}],"top_n":number,"top_n_share":number,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"Country","revenue_share":number confirmed by disclosure only — omit the entry if unavailable}],"trigger_events":[{"date":"YYYY-MM-DD or YYYY-MM","type":"Funding|Equity Offering|Major Deal","amount":"amount — empty string if unconfirmed","counterparty":"counterparty (investor/partner name) — empty string if unconfirmed","description":"1-line description, include [n] source markers","source_index":number}],"key_bullets":["Why this company is distinct in this market — core positioning, 8 words or fewer","This company's core growth driver, 8 words or fewer","This company's biggest execution risk, 8 words or fewer"],"bull_case":["Growth momentum bullet — market expansion, partnership, or competitive edge point, 1 line","2nd growth momentum bullet, 1 line"],"bear_case":["Key risk bullet — execution, competitive, regulatory, or market risk, 1 line","2nd key risk bullet, 1 line"],"oneLiner":"1-2 sentence read on where this company stands right now, written so a strategy or sales practitioner gets it immediately","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 top_customers: only names confirmed via IR or disclosure. Empty array if it's a guess. key_markets.revenue_share: if there's no disclosed figure, drop that country's entry entirely.
 key_metrics.value must contain only the figure itself (e.g. "$215.9B", "38%", "38% (estimated)") — never append a fiscal year or data-source name in parentheses like "(EDGAR, FY2026)"; that detail belongs in the linked source instead. key_metrics.source_index must point at the index of the entry in this section's own sources[] array that backs that figure — put the fiscal year in that source's content (e.g. "FY2026 10-K revenue disclosure") so the footnote carries it. Use null only if the figure genuinely can't be attributed to any listed source.
 ticker must be returned in TradingView format: US NASDAQ → "NASDAQ:SYMBOL" (e.g. NASDAQ:NVDA), US NYSE → "NYSE:SYMBOL" (e.g. NYSE:PLTR), Korea KOSPI → "KRX:code" (e.g. KRX:005930), Korea KOSDAQ → "KOSDAQ:code" (e.g. KOSDAQ:388130), null if private or uncertain.
-bull_case/bear_case: write from a strategy/practitioner point of view. No stock price, valuation, or investment-return language.
+bull_case/bear_case: 2-4 short bullets each, one distinct point per bullet — never restate the same point twice worded differently. Write from a strategy/practitioner point of view. No stock price, valuation, or investment-return language. If a bullet draws on a source, put the [n] marker at the very end of that bullet.
 customer_concentration: return null outright if per-customer revenue share can't be confirmed from disclosure or IR. Never use 0% or an unconfirmable number. The customers array also only includes disclosure-confirmed figures — empty array [] if uncertain. top_n_share: combined share of the top N customers (return the whole object as null if not disclosed). is_concentrated: true if top_n_share >= 30.
 trigger_events: base this only on the context's [Recent trigger event candidates] section (EDGAR 8-K excerpts or DART material-event filings) and recent funding/partnership info from web research — never speculate. Only events within the last 12 months, most recent first, max 3. If there's no evidence-backed event, return an empty array []. Leave amount/counterparty as an empty string if the source doesn't confirm them, but always fill date/type/description.
 oneLiner rule: don't just list numbers — explain in narrative form why the number matters. Style example: "Revenue's up, margins aren't — this is a company mid-buildout, pouring cash into infrastructure before it pays off."`,
 
   industry_history_v2: `Output only a JSON object matching this schema:
-{"industry_name":"Industry name","timeline":[{"period":"Time period","title":"Era title, 5 words or fewer","technology":"Core technology, 1 line","market_need":"Market need, 1 line","key_players":["Company name (country)"],"significance":"Why it matters, 1 line"}],"why_durable":"Why this industry endures, 2 sentences max","chasm_points":["Chasm moment and why, 1 line each, max 3"],"key_bullets":["This industry's single most decisive historical turning point, 8 words or fewer","What stage of development the industry is at now, 8 words or fewer","A structural risk unique to this industry, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"industry_name":"Industry name","timeline":[{"period":"Time period","title":"Era title, 5 words or fewer","technology":"Core technology, 1 line","market_need":"Market need, 1 line","key_players":["Company name (country)"],"significance":"Why it matters, 1 line"}],"why_durable":["Reason this industry endures, 1 line","2nd reason it endures, 1 line"],"chasm_points":["Chasm moment and why, 1 line each, max 3"],"key_bullets":["This industry's single most decisive historical turning point, 8 words or fewer","What stage of development the industry is at now, 8 words or fewer","A structural risk unique to this industry, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 timeline: 4-6 entries in chronological order. Tag important facts in the body with [n] source markers.
+why_durable: 2-4 short bullets, one distinct reason per bullet. If a bullet draws on a source, put the [n] marker at the very end of that bullet.
 Each timeline entry covers only industry-wide technology, market, or regulatory turning points. Never include a single company's funding round, VC raise, or M&A event — unless that company's tech/product launch itself reshaped the industry.
 key_players: list only companies that were actually active in the market at that time. Never include VCs, private equity, financial investors, or accelerators.
 Sourcing discipline: this section is about the INDUSTRY as a whole, not the analyzed company. The analyzed
@@ -648,8 +647,9 @@ you can't find a distinct source backing a specific era's claim, search again ra
 unrelated citation or leaving it unsourced.`,
 
   tech_evolution_v2: `Output only a JSON object matching this schema:
-{"tech_name":"Core technology name","stages":[{"stage":1,"period":"Time period","title":"Stage title, 5 words or fewer","description":"Description, 2 sentences max","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["Key enabler, max 3"],"key_players":["Company name, max 4"]}],"current_stage":"Current stage, 1 line","next_inflection":"Next inflection point, 1 line","key_bullets":["Current maturity stage on the Hype Cycle, 8 words or fewer","The key trigger for the next inflection point, 8 words or fewer","The main barrier blocking wider adoption, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"tech_name":"Core technology name","stages":[{"stage":1,"period":"Time period","title":"Stage title, 5 words or fewer","description":"Description, 2 sentences max","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["Key enabler, max 3"],"key_players":["Company name, max 4"]}],"current_stage":{"label":"Short 2-5 word phrase naming the current stage","detail":"1 sentence of supporting detail"},"next_inflection":{"label":"Short 2-5 word phrase naming the next inflection point","detail":"1 sentence of supporting detail"},"key_bullets":["Current maturity stage on the Hype Cycle, 8 words or fewer","The key trigger for the next inflection point, 8 words or fewer","The main barrier blocking wider adoption, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 stages: 4-6 entries. Tag important facts in the body with [n] source markers.
+current_stage/next_inflection: label is a short noun phrase (not a full sentence), detail is exactly 1 supporting sentence — don't restate the label inside detail.
 Sourcing discipline: this section is about the TECHNOLOGY's evolution industry-wide, not the analyzed
 company. The analyzed company's own official materials (10-K, IR site, press releases) may only back facts
 specifically ABOUT that company — never cite them for an industry-wide fact (when a technology emerged, a
@@ -660,11 +660,11 @@ across every entry. If you can't find a distinct source backing a specific stage
 rather than reusing an unrelated citation or leaving it unsourced.`,
 
   value_chain_v2: `Output only a JSON object matching this schema:
-{"industry":"Industry name","layers":[{"name":"Layer name","description":"Description, 1 line","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"buyer":false,"global_leaders":[{"name":"Company name","country":"Country","why_leader":"Why it leads, 1 line"}]}],"value_flow":"Pricing pass-through mechanism, 3-4 sentences","subject_position":"The analyzed company's position, 3-4 sentences","key_bullets":["Where this company is strongest in the value chain, 8 words or fewer","The basis for its pricing power / negotiating leverage, 8 words or fewer","The biggest risk that comes from this value-chain structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+{"industry":"Industry name","layers":[{"name":"Layer name","description":"Description, 1 line","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"buyer":false,"global_leaders":[{"name":"Company name","country":"Country","why_leader":"Why it leads, 1 line"}]}],"value_flow":["Pricing pass-through mechanism point, 1 line","2nd point, 1 line"],"subject_position":["The analyzed company's position point, 1 line","2nd point, 1 line"],"key_bullets":["Where this company is strongest in the value chain, 8 words or fewer","The basis for its pricing power / negotiating leverage, 8 words or fewer","The biggest risk that comes from this value-chain structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 layers: 4-6 entries. Set is_subject:true on the layer the analyzed company belongs to.
 For end-consumer/buyer layers (e.g. consumers, enterprise customers, government), set buyer:true and omit the pricing_power field.
 Only set pricing_power:"high"|"medium"|"low" on supplier, manufacturing, or distribution layers.
-value_flow/subject_position: write in full paragraph prose (not bullets), but every [n] source marker must sit at the very end of the sentence it supports — never mid-sentence. If a sentence draws on two sources, put both markers together at the end (e.g. "...as a result [1][2]."). Any URL confirmed via web search must go in sources[].url.`,
+value_flow/subject_position: 2-4 short bullets each, one distinct point per bullet. If a bullet draws on a source, put the [n] marker at the very end of that bullet. Any URL confirmed via web search must go in sources[].url.`,
 
   business_model_v2: `Output only a JSON object matching this schema:
 {"revenue_streams":[{"name":"Revenue stream","type":"subscription|transaction|service|license|other","revenue_share":number,"operating_margin":number,"growth_rate":number}],"segments":[{"name":"Segment name","revenue_share":number,"characteristics":"Characteristics, 1 line"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"How growth works, 2 sentences max","unit_economics":{"gross_margin":number,"operating_margin":number,"net_margin":number,"fcf_margin":number,"nrr":number},"moat":[{"type":"Moat type","strength":"strong|medium|weak","description":"Moat description, 1 line"}],"key_bullets":["The core of this company's revenue engine — why it makes money, 8 words or fewer","The core moat holding up the business model, 8 words or fewer","A structural weakness or collapse risk in the business model, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
@@ -672,21 +672,22 @@ Tag important facts in growth_motion_detail/moat.description with [n] source mar
 operating_margin/growth_rate (inside revenue_streams) and unit_economics' gross_margin/operating_margin/net_margin/fcf_margin/nrr are numeric fields — return 0 if unconfirmable. Never use text like "Not disclosed"/"N/A" or a sentinel like -999 (that produces invalid JSON). For revenue_share, don't default to 0 if unconfirmable — always fill in a reasonable estimate.`,
 
   cross_industry_nudge_v1: `Output only a JSON object matching this schema:
-{"industry_pain":{"title":"Pain point title, 8 words or fewer","description":"An operational or business pain point common across the analyzed company's industry (by SIC/KSIC classification) as a whole — not specific to this one company, 2 sentences max","financial_impact_question":"A question only — never a stated number, percentage, or dollar-figure conclusion — about how this pain point could hit the business financially. Example: 'How much of quarterly revenue could this bottleneck be putting at risk?'"},"cross_industry_example":{"source_industry":"The OTHER industry this solution came from — must be genuinely different from the analyzed company's own industry","case_name":"The company or case name that solved it","solution_description":"How that other industry solved an analogous operational problem, 2 sentences max"},"key_bullets":["Why this pain point matters right now for this company, 8 words or fewer","The core mechanism behind the cross-industry solution, 8 words or fewer","The single biggest condition for applying this solution here, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://..."}]}
-Determine the analyzed company's industry (SIC/KSIC classification) from the provided context first. industry_pain must describe a pain point shared across that industry broadly, not a problem unique to this one company. cross_industry_example.source_industry must differ from the analyzed company's own industry — find a company in a different industry that solved a genuinely analogous operational problem. financial_impact_question must be phrased strictly as a question — never assert a number, percentage, or dollar-figure impact as fact. Both facts need at least one real, verifiable source URL in sources[].url — a real URL is required here (unlike other sections, don't leave it null); if you can't find a real source URL for a fact, drop that fact rather than inventing a URL. Tag both descriptions with [n] source markers.`,
+{"industry_pain":{"title":"Pain point title, 8 words or fewer","description":["Pain point bullet common across the analyzed company's industry (by SIC/KSIC classification) as a whole — not specific to this one company, 1 line","2nd bullet, 1 line"],"financial_impact_question":"A question only — never a stated number, percentage, or dollar-figure conclusion — about how this pain point could hit the business financially. Example: 'How much of quarterly revenue could this bottleneck be putting at risk?'"},"cross_industry_example":{"source_industry":"The OTHER industry this solution came from — must be genuinely different from the analyzed company's own industry","case_name":"The company or case name that solved it","solution_description":"How that other industry solved an analogous operational problem, 2 sentences max"},"key_bullets":["Why this pain point matters right now for this company, 8 words or fewer","The core mechanism behind the cross-industry solution, 8 words or fewer","The single biggest condition for applying this solution here, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://..."}]}
+Determine the analyzed company's industry (SIC/KSIC classification) from the provided context first. industry_pain.description: 2-4 short bullets, one distinct point per bullet, describing a pain point shared across that industry broadly, not a problem unique to this one company. cross_industry_example.source_industry must differ from the analyzed company's own industry — find a company in a different industry that solved a genuinely analogous operational problem. financial_impact_question must be phrased strictly as a question — never assert a number, percentage, or dollar-figure impact as fact. Both facts need at least one real, verifiable source URL in sources[].url — a real URL is required here (unlike other sections, don't leave it null); if you can't find a real source URL for a fact, drop that fact rather than inventing a URL. Tag industry_pain bullets and the solution_description with [n] source markers (bullets: marker at the end of the bullet; solution_description: marker at the end of the sentence it supports).`,
 
   competitors_v2: `Output only a JSON object matching this schema:
 {"direct":[{"name":"Competitor name","country":"Country","market_share":"share% (estimates OK)","strengths":["Strength, 1 line, max 3 — strategy/technology/market-power focused"],"weaknesses":["Weakness, 1 line, max 2 — structural weaknesses"],"vs_subject":"1-line positioning gap vs. the analyzed company — format like 'stronger on X, weaker on Y'"}],"indirect":[{"name":"Indirect competitor","threat":"Threat, 1 line"}],"substitutes":[{"name":"Substitute","threat":"Threat, 1 line"}],"competitive_position":"leader|challenger|niche|follower","key_bullets":["This company's competitive position — where it's strongest and weakest, 8 words or fewer","The clearest strategic differentiator versus competitors, 8 words or fewer","The most threatening competitive risk — where it could get flipped, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 direct: 3-5 global direct competitors required. If there's no public market_share figure, give an estimate tagged "(estimated)"; use "-" only when it's genuinely unknowable. vs_subject must not be a plain list — write one specific line on the strategic positioning gap (price, channel, technology, customer base, etc.). Tag important facts in the body with [n] source markers. Any URL confirmed via web search must go in sources[].url.`,
 
   strategy_v2: `Output only a JSON object matching this schema:
-{"corporate":{"direction":"Corporate strategy, 1 line","portfolio":"Portfolio direction, 1 line","ma_partnerships":["M&A example, 1 line, max 3"],"geographic":"Geographic expansion, 1 line"},"business":{"direction":"Business strategy, 1 line","competitive_advantage":"Competitive edge, 1 line","go_to_market":"GTM strategy, 1 line","product_roadmap":["Roadmap item, 1 line, max 4"]},"financial":{"direction":"Financial strategy, 1 line","capital_allocation":"Capital allocation, 1 line","investment_priority":"Investment priority, 1 line","return_target":"Target return metric, 1 line"},"strategy_coherence":"How the 3 strategies converge, 3-4 sentences","ten_year_durability":"10-year durability, 3-4 sentences","key_bullets":["The core direction of corporate strategy in one line, 8 words or fewer","Business strategy — how it wins, 8 words or fewer","Financial strategy — where it's betting, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
-strategy_coherence/ten_year_durability: write in full paragraph prose (not bullets), but every [n] source marker must sit at the very end of the sentence it supports — never mid-sentence. If a sentence draws on two sources, put both markers together at the end (e.g. "...as a result [1][2]."). Any URL confirmed via web search must go in sources[].url.`,
+{"corporate":{"direction":"Corporate strategy, 1 line","portfolio":"Portfolio direction, 1 line","ma_partnerships":["M&A example, 1 line, max 3"],"geographic":"Geographic expansion, 1 line"},"business":{"direction":"Business strategy, 1 line","competitive_advantage":"Competitive edge, 1 line","go_to_market":"GTM strategy, 1 line","product_roadmap":["Roadmap item, 1 line, max 4"]},"financial":{"direction":"Financial strategy, 1 line","capital_allocation":"Capital allocation, 1 line","investment_priority":"Investment priority, 1 line","return_target":"Target return metric, 1 line"},"strategy_coherence":"How the 3 strategies (corporate/business/financial) connect and reinforce each other, 3-4 sentences","ten_year_durability":["10-year durability point, 1 line","2nd point, 1 line"],"key_bullets":["The core direction of corporate strategy in one line, 8 words or fewer","Business strategy — how it wins, 8 words or fewer","Financial strategy — where it's betting, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+strategy_coherence is the only field in this schema written as full paragraph prose — it's a narrative showing how the 3 strategy blocks above connect, so breaking it into bullets would just repeat what those blocks already say. Every [n] marker in it must sit at the very end of the sentence it supports — never mid-sentence; if a sentence draws on two sources, put both markers together at the end (e.g. "...as a result [1][2].").
+ten_year_durability: 2-4 short bullets, one distinct point per bullet (e.g. one bullet per structural tailwind/headwind, not a running paragraph). If a bullet draws on a source, put the [n] marker at the very end of that bullet. Any URL confirmed via web search must go in sources[].url.`,
 
   financials_v2: `Output only a JSON object matching this schema:
-{"narrative":"Financial narrative, 3 sentences max","income_statement":[{"item":"Revenue","fy2021":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2022":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'","yoy":"▲N% or ▼N% or —"},{"item":"Gross Profit","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Operating Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Net Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"Cash & Equivalents","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'"},{"item":"Total Assets","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Liabilities","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Equity","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"disclosed figure or 'Not disclosed'","investing":"disclosed figure or 'Not disclosed'","financing":"disclosed figure or 'Not disclosed'","fcf":"disclosed figure or 'figure (estimated)' or 'Not disclosed'","notes":"anything notable, or an empty string"},"key_risks":["Risk, 1 line, max 5"],"outlook":{"shortTerm":"Short-term outlook (3-6 months) — include a symbol: ○ positive / △ neutral / ▼ negative","midLongTerm":"Mid/long-term outlook (1-3 years) — include a symbol: ○ positive / △ neutral / ▼ negative","keyRisks":["Key risk, 1 line, max 3"]},"key_bullets":["The financial metric and trend most worth flagging, 8 words or fewer","Core state of profitability and cash flow, 8 words or fewer","The single biggest risk in the financial structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"income_statement":[{"item":"Revenue","fy2021":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2022":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'","yoy":"▲N% or ▼N% or —"},{"item":"Gross Profit","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Operating Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Net Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"Cash & Equivalents","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'"},{"item":"Total Assets","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Liabilities","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Equity","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"disclosed figure or 'Not disclosed'","investing":"disclosed figure or 'Not disclosed'","financing":"disclosed figure or 'Not disclosed'","fcf":"disclosed figure or 'figure (estimated)' or 'Not disclosed'","notes":"anything notable, or an empty string"},"key_risks":["Risk, 1 line, max 5"],"outlook":{"shortTerm":"Short-term outlook (3-6 months) — include a symbol: ○ positive / △ neutral / ▼ negative","midLongTerm":"Mid/long-term outlook (1-3 years) — include a symbol: ○ positive / △ neutral / ▼ negative","keyRisks":["Key risk, 1 line, max 3"]},"key_bullets":["The financial metric and trend most worth flagging, 8 words or fewer","Core state of profitability and cash flow, 8 words or fewer","The single biggest risk in the financial structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 income_statement/balance_sheet: never leave a cell blank — if there's no disclosed figure, it must be 'Not disclosed'. Exception: if the context's [Years missing from source data] section explicitly marks a given year as having no data (the source filing has no financial statement at all for that year), label that year 'Not applicable' instead of 'Not disclosed' — "Not disclosed" means "we looked but couldn't confirm it," "Not applicable" means "that year's data doesn't exist in the first place." Keep the distinction. Estimated values must always use the 'number (estimated)' format.
-Tag the narrative and key figures with [n] source markers.
+Tag key figures with [n] source markers.
 outlook rules: base it on the financial data. No baseless optimism. shortTerm/midLongTerm must always be prefixed with a ○/△/▼ symbol.`,
 
   sources: `Output only a JSON object matching this schema. Organize the sources actually referenced during research, by tab:
@@ -715,14 +716,14 @@ Rules:
 // (대표 텍스트 필드가 placeholder여도) 섹션을 유지한다.
 const SECTION_CONTENT_SIGNALS: Record<string, { text?: string[]; arrays?: string[] }> = {
   summary_v2:          { text: ['oneLiner'],                                    arrays: ['products', 'key_metrics', 'key_bullets'] },
-  industry_history_v2: { text: ['why_durable'],                                 arrays: ['timeline', 'chasm_points', 'key_bullets'] },
-  tech_evolution_v2:   { text: ['current_stage', 'next_inflection'],            arrays: ['stages', 'key_bullets'] },
-  value_chain_v2:      { text: ['value_flow'],                                  arrays: ['layers', 'key_bullets'] },
+  industry_history_v2: {                                                        arrays: ['timeline', 'chasm_points', 'why_durable', 'key_bullets'] },
+  tech_evolution_v2:   {                                                        arrays: ['stages', 'key_bullets'] },
+  value_chain_v2:      {                                                        arrays: ['layers', 'value_flow', 'key_bullets'] },
   business_model_v2:   { text: ['growth_motion_detail'],                        arrays: ['revenue_streams', 'segments', 'moat', 'key_bullets'] },
   competitors_v2:      {                                                        arrays: ['direct', 'indirect', 'substitutes', 'key_bullets'] },
   cross_industry_nudge_v1: {                                                    arrays: ['key_bullets', 'sources'] },
-  strategy_v2:          { text: ['strategy_coherence', 'ten_year_durability'],  arrays: ['key_bullets', 'corporate.ma_partnerships', 'business.product_roadmap'] },
-  financials_v2:         { text: ['narrative'],                                 arrays: ['income_statement', 'balance_sheet', 'key_risks', 'key_bullets'] },
+  strategy_v2:          { text: ['strategy_coherence'],                        arrays: ['ten_year_durability', 'key_bullets', 'corporate.ma_partnerships', 'business.product_roadmap'] },
+  financials_v2:         {                                                        arrays: ['income_statement', 'balance_sheet', 'key_risks', 'key_bullets'] },
 };
 
 function isPlaceholderText(v: unknown): boolean {
@@ -890,8 +891,8 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
       // 프론트가 조건부 렌더링하는 단일 텍스트 필드가 비어있는 빈도 관찰용 — Quality Gate
       // 룰로 승격하지 않음(business_model_v2 22% 폐기율 재현 위험, 실전 발견 이력 6번 참고).
       if (sectionKey === 'summary_v2') {
-        if (!r.bull_case) console.warn(`[quality-gate] summary_v2.bull_case 비어있음`);
-        if (!r.bear_case) console.warn(`[quality-gate] summary_v2.bear_case 비어있음`);
+        if (!r.bull_case?.length) console.warn(`[quality-gate] summary_v2.bull_case 비어있음`);
+        if (!r.bear_case?.length) console.warn(`[quality-gate] summary_v2.bear_case 비어있음`);
       }
       if (sectionKey === 'business_model_v2' && !r.growth_motion_detail) {
         console.warn(`[quality-gate] business_model_v2.growth_motion_detail 비어있음`);

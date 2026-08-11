@@ -314,7 +314,6 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
       series.revenue?.[0]        != null ? `${yr}년 ${isKr ? '매출액' : 'Revenue'}: ${fmt(series.revenue[0])}` : null,
       series.operatingIncome?.[0] != null ? `${yr}년 ${isKr ? '영업이익' : 'Operating Income'}: ${fmt(series.operatingIncome[0])}` : null,
     ] as (string | null)[]).filter((x): x is string => x !== null),
-    narrative: `[${srcLbl}] ${name} ${yr}년 재무 수치 (${isKr ? '연결재무제표' : '10-K 기준'})`,
     income_statement: [
       toIsRow(isKr ? '매출액'     : 'Revenue',           series.revenue),
       toIsRow(isKr ? '영업이익'   : 'Operating Income',  series.operatingIncome),
@@ -363,7 +362,7 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
       value_chain_v2: data.value_chain_v2    ?? null,
       strategy_v2:    data.strategy_v2       ?? null,
       financials_v2:  data.financials_v2     ?? null,
-      financials:     data.financials_v2?.narrative ?? '',
+      financials:     '',
     };
     case 4: return {
       founder_v2: data.founder_v2 ?? null,
@@ -477,7 +476,7 @@ router.post('/', async (req: Request, res: Response) => {
         tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
         value_chain_overview: analysis.value_chain_v2?.industry ?? '',
         business_model:       analysis.business_model_v2?.growth_motion_detail ?? '',
-        financials:           analysis.financials_v2?.narrative ?? '',
+        financials:           '',
         metrics: [], strengths: [], risks: [],
         moat_analysis: {}, risk_analysis: {}, competitors: {}, strategy: {},
         financials_structured: {},
@@ -509,7 +508,7 @@ router.post('/', async (req: Request, res: Response) => {
       tech_evolution:       analysis.tech_evolution_v2?.tech_name ?? '',
       value_chain_overview: analysis.value_chain_v2?.industry ?? '',
       business_model:       analysis.business_model_v2?.growth_motion_detail ?? '',
-      financials:           analysis.financials_v2?.narrative ?? '',
+      financials:           '',
       metrics: [], strengths: [], risks: [],
       moat_analysis: {}, risk_analysis: {}, competitors: {}, strategy: {},
       financials_structured: {},
@@ -635,13 +634,15 @@ router.post('/stream', async (req: Request, res: Response) => {
 
     let cachedFinancials: FinancialsV2 | undefined = finCache?.financials_v2 ?? undefined;
 
-    // 캐시 데이터 회사명 일치 검증 — 서사에 회사명 키워드가 없으면 오염된 캐시로 판단하고 무시
+    // 캐시 데이터 회사명 일치 검증 — 콘텐츠 어디에도 회사명 키워드가 없으면 오염된 캐시로 판단하고
+    // 무시. 예전엔 narrative 필드 하나만 검색했으나(2026-08 재무 서사 섹션 삭제로 그 필드 자체가
+    // 없어짐), 특정 필드에 의존하지 않도록 전체 JSON을 검색 대상으로 확장 — 더 안전함.
     if (cachedFinancials && finCache?.company_name === name) {
-      const narrative = (cachedFinancials.narrative ?? '').toLowerCase();
+      const searchText = JSON.stringify(cachedFinancials).toLowerCase();
       const nameTokens = name.toLowerCase().split(/[\s,.\-]+/).filter(t => t.length >= 3);
-      const hasMatch = nameTokens.some(token => narrative.includes(token));
+      const hasMatch = nameTokens.some(token => searchText.includes(token));
       if (!hasMatch) {
-        console.warn(`[financials_cache] company name mismatch in narrative — discarding cache for "${name}"`);
+        console.warn(`[financials_cache] company name mismatch — discarding cache for "${name}"`);
         cachedFinancials = undefined;
         // 오염된 캐시 즉시 삭제
         await supabase.from('financials_v2_cache').delete().eq('company_name', name);
@@ -965,7 +966,7 @@ const REANALYZE_SECTION_MAP: Record<string, string> = {
 function getReanalyzeSectionDbFields(sectionKey: string, data: any): Record<string, any> {
   switch (sectionKey) {
     case 'summary_v2':          return { summary_v2: data, summary: data?.key_bullets?.join(' | ') ?? '' };
-    case 'financials_v2':       return { financials_v2: data, financials: data?.narrative ?? '' };
+    case 'financials_v2':       return { financials_v2: data, financials: '' };
     case 'business_model_v2':   return { business_model_v2: data, business_model: data?.growth_motion_detail ?? '' };
     default:                    return { [sectionKey]: data };
   }
