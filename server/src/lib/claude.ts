@@ -603,6 +603,12 @@ Follow each section's own bullets guidance.
    site (e.g. a government agency's domain, a company's investor-relations path). If you're not certain
    of the exact URL for a fact, either use the exact URL from a search result that does support it, or
    set url to null — a missing URL is far better than a wrong one.
+7. When the context's [Disclosed data] block already states a figure for a specific line item and fiscal
+   year, copy that number exactly as given — don't round it, recompute it, derive a margin/ratio from a
+   different year's figures, or substitute a number from an adjacent year. Treat that block as ground truth
+   to transcribe, not raw material to calculate from. Only compute a derived figure (e.g. a YoY % or a
+   margin) yourself when the underlying inputs for that exact same fiscal year are both present in the
+   context — never mix inputs from different years to produce a number that looks like it belongs to one.
 
 [Tone & voice]
 Write like a sharp US B2B practitioner — Sales, BD, or Strategy — briefing a peer, not like an equity
