@@ -1002,6 +1002,18 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
   const revenueStreams = bm.revenue_streams ?? [];
   const segments = bm.segments ?? [];
   const moat = bm.moat ?? [];
+  // Revenue Streams와 사업 세그먼트가 사실상 같은 항목을 중복 표시하던 문제(2026-08) —
+  // 세그먼트 섹션은 제거하고, 거기에만 있던 금액/배경 설명(characteristics)은 이름이
+  // 일치하는 Revenue Streams 항목 아래 1줄 설명으로 옮겨 정보 손실을 막는다.
+  const normSegName = (s: string) => s.toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
+  const rsCharacteristics = revenueStreams.map(rs => {
+    const rsNorm = normSegName(rs.name);
+    const match = segments.find(seg => {
+      const segNorm = normSegName(seg.name);
+      return segNorm === rsNorm || segNorm.includes(rsNorm) || rsNorm.includes(segNorm);
+    });
+    return match?.characteristics || null;
+  });
   const ueMetrics = [
     { label: 'Gross Margin', value: `${ue.gross_margin}%` },
     { label: 'Operating Margin', value: `${ue.operating_margin}%` },
@@ -1040,6 +1052,9 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
                     )}
                   </div>
                 )}
+                {rsCharacteristics[i] && (
+                  <p className="text-[11px] text-gray-400 mt-1 leading-snug">{rsCharacteristics[i]}</p>
+                )}
               </div>
             ))}
           </div>
@@ -1058,8 +1073,8 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
         </SectionCard>
       )}
 
-      {/* Below fold: unit economics + segments + moat */}
-      <ShowMore label="Unit Economics · 세그먼트 · 경제적 해자 보기">
+      {/* Below fold: unit economics + moat */}
+      <ShowMore label="Unit Economics · 경제적 해자 보기">
         <>
           <SectionCard title="Unit Economics" dotColor="bg-blue-400">
             {ueMetrics.length > 0 ? (
@@ -1072,23 +1087,6 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
               <p className="text-sm text-gray-400">데이터 없음</p>
             )}
           </SectionCard>
-
-          {segments.length > 0 && (
-            <SectionCard title="사업 세그먼트" dotColor="bg-indigo-400">
-              <div className="space-y-2.5">
-                {segments.map((seg, i) => (
-                  <div key={i}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-700">{seg.name}</span>
-                      <span className="font-medium text-gray-800">{seg.revenue_share}%</span>
-                    </div>
-                    <ProgressBar value={seg.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
-                    <p className="text-[11px] text-gray-400 mt-0.5">{seg.characteristics}</p>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
 
           {moat.length > 0 && (
             <SectionCard title="경제적 해자 (Moat)" dotColor="bg-gray-400">
