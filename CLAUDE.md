@@ -235,6 +235,23 @@ SK텔레콤/우리금융지주/SK하이닉스 — 상세는 아래 실전 발견
 FINANCE/MEDIA_CONTENT/HARDWARE_SEMICONDUCTOR/ENERGY/LOGISTICS_TRANSPORT/CONSUMER_GOODS/
 REAL_ESTATE_CONSTRUCTION/OTHER)
 
+**industry_benchmark** (2026-08-11): `sic_code`(PK), `debt_equity_ratio_median/n`,
+`cfo_revenue_ratio_median/n`, `operating_margin_median/n`, `asset_turnover_median/n`(배수, %아님),
+`revenue_growth_median/n`, `source_quarters`, `computed_at`. SEC Financial Statement Data Sets
+벌크 데이터(`data/raw/sec-financial-statements/`, gitignore됨) 4개 분기를 `server/scripts/
+secBenchmarkPrecompute.ts`로 파싱·집계 — SIC당 표본 5개 미만 지표는 null, 평균이 아니라
+중앙값 저장(작은 표본에서 평균이 극단치에 취약한 문제 발견, 상세는 Quality Gate 원칙 섹션
+참고). 기존 `industry_benchmark_cache`(라이브 캐시, 이 앱에서 검색된 기업만 대상이라 표본
+좁음, `financials_v2.industry_benchmark` 구조화 필드로 첨부)와는 완전히 별개 시스템 —
+이쪽은 SEC 전수 벌크 기반 대표본이고, `server/src/lib/secIndustryBenchmark.ts`가 financials_v2
+생성 직전에 EDGAR 소스 기업의 SIC를 조회해 회사 자신의 수치와 업종 중앙값을 서버에서 직접
+비교, ±30% 이상 벗어난 지표만 골라 Claude 프롬프트에 주입(구조화 필드 아님 — narrative/
+outlook 문장에 자연스럽게 녹아듦). 표본 부족 SIC는 수치 대신 "비교 데이터 부족, 직접 확인
+제안" 안내만 주입, 벗어난 지표 없으면 벤치마크 자체를 언급 안 함(노이즈 방지). 인용 시
+sources[]에 L1(🟢 공식) "SEC Financial Statement Data Sets, SIC {code}, n={표본수}" 추가.
+DART/web_search 소스는 SIC 체계가 안 맞아 조용히 스킵. dev 프로젝트는 스키마만 있고
+데이터는 비어있음(일회성 데이터 적재라 이번엔 prod만 — dev/ops 서버 분리 시 재실행 예정).
+
 **analysis_usage**: `id`, `user_id`(로그인 시 auth.users.id, 비로그인 시 클라이언트 임시 식별자),
 `analysis_target`, `created_at`, `is_cache_view`(BOOLEAN, 기본 false — 2026-07-16 추가) —
 무료 분석 횟수 제한(rolling 7일 2회) 추적 + `GET /api/analyses`(내 히스토리) 소스, 두 역할
@@ -918,6 +935,14 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   로그인 체크가 "검색 실행" 등 특정 액션 단위로만 걸려있어, AE Skills 뷰는 그런 액션을
   아예 거치지 않으므로 자연히 무인증 접근이 됨, 별도 미들웨어 불필요). 실제 콘텐츠
   파이프라인(VOC.md→DB화)은 백로그 "🔵 탐색 중"에 별도 등록, 이번엔 UI 뼈대만.
+- [x] SEC 산업 벤치마크(`industry_benchmark`) 신설 + financials_v2 프롬프트 연결 (2026-08-11)
+  — 상세는 DB schema 섹션 "industry_benchmark" 항목 참고. SEC Financial Statement Data Sets
+  벌크 데이터 4개 분기 파싱(`secBenchmarkPrecompute.ts`) → SIC별 부채/자본·CFO/매출·영업이익률·
+  자산회전율·매출성장률 5개 지표 중앙값 집계 → EDGAR 소스 기업의 financials_v2 생성 시 회사
+  자신의 수치와 ±30% 이상 벌어진 지표만 서버에서 골라 프롬프트에 주입(`secIndustryBenchmark.ts`).
+  과정에서 평균이 소표본 극단치에 취약한 문제(SIC 6411 보험중개업 부채/자본 비율이 평균
+  10,749%로 왜곡)를 발견해 중앙값 전환 + 분모 최소 기준 상향(매출 $10M/자본·자산 $5M)으로
+  해결 — Quality Gate 원칙 섹션에 일반 원칙으로 기록됨.
 
 ## Security Principles (SSOT)
 
@@ -1349,6 +1374,16 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
 - sources 배열이 비어있지 않은가?
 - 모든 섹션이 "—" 또는 null이 아닌가? (전체 실패 감지)
 
+**산업 벤치마크 지표는 항상 중앙값(median) 우선, 평균(avg) 사용 시 최소 표본/분모 기준
+필수** (2026-08-11, `industry_benchmark` 테이블 구축 중 발견) — 표본이 작은 그룹(n=5~20)은
+상하위 1% 백분위수 윈저라이징조차 사실상 무의미하고(트리밍 경계가 최솟값/최댓값에 근접),
+분모가 작은 표본 하나가 평균 전체를 극단치로 끌고 간다(실측: SIC 6411 보험중개업 부채/자본
+비율이 자본이 작은 회사 1곳 때문에 평균 10,749%로 왜곡, 매출성장률 평균이 SIC별로 최대
++2,267%까지 튐). 평균 대신 중앙값으로 전환 + 분모 최소 기준을 매출 계열 $10M/자본·자산
+계열 $5M로 상향하자 정상 범위로 돌아옴(`server/scripts/secBenchmarkPrecompute.ts` 참고).
+앞으로 새 벤치마크/집계 지표를 추가할 때 평균을 쓰려면 이 두 방어(중앙값 우선 또는 표본/
+분모 하한)를 먼저 검토할 것 — Data Aggregation Principles의 4단계 원칙과 동일 계열.
+
 ### 프론트 진행 상태 표시 원칙 (2026-08-02 추가 — 체크마크/온디맨드 트리거 통합 버그 수정 계기)
 - 탭 완료 체크마크(✓)는 반드시 "그 탭 데이터가 프론트 state에 실제로 존재하는가"만으로
   판정한다 — 배치 번호(progress 이벤트)를 대리 신호로 쓰지 않는다. 온디맨드 섹션(배치에
@@ -1411,4 +1446,7 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
   기존 기업분석/pain 진단 2그룹은 앞의 두 탭으로 편입(사이드바 로직 재사용, `activeGroup`
   prop 필터링만 추가), AE Skills는 로그인 게이트 없는 별도 뷰(카테고리 칩 + 카드 피드
   스텁, 실 콘텐츠 파이프라인은 별도 백로그). 상세는 위 "UI/UX 원칙" 섹션 참고. |
+| v2.5.0 | 2026-08 — SEC 산업 벤치마크(`industry_benchmark`, SEC Financial Statement Data Sets
+  전수 벌크 파싱) 신설 + financials_v2 프롬프트 연결(±30% 이상 벌어진 지표만, 표본 부족 시
+  대체 안내). 상세는 위 DB schema/Quality Gate 원칙 섹션 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

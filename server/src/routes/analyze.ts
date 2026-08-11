@@ -5,6 +5,7 @@ import {
   generateGrowthScenarioNarrative, withTimeout,
 } from '../lib/claude';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
+import { buildSecBenchmarkContext } from '../lib/secIndustryBenchmark';
 import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
 } from '../services/monteCarloService';
@@ -385,8 +386,11 @@ router.post('/', async (req: Request, res: Response) => {
     if (companyErr) throw companyErr;
 
     const listings = await fetchCompanyListings(companyId ?? company.id);
-    const { source: dataSource, contextText } = await fetchFinancialContext(name, listings);
-    const analysis = await analyzeCompany(name, contextText || undefined);
+    const { source: dataSource, contextText, rawEdgar } = await fetchFinancialContext(name, listings);
+    const secBenchmarkContext = dataSource === 'edgar' && rawEdgar
+      ? await buildSecBenchmarkContext(rawEdgar).catch(() => null)
+      : null;
+    const analysis = await analyzeCompany(name, contextText || undefined, undefined, { secBenchmarkContext });
 
     const { data: savedAnalysis, error: analysisErr } = await supabase
       .from('analyses')
@@ -693,6 +697,12 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
 
+        // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — 실패해도 financials_v2
+        // 생성 자체를 막지 않도록 방어.
+        const secBenchmarkContext = dataSource === 'edgar' && rawEdgar
+          ? await buildSecBenchmarkContext(rawEdgar).catch(() => null)
+          : null;
+
         const analysis = await analyzeCompany(
           name,
           contextText || undefined,
@@ -710,7 +720,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               );
             }
           },
-          { skipBatches, initialData, cachedFinancials: useCachedFin },
+          { skipBatches, initialData, cachedFinancials: useCachedFin, secBenchmarkContext },
         );
 
         if (analysis.sources) await saveSources(cached.id, name, analysis.sources);
@@ -756,6 +766,12 @@ router.post('/stream', async (req: Request, res: Response) => {
         send('fin_preview', { financials_v2: quickFin, dataSource: previewSource });
       }
     }
+
+    // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — 실패해도 financials_v2
+    // 생성 자체를 막지 않도록 방어.
+    const secBenchmarkContext = dataSource === 'edgar' && rawEdgar
+      ? await buildSecBenchmarkContext(rawEdgar).catch(() => null)
+      : null;
 
     let savedId: string | null = null;
     let savedAt: string | null = null;
@@ -812,7 +828,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
       },
-      { cachedFinancials },
+      { cachedFinancials, secBenchmarkContext },
     );
 
     if (savedId && analysis.sources) await saveSources(savedId, name, analysis.sources);

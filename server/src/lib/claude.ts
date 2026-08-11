@@ -937,6 +937,10 @@ export async function analyzeCompany(
     skipBatches?: Set<number>;
     initialData?: Partial<AnalysisData>;
     cachedFinancials?: FinancialsV2;
+    // financials_v2 전용 SEC 산업 벤치마크 컨텍스트(server/src/lib/secIndustryBenchmark.ts,
+    // 2026-08-11) — sharedContext에 안 섞고 financials_v2 callSection 호출에만 덧붙인다.
+    // 다른 섹션(summary_v2 등)에 벤치마크 언급이 새어 들어가지 않도록 하기 위함.
+    secBenchmarkContext?: string | null;
   },
 ): Promise<AnalysisData> {
   const skip = opts?.skipBatches ?? new Set<number>();
@@ -1004,6 +1008,7 @@ export async function analyzeCompany(
   // 각 runBatch는 완료 즉시 onBatch → send('batch') 호출 → 탭 순차 채워짐
   // financial_cache 히트 시 batch3(financials)가 가장 먼저 완료될 수 있음
   const cachedFin = opts?.cachedFinancials;
+  const financialsContext = sharedContext + (opts?.secBenchmarkContext ?? '');
   // 2026-08 재편: industry_history_v2/tech_evolution_v2를 "pain 진단 시작" 버튼 트리거
   // 온디맨드 엔드포인트(POST /api/analyze/:id/pain-diagnosis)로 완전히 분리하면서 배치가
   // 2/3/4 세 개로 줄었다 — founder_v2(구 배치5)는 sources와 함께 배치4로, financials_v2는
@@ -1025,7 +1030,7 @@ export async function analyzeCompany(
       () => [
         callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
         callSection<StrategyV2>(sharedContext, 'strategy_v2'),
-        cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2'),
+        cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(financialsContext, 'financials_v2'),
       ],
       ([vc, s, f]) => {
         // Rule 4: 재무 수치 전년 대비 10배 이상 변동 → (추정) 뱃지 강제 적용
