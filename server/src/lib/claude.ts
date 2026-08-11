@@ -293,15 +293,34 @@ export interface FounderV2 {
   sources?: SectionSource[];
 }
 
+export interface CrossIndustryNudgeV1 {
+  industry_pain: {
+    title: string;
+    description: string;
+    financial_impact_question: string;
+  };
+  cross_industry_example: {
+    source_industry: string;
+    case_name: string;
+    solution_description: string;
+  };
+  key_bullets: string[];
+  sources: SectionSource[];
+}
+
 export interface AnalysisData {
   summary_v2: SummaryV2;
   // 온디맨드 전환(2026-07) — 초기 배치에서 생성하지 않음. null이면 "아직 생성 안 됨"을 의미하며
-  // 프론트가 탭 클릭 시 /api/analyze/reanalyze로 그때 생성함.
+  // 프론트가 "pain 진단 시작" 버튼 클릭 시 /api/analyze/:id/pain-diagnosis로 그때 생성함
+  // (2026-08 — 기존 탭별 자동생성 방식에서 명시적 버튼 트리거 방식으로 전환).
   industry_history_v2: IndustryHistoryV2 | null;
   tech_evolution_v2: TechEvolutionV2 | null;
   value_chain_v2: ValueChainV2;
   business_model_v2: BusinessModelV2;
   competitors_v2: CompetitorsV2;
+  // 2026-08 신규 — 배치2에서 business_model_v2/competitors_v2와 함께 생성(pain 진단 그룹의
+  // "넛지" 탭). SIC/KSIC 업종 pain 1개 + 타산업 해결사례 1개, 재무임팩트는 질문형으로만.
+  cross_industry_nudge_v1: CrossIndustryNudgeV1;
   strategy_v2: StrategyV2;
   financials_v2: FinancialsV2;
   founder_v2: FounderV2;
@@ -329,6 +348,11 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     key_bullets: [], sources: [],
   },
   competitors_v2: { direct: [], indirect: [], substitutes: [], competitive_position: 'niche', key_bullets: [], sources: [] },
+  cross_industry_nudge_v1: {
+    industry_pain: { title: '', description: '', financial_impact_question: '' },
+    cross_industry_example: { source_industry: '', case_name: '', solution_description: '' },
+    key_bullets: [], sources: [],
+  },
   strategy_v2: {
     corporate: { direction: '', portfolio: '', ma_partnerships: [], geographic: '' },
     business: { direction: '', competitive_advantage: '', go_to_market: '', product_roadmap: [] },
@@ -512,7 +536,7 @@ function extractJson<T>(raw: string, label = 'response'): T | null {
   return null;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
@@ -595,6 +619,10 @@ Tag important facts in value_flow/subject_position with [n] source markers. Any 
 Tag important facts in growth_motion_detail/moat.description with [n] source markers. Any URL confirmed via web search must go in sources[].url.
 operating_margin/growth_rate (inside revenue_streams) and unit_economics' gross_margin/operating_margin/net_margin/fcf_margin/nrr are numeric fields — return 0 if unconfirmable. Never use text like "Not disclosed"/"N/A" or a sentinel like -999 (that produces invalid JSON). For revenue_share, don't default to 0 if unconfirmable — always fill in a reasonable estimate.`,
 
+  cross_industry_nudge_v1: `Output only a JSON object matching this schema:
+{"industry_pain":{"title":"Pain point title, 8 words or fewer","description":"An operational or business pain point common across the analyzed company's industry (by SIC/KSIC classification) as a whole — not specific to this one company, 2 sentences max","financial_impact_question":"A question only — never a stated number, percentage, or dollar-figure conclusion — about how this pain point could hit the business financially. Example: 'How much of quarterly revenue could this bottleneck be putting at risk?'"},"cross_industry_example":{"source_industry":"The OTHER industry this solution came from — must be genuinely different from the analyzed company's own industry","case_name":"The company or case name that solved it","solution_description":"How that other industry solved an analogous operational problem, 2 sentences max"},"key_bullets":["Why this pain point matters right now for this company, 8 words or fewer","The core mechanism behind the cross-industry solution, 8 words or fewer","The single biggest condition for applying this solution here, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://..."}]}
+Determine the analyzed company's industry (SIC/KSIC classification) from the provided context first. industry_pain must describe a pain point shared across that industry broadly, not a problem unique to this one company. cross_industry_example.source_industry must differ from the analyzed company's own industry — find a company in a different industry that solved a genuinely analogous operational problem. financial_impact_question must be phrased strictly as a question — never assert a number, percentage, or dollar-figure impact as fact. Both facts need at least one real, verifiable source URL in sources[].url — a real URL is required here (unlike other sections, don't leave it null); if you can't find a real source URL for a fact, drop that fact rather than inventing a URL. Tag both descriptions with [n] source markers.`,
+
   competitors_v2: `Output only a JSON object matching this schema:
 {"direct":[{"name":"Competitor name","country":"Country","market_share":"share% (estimates OK)","strengths":["Strength, 1 line, max 3 — strategy/technology/market-power focused"],"weaknesses":["Weakness, 1 line, max 2 — structural weaknesses"],"vs_subject":"1-line positioning gap vs. the analyzed company — format like 'stronger on X, weaker on Y'"}],"indirect":[{"name":"Indirect competitor","threat":"Threat, 1 line"}],"substitutes":[{"name":"Substitute","threat":"Threat, 1 line"}],"competitive_position":"leader|challenger|niche|follower","key_bullets":["This company's competitive position — where it's strongest and weakest, 8 words or fewer","The clearest strategic differentiator versus competitors, 8 words or fewer","The most threatening competitive risk — where it could get flipped, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 direct: 3-5 global direct competitors required. If there's no public market_share figure, give an estimate tagged "(estimated)"; use "-" only when it's genuinely unknowable. vs_subject must not be a plain list — write one specific line on the strategic positioning gap (price, channel, technology, customer base, etc.). Tag important facts in the body with [n] source markers. Any URL confirmed via web search must go in sources[].url.`,
@@ -640,6 +668,7 @@ const SECTION_CONTENT_SIGNALS: Record<string, { text?: string[]; arrays?: string
   value_chain_v2:      { text: ['value_flow'],                                  arrays: ['layers', 'key_bullets'] },
   business_model_v2:   { text: ['growth_motion_detail'],                        arrays: ['revenue_streams', 'segments', 'moat', 'key_bullets'] },
   competitors_v2:      {                                                        arrays: ['direct', 'indirect', 'substitutes', 'key_bullets'] },
+  cross_industry_nudge_v1: {                                                    arrays: ['key_bullets', 'sources'] },
   strategy_v2:          { text: ['strategy_coherence', 'ten_year_durability'],  arrays: ['key_bullets', 'corporate.ma_partnerships', 'business.product_roadmap'] },
   financials_v2:         { text: ['narrative'],                                 arrays: ['income_statement', 'balance_sheet', 'key_risks', 'key_bullets'] },
 };
@@ -973,37 +1002,32 @@ export async function analyzeCompany(
 
   // Batch 2-4 병렬 실행 — sharedContext 공유, 완료 순서대로 즉시 SSE 전송
   // 각 runBatch는 완료 즉시 onBatch → send('batch') 호출 → 탭 순차 채워짐
-  // financial_cache 히트 시 batch4(financials)가 가장 먼저 완료될 수 있음
+  // financial_cache 히트 시 batch3(financials)가 가장 먼저 완료될 수 있음
   const cachedFin = opts?.cachedFinancials;
-  // Batch 4 (financials + sources) and Batch 5 (founder) run in parallel with Batch 2 & 3.
-  // Founder is decoupled so financials can surface faster.
+  // 2026-08 재편: industry_history_v2/tech_evolution_v2를 "pain 진단 시작" 버튼 트리거
+  // 온디맨드 엔드포인트(POST /api/analyze/:id/pain-diagnosis)로 완전히 분리하면서 배치가
+  // 2/3/4 세 개로 줄었다 — founder_v2(구 배치5)는 sources와 함께 배치4로, financials_v2는
+  // value_chain_v2/strategy_v2와 함께 배치3으로 재배치.
   await Promise.all([
     runBatch(2,
       () => [
         callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
         callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
+        callSection<CrossIndustryNudgeV1>(sharedContext, 'cross_industry_nudge_v1'),
       ],
-      ([bm, c]) => ({
-        business_model_v2:   bm ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
-        competitors_v2:      c  ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
+      ([bm, c, n]) => ({
+        business_model_v2:       bm ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
+        competitors_v2:          c  ?? DEFAULT_ANALYSIS_DATA.competitors_v2,
+        cross_industry_nudge_v1: n  ?? DEFAULT_ANALYSIS_DATA.cross_industry_nudge_v1,
       }),
     ),
     runBatch(3,
       () => [
         callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
         callSection<StrategyV2>(sharedContext, 'strategy_v2'),
-      ],
-      ([vc, s]) => ({
-        value_chain_v2:    vc ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
-        strategy_v2:       s  ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
-      }),
-    ),
-    runBatch(4,
-      () => [
         cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2'),
-        callSection<AnalysisSources>(sharedContext, 'sources'),
       ],
-      ([f, src]) => {
+      ([vc, s, f]) => {
         // Rule 4: 재무 수치 전년 대비 10배 이상 변동 → (추정) 뱃지 강제 적용
         if (f?.income_statement) {
           for (const row of f.income_statement) {
@@ -1021,15 +1045,20 @@ export async function analyzeCompany(
           }
         }
         return {
-          financials_v2: f   ?? DEFAULT_ANALYSIS_DATA.financials_v2,
-          sources:       src ?? DEFAULT_ANALYSIS_DATA.sources,
+          value_chain_v2: vc ?? DEFAULT_ANALYSIS_DATA.value_chain_v2,
+          strategy_v2:    s  ?? DEFAULT_ANALYSIS_DATA.strategy_v2,
+          financials_v2:  f  ?? DEFAULT_ANALYSIS_DATA.financials_v2,
         };
       },
     ),
-    runBatch(5,
-      () => [callFounderSection(companyName)],
-      ([fo]) => ({
-        founder_v2: fo ?? DEFAULT_ANALYSIS_DATA.founder_v2,
+    runBatch(4,
+      () => [
+        callFounderSection(companyName),
+        callSection<AnalysisSources>(sharedContext, 'sources'),
+      ],
+      ([fo, src]) => ({
+        founder_v2: fo  ?? DEFAULT_ANALYSIS_DATA.founder_v2,
+        sources:    src ?? DEFAULT_ANALYSIS_DATA.sources,
       }),
     ),
   ]);

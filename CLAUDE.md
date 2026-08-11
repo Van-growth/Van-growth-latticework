@@ -202,6 +202,9 @@ cd client && npm install && npm run dev
 
 **analyses**(추가 컬럼): `growth_scenario_v2` (JSONB — 몬테카를로 성장 시나리오, 3차 배치)
 
+**analyses**(추가 컬럼, 2026-08): `cross_industry_nudge_v1` (JSONB — 크로스인더스트리 넛지,
+2배치. 상세는 "Pain 진단" 섹션 참고)
+
 **analyses**(추가 컬럼, 2026-07-16): `created_by`(uuid, NULL 허용, FK→auth.users) — 이
 마이그레이션 이전 생성된 기존 행은 전부 NULL(생성자 미기록). `POST /api/analyses/:id/share`,
 `DELETE /api/analyses/:id/share`의 소유권(403) 체크 전용 컬럼 — `reanalyze`/
@@ -492,46 +495,83 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 재무 우선순위: EDGAR > DART > 웹추정 (미국 타겟 GTM 기준, 한미 병기는 하지 않음 —
   상세는 Data SSOT 기준 > 5번 참고)
 
-### 분석 배치 구조 (1차/2차/3차)
+### 분석 배치 구조 (1차/2차/온디맨드/3차) — 2026-08 재편
+> 2026-08 이전엔 2/3/4/5 네 배치(총 5개, financials가 4배치·founder가 5배치 단독)였고
+> industry_history_v2/tech_evolution_v2는 "탭을 여는 순간 자동 생성"하는 온디맨드였다.
+> 이번 재편으로 (1) cross_industry_nudge_v1이 2배치에 신규 추가되고, (2) financials_v2가
+> 3배치로, founder_v2가 4배치로 이동해 동기 배치가 4개로 줄었고(진행바 분모도 5→4), (3)
+> industry_history_v2/tech_evolution_v2는 "탭 오픈 자동생성"에서 "pain 진단 시작" 버튼
+> 명시적 클릭 트리거로 바뀌면서 완전히 별도 엔드포인트로 분리됐다. 상세는 아래 "Pain 진단"
+> 섹션 참고.
 - **1차** (목표 60초 이내, 완료 즉시 요약/재무 탭 렌더링):
   - 1배치 (병렬 1개): summary_v2
-  - fin_preview: EDGAR/DART 캐시·라이브 raw 데이터로 재무 탭 즉시 프리뷰 (batch4 Claude 응답 이전)
-- **2차** (1차 이후 백그라운드로 계속 처리 — **2/3/4/5배치는 순차가 아니라 단 하나의
-  `Promise.all([runBatch(2,...), runBatch(3,...), runBatch(4,...), runBatch(5,...)])`로
-  전부 동시에 시작됨**, `server/src/lib/claude.ts`의 `analyzeCompany()` 참고. 번호는
-  배치 식별용일 뿐 실행 순서와 무관 — 각 배치는 완료되는 즉시(그 배치 내부 Claude 호출들이
-  끝나는 순간) 개별적으로 SSE 전송 + DB 저장되므로, 실제 완료 순서는 그때그때 API 응답
-  속도에 따라 달라진다. 코드 주석에도 "financial_cache 히트 시 batch4(financials)가
-  가장 먼저 완료될 수 있음"이라고 이 비순차성이 명시돼 있음):
-  - 2배치 (병렬 2개): business_model_v2, competitors_v2
-  - 3배치 (병렬 2개): value_chain_v2, strategy_v2
-  - 4배치 (병렬 2개): financials_v2, sources
-  - 5배치: founder_v2
-- **온디맨드** (2026-07~, 초기 배치에서 제외): industry_history_v2(산업역사), tech_evolution_v2(기술변화) —
-  해당 탭을 처음 열 때만 `/api/analyze/reanalyze`(기존 "탭별 재분석" 경로 재사용)로 그 시점에 생성,
-  생성 중엔 스피너 + "생성 중..." 표시, 완료되면 DB 저장 + 이후 재방문·다른 유저 조회 시 캐시 히트.
-  DB 컬럼은 생성 전까지 `null` — "생성 실패"와 "아직 생성 안 함"을 구분하기 위해 빈 placeholder
-  객체 대신 명시적 null 사용(2배치/3배치 캐시 히트 판정에서도 이 두 필드는 제외됨).
-  실측(2026-07-09, Datadog, 개발 서버 1회 측정 — 배치 완료 시간은 병렬 호출 중 가장 느린 것에
-  의해 결정되므로 기업별 편차 있음): 2배치 30.4s(business_model_v2 26.7s, competitors_v2 30.4s),
-  3배치 36.7s(value_chain_v2 36.7s, strategy_v2 29.3s) — 이전에는 각 배치에 industry_history_v2/
-  tech_evolution_v2가 3번째 병렬 호출로 더해져 있었음. 셋 중 가장 느린 호출이 배치 완료 시간을
-  결정하는 구조라, 제거로 인한 체감 단축 폭은 그 두 섹션이 해당 배치에서 병목이었는지에 따라
-  기업마다 다름(느슨한 상한 감소는 항상 있음: 동시 API 호출·실패 표면 감소).
-  industry_history_v2와 tech_evolution_v2는 서로 완전히 독립된 별도 요청(유저가 그 탭을
-  각각 언제 여는지 + 그 순간의 웹서치·Claude 응답 속도)이라 **둘 사이의 완료 순서 보장이
-  전혀 없음** — 실측(2026-08, MSFT/TSLA/NVDA 3개 기업): industry_history_v2 평균 103.3s,
-  tech_evolution_v2 평균 94.7s로 매번 tech_evolution이 약간 더 빠른 경향은 있지만(스키마상
-  타임라인 항목 수가 더 많아서로 추정) 절대적 선후 보장은 아님 — tech_evolution 탭이
-  industry_history보다 먼저 완료되는 건 버그가 아니라 설계상 정상 동작.
+  - fin_preview: EDGAR/DART 캐시·라이브 raw 데이터로 재무 탭 즉시 프리뷰 (batch3 Claude 응답 이전)
+- **2차** (1차 이후 백그라운드로 계속 처리 — **2/3/4배치는 순차가 아니라 단 하나의
+  `Promise.all([runBatch(2,...), runBatch(3,...), runBatch(4,...)])`로 전부 동시에
+  시작됨**, `server/src/lib/claude.ts`의 `analyzeCompany()` 참고. 번호는 배치 식별용일 뿐
+  실행 순서와 무관 — 각 배치는 완료되는 즉시(그 배치 내부 Claude 호출들이 끝나는 순간)
+  개별적으로 SSE 전송 + DB 저장되므로, 실제 완료 순서는 그때그때 API 응답 속도에 따라
+  달라진다. 코드 주석에도 "financial_cache 히트 시 batch3(financials)가 가장 먼저
+  완료될 수 있음"이라고 이 비순차성이 명시돼 있음):
+  - 2배치 (병렬 3개): business_model_v2, competitors_v2, cross_industry_nudge_v1
+  - 3배치 (병렬 3개): value_chain_v2, strategy_v2, financials_v2 (Rule 4 YoY 추정뱃지 로직도 이 배치 merge에 포함)
+  - 4배치 (병렬 2개): founder_v2, sources
+- **온디맨드** ("pain 진단 시작" 버튼 클릭 트리거, 2026-08): industry_history_v2(산업역사),
+  tech_evolution_v2(기술변화) — 상세는 아래 "Pain 진단" 섹션 참고.
 - **3차** (2차 전체 완료 후, revenue_history 3개년 이상 확보된 기업만):
   - 6배치: growth_scenario_v2 — 몬테카를로 매출 시뮬레이션 (순수 계산, 프리미엄 전용 탭)
 - 각 배치 완료 시 즉시 Supabase DB 저장 + SSE(`batch` 이벤트)로 프론트엔드 반영
 - 캐시 미스(EDGAR/DART 라이브 조회)로 1차가 60초를 넘길 수 있는 경우 `meta` 이벤트로
   `isFirstLookup: true` 전달 → 프론트에 "처음 조회하는 기업이라 조금 더 걸려요" 안내
-- 배치 타임아웃: 75초
+- 배치 타임아웃: 75초 (1~4배치만 — 온디맨드 pain 진단은 별도 10분 타임아웃, 아래 참고)
 - 배치 실패 시 해당 섹션만 "—" 표시, 나머지 계속 진행
-- 상단 진행바: "배치 N/5 완료" 표시 (6배치는 진행률 계산에서 제외 — 프리미엄 전용이라 대부분 유저에게 미노출)
+- 상단 진행바: "배치 N/4 완료" 표시 (6배치는 진행률 계산에서 제외 — 프리미엄 전용이라 대부분 유저에게 미노출)
+
+### Pain 진단 (2026-08 신규)
+사이드바를 "기업분석"(요약/밸류체인/비즈니스모델/경쟁사/전략/재무/창업자/성장시나리오)과
+"pain 진단"(넛지/산업역사/기술역사) 두 그룹으로 분리 — `client/src/app/components/
+AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 필드 추가).
+탭 바 UI는 그룹 라벨만 덧붙인 것이라 개별 탭 버튼(체크마크/스피너/tooltip)은 기존과 동일.
+
+- **크로스인더스트리 넛지** (`cross_industry_nudge_v1`, 신규 탭 key `cross_industry_nudge`):
+  2배치에서 business_model_v2/competitors_v2와 함께 즉시 생성 — 별도 트리거 불필요, 배치2
+  완료 시 바로 표시. 스키마: SIC/KSIC 업종 공통 pain 1개(`industry_pain`) + 타산업 해결
+  사례 1개(`cross_industry_example`), 둘 다 출처 URL 필수(다른 섹션과 달리 `sources[].url`을
+  null로 두는 것 금지 — 못 찾으면 그 fact 자체를 드롭). `financial_impact_question`은
+  프롬프트에서 질문형으로만 서술하도록 강제(숫자/비율/금액을 사실처럼 단정 금지) — "이 문제가
+  분기 매출의 몇 %에 영향을 줄 수 있을까요?" 같은 형태만 허용, "매출의 15%를 위협"처럼
+  단정하는 문장은 금지. 기존 🟢🟡⚪ 출처 뱃지 시스템(`SectionSource`, L1/L2/L3) 그대로 재사용 —
+  새 뱃지 체계를 만들지 않음.
+- **산업역사/기술역사** (`industry_history_v2`/`tech_evolution_v2`): "pain 진단 시작" 버튼
+  클릭 1번으로 **둘을 동시에** 생성(신규 `POST /api/analyze/:id/pain-diagnosis`, body
+  `{ companyName }`, 로그인 필수·소유권 체크 없음 — `/reanalyze`와 동일한 공용 캐시 협업
+  설계). 내부적으로 기존 `reanalyzeSingleSection()`을 그대로 재사용(`Promise.all`로 두 섹션
+  병렬 호출) — 새 생성 로직을 만들지 않음. 두 섹션 각각 실측 90~106초 걸리는데 병렬로 돌려도
+  기존 75초 배치 타임아웃으로는 부족해 **전용 10분 타임아웃**(`PAIN_DIAGNOSIS_TIMEOUT`)을
+  따로 둠. 이미 둘 다 DB에 있으면(캐시) 재생성 없이 즉시 반환.
+  - **UI**: 클릭 전 두 탭 모두 "산업 역사와 기술 변화를 함께 진단해요. 약 7~10분 소요될 수
+    있어요." + "pain 진단 시작" 버튼(`PainDiagnosisStart` 컴포넌트) 노출. 클릭 후엔 두 탭
+    모두 `SectionGenerating` 스피너("최대 10분 정도 소요될 수 있어요") → 완료되는 대로 각자
+    표시(둘 사이 완료 순서 보장 없음, 기존 온디맨드와 동일한 특성). 실패 시(버튼을 이미
+    눌렀는데 여전히 데이터 없음) 기존 "↻ 다시 분석" 단일 섹션 재시도 링크로 폴백.
+  - **기존 "탭 오픈 시 자동생성" 방식은 완전히 제거됨** — `AnalysisCard.tsx`의
+    `autoGenTriggered` useEffect 삭제, `painDiagnosisStarted` 로컬 state로 대체(이번 화면
+    방문에서 버튼을 눌렀는지만 추적, CTA ↔ 실패 폴백 UI 분기용).
+  - 기존 `/api/analyze/reanalyze`(`section: 'industry'` / `'tech'`)는 그대로 살아있음 —
+    개별 섹션 하나만 재시도할 때(실패 폴백 링크)는 여전히 이 범용 엔드포인트를 사용, 새
+    전용 엔드포인트는 "처음 함께 생성"할 때만 쓰인다.
+- DB 컬럼(`industry_history_v2`/`tech_evolution_v2`)은 생성 전까지 `null` — "생성 실패"와
+  "아직 생성 안 함"을 구분하기 위해 빈 placeholder 객체 대신 명시적 null 사용(2배치/3배치
+  캐시 히트 판정에서도 이 두 필드는 제외됨). `cross_industry_nudge_v1`는 2배치 소속이라
+  다른 배치2 필드(business_model_v2 등)와 동일하게 항상 채워짐(실패 시 빈 placeholder
+  객체로 폴백, null 아님).
+- industry_history_v2와 tech_evolution_v2는 서로 완전히 독립된 별도 웹서치 요청(같은
+  버튼 클릭으로 동시에 시작은 하지만 내부적으로 별개 `reanalyzeSingleSection` 호출)이라
+  **둘 사이의 완료 순서 보장이 전혀 없음** — 실측(2026-08, MSFT/TSLA/NVDA 3개 기업):
+  industry_history_v2 평균 103.3s, tech_evolution_v2 평균 94.7s로 매번 tech_evolution이
+  약간 더 빠른 경향은 있지만(스키마상 타임라인 항목 수가 더 많아서로 추정) 절대적 선후
+  보장은 아님 — tech_evolution 탭이 industry_history보다 먼저 완료되는 건 버그가 아니라
+  설계상 정상 동작.
 
 ### 보안
 - RLS 전 테이블 적용 완료 (2026-07-03, 로그인 구현을 기다리지 않고 선적용 — 상세는 Security Principles 섹션 참고)
@@ -848,6 +888,13 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   교훈: 크론/배치 스크립트가 라이브 fetch 로직을 "별도 실행 컨텍스트"라는 이유로
   복제해서 쓰는 패턴(2026-07-04 revenue concept 버그도 동일 구조)은 한쪽만 고치고
   잊기 쉬움 — 필드 하나를 새로 추가할 때마다 두 파일 다 확인할 것.
+- [x] Pain 진단 신규 + 사이드바 2그룹 분리 + 배치 재편 (2026-08) — 상세는 위 "분석 배치
+  구조"/"Pain 진단" 섹션 참고. 신규: `cross_industry_nudge_v1`(배치2, 크로스인더스트리
+  넛지), `POST /api/analyze/:id/pain-diagnosis`(산업역사+기술역사 동시 온디맨드 생성,
+  10분 타임아웃). 배치 재편: financials_v2 4배치→3배치, founder_v2 5배치→4배치 이동,
+  동기 배치 5개→4개(진행바 분모도 5→4). 사이드바: `TABS`에 `group` 필드 추가, "기업분석"
+  8탭 + "pain 진단" 3탭(넛지/산업역사/기술역사). industry_history_v2/tech_evolution_v2의
+  "탭 오픈 시 자동생성"은 완전히 제거되고 "pain 진단 시작" 버튼 명시적 클릭으로 대체.
 
 ## Security Principles (SSOT)
 
@@ -1333,4 +1380,8 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
   다중상장 대응(SK하이닉스 등) |
 | v2.2.0 | 2026-08 — 영어 단일화 1단계: Claude 분석 프롬프트 전체 영어 고정(EN/KR 토글 계획은 취소,
   DART 컨텍스트만 예외적으로 한국어 유지). 상세는 위 "언어 정책" 섹션 참고. |
+| v2.3.0 | 2026-08 — Pain 진단 신규(크로스인더스트리 넛지 배치2 추가, 산업역사/기술역사
+  "pain 진단 시작" 버튼 트리거로 전환), 사이드바 기업분석/pain 진단 2그룹 분리, 배치
+  재편(2/3/4배치 3개, financials→3배치·founder→4배치 이동, 진행바 분모 5→4). 상세는 위
+  "분석 배치 구조"/"Pain 진단" 섹션 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

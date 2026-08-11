@@ -307,7 +307,7 @@ export default function HomeContent() {
       .then((data: AnalysisDetail) => {
         setResult(data);
         setAnalysisData(data);
-        setCompletedBatches(new Set([1, 2, 3, 4, 5, 6, 40]));
+        setCompletedBatches(new Set([1, 2, 3, 4, 6, 40]));
         loadedIdRef.current = urlId;
       })
       .catch(() => setError('분석 결과를 불러오지 못했습니다.'))
@@ -319,6 +319,7 @@ export default function HomeContent() {
     industry:       'industry_history_v2',
     business_model: 'business_model_v2',
     competitors:    'competitors_v2',
+    nudge:          'cross_industry_nudge_v1',
     tech:           'tech_evolution_v2',
     value_chain:    'value_chain_v2',
     strategy:       'strategy_v2',
@@ -373,6 +374,48 @@ export default function HomeContent() {
     }
   }
 
+  // "pain 진단 시작" 버튼 — industry_history_v2 + tech_evolution_v2를 POST
+  // /api/analyze/:id/pain-diagnosis 한 번의 요청으로 동시 생성한다(2026-08, 기존 탭별
+  // 개별 자동생성 방식 대체). reanalyzingTabs에 'industry'/'tech' 둘 다 추가해서
+  // AnalysisCard의 기존 isReanalyzing('industry' | 'tech') 판정 로직을 그대로 재사용 —
+  // 새 로딩 state를 따로 만들지 않는다.
+  async function handlePainDiagnosisStart() {
+    const targetId = analysisIdRef.current ?? result?.id;
+    const targetName = result?.companyName || companyName.trim();
+    if (!targetId || !targetName) return;
+    if (!session) { signInWithGoogle(); return; }
+    setReanalyzingTabs(prev => new Set([...prev, 'industry', 'tech']));
+    try {
+      const resp = await fetch(`${API_URL}/api/analyze/${targetId}/pain-diagnosis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(null, session.access_token) },
+        body: JSON.stringify({ companyName: targetName }),
+      });
+      if (resp.ok) {
+        const { industry_history_v2, tech_evolution_v2 } = await resp.json();
+        streamingRef.current = {
+          ...(streamingRef.current ?? emptyBase(targetName)),
+          ...(industry_history_v2 ? { industry_history_v2 } : {}),
+          ...(tech_evolution_v2 ? { tech_evolution_v2 } : {}),
+        };
+        setDisplayData({ ...streamingRef.current });
+        if (result) {
+          const updated = {
+            ...result,
+            ...(industry_history_v2 ? { industry_history_v2 } : {}),
+            ...(tech_evolution_v2 ? { tech_evolution_v2 } : {}),
+          };
+          setResult(updated);
+          setAnalysisData(updated);
+        }
+      }
+    } catch (err) {
+      console.error('[pain-diagnosis]', err);
+    } finally {
+      setReanalyzingTabs(prev => { const s = new Set(prev); s.delete('industry'); s.delete('tech'); return s; });
+    }
+  }
+
   // 배치별로 즉시 DB 저장되는 기존 구조를 그대로 활용 — 이미 있는 GET /api/analyses/:id로
   // 현재까지 완료된 배치를 가져와 화면 상태에 병합한다. 완료 여부(b1~b5 모두 참)를 반환.
   async function fetchAndMergeStatus(analysisId: string, name: string): Promise<boolean> {
@@ -387,21 +430,19 @@ export default function HomeContent() {
     setDisplayData({ ...streamingRef.current });
 
     const b1 = !!data.summary_v2;
-    const b2 = !!(data.business_model_v2 && data.competitors_v2);
-    const b3 = !!(data.value_chain_v2 && data.strategy_v2);
-    const b4 = !!data.financials_v2;
-    const b5 = !!data.founder_v2;
-    const allDone = b1 && b2 && b3 && b4 && b5;
+    const b2 = !!(data.business_model_v2 && data.competitors_v2 && data.cross_industry_nudge_v1);
+    const b3 = !!(data.value_chain_v2 && data.strategy_v2 && data.financials_v2);
+    const b4 = !!data.founder_v2;
+    const allDone = b1 && b2 && b3 && b4;
 
     const next = new Set<number>([-1]);
     if (b1) next.add(1);
     if (b2) next.add(2);
-    if (b3) next.add(3);
-    if (b4) { next.add(4); next.add(40); }
-    if (b5) next.add(5);
+    if (b3) { next.add(3); next.add(40); }
+    if (b4) next.add(4);
     if (data.growth_scenario_v2) next.add(6);
     setCompletedBatches(prev => new Set([...prev, ...next]));
-    setProgress({ completed: [b1, b2, b3, b4, b5].filter(Boolean).length, total: 5 });
+    setProgress({ completed: [b1, b2, b3, b4].filter(Boolean).length, total: 4 });
 
     if (allDone && !analysisDoneRef.current) {
       analysisDoneRef.current = true;
@@ -409,7 +450,7 @@ export default function HomeContent() {
       loadedIdRef.current = data.id;
       setResult(data);
       setAnalysisData(data);
-      setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40]));
+      setCompletedBatches(new Set([-1, 1, 2, 3, 4, 6, 40]));
       if (data.id) router.replace(`/?id=${data.id}`);
       refreshUsage();
     }
@@ -522,8 +563,8 @@ export default function HomeContent() {
                 streamingRef.current = { ...streamingRef.current, ...batchData } as AnalysisDetail;
               }
               setDisplayData({ ...streamingRef.current });
-              // batch 4 also unlocks financials tab (batch 40) in case fin_preview wasn't sent
-              const extra = batchNum === 4 ? [40] : [];
+              // batch 3 also unlocks financials tab (batch 40) in case fin_preview wasn't sent
+              const extra = batchNum === 3 ? [40] : [];
               setCompletedBatches(prev => new Set([...prev, batchNum, ...extra]));
 
               setProgress({ completed: payload.completed, total: payload.total });
@@ -545,7 +586,7 @@ export default function HomeContent() {
               setResult(merged);
               setAnalysisData(merged);
               streamingRef.current = merged;
-              setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
+              setCompletedBatches(new Set([-1, 1, 2, 3, 4, 6, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
               if (merged.id) router.replace(`/?id=${merged.id}`);
               refreshUsage();
               trackEvent('report_generated', { companyName: merged.companyName, cached: payload.cached === true });
@@ -711,10 +752,10 @@ export default function HomeContent() {
   const isStreaming = completedBatches.has(-1);
   const nudgeItems = [
     { label: '산업분석', done: completedBatches.has(2) },
-    { label: '재무',     done: completedBatches.has(40) || completedBatches.has(4) },
+    { label: '재무',     done: completedBatches.has(40) || completedBatches.has(3) },
     { label: '경쟁사',   done: completedBatches.has(2) },
     { label: '전략',     done: completedBatches.has(3) },
-    { label: '창업자',   done: completedBatches.has(5) },
+    { label: '창업자',   done: completedBatches.has(4) },
   ];
   const allNudgeDone = nudgeItems.every(it => it.done);
   const showNudge = isStreaming && completedBatches.has(1) && !nudgeDismissed;
@@ -974,7 +1015,7 @@ export default function HomeContent() {
             </div>
           )}
 
-          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} isPremium={usage?.isPremium ?? false} />
+          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} onPainDiagnosisStart={handlePainDiagnosisStart} isPremium={usage?.isPremium ?? false} />
         </div>
       )}
 

@@ -322,6 +322,21 @@ export interface CompetitorsV2 {
   revenue_ranking?: CompetitorRevenueRanking | null;
 }
 
+export interface CrossIndustryNudgeV1 {
+  industry_pain: {
+    title: string;
+    description: string;
+    financial_impact_question: string;
+  };
+  cross_industry_example: {
+    source_industry: string;
+    case_name: string;
+    solution_description: string;
+  };
+  key_bullets?: string[];
+  sources?: Source[];
+}
+
 export interface StrategyV2 {
   corporate: {
     direction: string;
@@ -528,6 +543,7 @@ export interface AnalysisDetail {
   value_chain_v2?: ValueChainV2;
   business_model_v2?: BusinessModelV2;
   competitors_v2?: CompetitorsV2;
+  cross_industry_nudge_v1?: CrossIndustryNudgeV1;
   strategy_v2?: StrategyV2;
   financials_v2?: FinancialsV2;
   founder_v2?: FounderV2;

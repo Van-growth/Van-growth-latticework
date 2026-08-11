@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import {
   analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, reanalyzeSingleSection,
-  generateGrowthScenarioNarrative,
+  generateGrowthScenarioNarrative, withTimeout,
 } from '../lib/claude';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
 import {
@@ -277,24 +277,23 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
       summary_v2: data.summary_v2 ?? null,
       summary:    data.summary_v2?.key_bullets?.join(' | ') ?? '',
     };
-    // industry_history_v2/tech_evolution_v2는 배치2/3이 더 이상 생성하지 않음(온디맨드 전환) —
+    // industry_history_v2/tech_evolution_v2는 어떤 배치로도 생성하지 않음(온디맨드 전환) —
     // 여기서 필드를 포함하면 이미 온디맨드로 생성돼 있던 값을 배치 재실행 시 null로 덮어쓰게 되므로
-    // 아예 건드리지 않는다(별도 소유자: /api/analyze/reanalyze의 getReanalyzeSectionDbFields).
+    // 아예 건드리지 않는다(별도 소유자: POST /api/analyze/:id/pain-diagnosis).
     case 2: return {
-      business_model_v2:   data.business_model_v2   ?? null,
-      competitors_v2:      data.competitors_v2       ?? null,
+      business_model_v2:       data.business_model_v2       ?? null,
+      competitors_v2:          data.competitors_v2           ?? null,
+      cross_industry_nudge_v1: data.cross_industry_nudge_v1  ?? null,
     };
     case 3: return {
-      value_chain_v2:    data.value_chain_v2    ?? null,
-      strategy_v2:       data.strategy_v2       ?? null,
+      value_chain_v2: data.value_chain_v2    ?? null,
+      strategy_v2:    data.strategy_v2       ?? null,
+      financials_v2:  data.financials_v2     ?? null,
+      financials:     data.financials_v2?.narrative ?? '',
     };
     case 4: return {
-      financials_v2: data.financials_v2 ?? null,
-      sources:       data.sources       ?? {},
-      financials:    data.financials_v2?.narrative ?? '',
-    };
-    case 5: return {
       founder_v2: data.founder_v2 ?? null,
+      sources:    data.sources    ?? {},
     };
     default: return {};
   }
@@ -329,6 +328,7 @@ function buildDonePayload(
     value_chain_v2:      data.value_chain_v2      ?? null,
     business_model_v2:   data.business_model_v2   ?? null,
     competitors_v2:      data.competitors_v2       ?? null,
+    cross_industry_nudge_v1: data.cross_industry_nudge_v1 ?? null,
     strategy_v2:         data.strategy_v2          ?? null,
     financials_v2:       data.financials_v2        ?? null,
     founder_v2:          data.founder_v2           ?? null,
@@ -410,6 +410,7 @@ router.post('/', async (req: Request, res: Response) => {
         value_chain_v2:      analysis.value_chain_v2,
         business_model_v2:   analysis.business_model_v2,
         competitors_v2:      analysis.competitors_v2,
+        cross_industry_nudge_v1: analysis.cross_industry_nudge_v1,
         strategy_v2:         analysis.strategy_v2,
         financials_v2:       analysis.financials_v2,
         founder_v2:          analysis.founder_v2,
@@ -441,6 +442,7 @@ router.post('/', async (req: Request, res: Response) => {
       value_chain_v2:      analysis.value_chain_v2,
       business_model_v2:   analysis.business_model_v2,
       competitors_v2:      analysis.competitors_v2,
+      cross_industry_nudge_v1: analysis.cross_industry_nudge_v1,
       strategy_v2:         analysis.strategy_v2,
       financials_v2:       analysis.financials_v2,
       founder_v2:          analysis.founder_v2,
@@ -573,7 +575,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     if (!forceRefresh) {
       const { data: cached } = await supabase
         .from('analyses')
-        .select('id, created_at, summary_v2, industry_history_v2, tech_evolution_v2, value_chain_v2, business_model_v2, competitors_v2, strategy_v2, financials_v2, founder_v2, growth_scenario_v2, sources, data_source')
+        .select('id, created_at, summary_v2, industry_history_v2, tech_evolution_v2, value_chain_v2, business_model_v2, competitors_v2, cross_industry_nudge_v1, strategy_v2, financials_v2, founder_v2, growth_scenario_v2, sources, data_source')
         .eq('company_id', company.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -581,15 +583,15 @@ router.post('/stream', async (req: Request, res: Response) => {
 
       if (cached) {
         const b1 = !!cached.summary_v2;
-        // industry_history_v2/tech_evolution_v2는 온디맨드 전환(2026-07)으로 배치2/3에 더 이상
-        // 포함되지 않음 — "배치 완료" 판정에서 제외해야 아직 온디맨드 생성 전인 정상 캐시 행이
-        // 매번 배치 전체 재생성으로 이어지지 않는다. 캐시에 있으면 sendCached에서 별도로 실어보냄.
-        const b2 = !!(cached.business_model_v2 && cached.competitors_v2);
-        const b3 = !!(cached.value_chain_v2 && cached.strategy_v2);
-        const b4 = !!cached.financials_v2;
-        const b5 = !!cached.founder_v2;
+        // industry_history_v2/tech_evolution_v2는 온디맨드 전환(2026-07, 2026-08부터는
+        // "pain 진단 시작" 버튼 전용 엔드포인트로 완전 분리)으로 어떤 배치에도 포함되지 않음 —
+        // "배치 완료" 판정에서 제외해야 아직 생성 전인 정상 캐시 행이 매번 배치 전체
+        // 재생성으로 이어지지 않는다. 캐시에 있으면 sendCached에서 별도로 실어보냄.
+        const b2 = !!(cached.business_model_v2 && cached.competitors_v2 && cached.cross_industry_nudge_v1);
+        const b3 = !!(cached.value_chain_v2 && cached.strategy_v2 && cached.financials_v2);
+        const b4 = !!cached.founder_v2;
 
-        if (b1 && b2 && b3 && b4 && b5) {
+        if (b1 && b2 && b3 && b4) {
           // Full cache hit — financial_cache 조회 (web_search 기반 캐시만 업그레이드)
           let effectiveFinancials = cached.financials_v2;
           let effectiveCompetitors = cached.competitors_v2;
@@ -654,33 +656,34 @@ router.post('/stream', async (req: Request, res: Response) => {
           completedCount++;
           skipBatches.add(batchNum);
           Object.assign(initialData, data);
-          send('batch', { batch: batchNum, data, completed: completedCount, total: 5, analysisId: cached.id });
+          send('batch', { batch: batchNum, data, completed: completedCount, total: 4, analysisId: cached.id });
         };
 
         if (b1) sendCached(1, { summary_v2: cached.summary_v2 });
         // industry_history_v2/tech_evolution_v2는 온디맨드라 캐시에 있을 때만 실어보냄 —
-        // 없으면 프론트에서 undefined로 남아 해당 탭 클릭 시 온디맨드 생성이 트리거됨.
+        // 없으면 프론트에서 undefined로 남아 "pain 진단 시작" 버튼이 계속 노출된다.
         if (b2) sendCached(2, {
           business_model_v2: cached.business_model_v2,
           competitors_v2:    cached.competitors_v2,
+          cross_industry_nudge_v1: cached.cross_industry_nudge_v1,
           ...(cached.industry_history_v2 ? { industry_history_v2: cached.industry_history_v2 } : {}),
         });
         if (b3) sendCached(3, {
           value_chain_v2: cached.value_chain_v2,
           strategy_v2:    cached.strategy_v2,
+          financials_v2:  cached.financials_v2,
           ...(cached.tech_evolution_v2 ? { tech_evolution_v2: cached.tech_evolution_v2 } : {}),
         });
-        if (b4) sendCached(4, { financials_v2: cached.financials_v2, sources: cached.sources ?? {} });
-        if (b5) sendCached(5, { founder_v2: cached.founder_v2 });
+        if (b4) sendCached(4, { founder_v2: cached.founder_v2, sources: cached.sources ?? {} });
 
         if (!(await checkAndRecordUsage())) return;
 
         const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name, listings);
         send('meta', { isFirstLookup: !isCacheHit });
-        const useCachedFin = !skipBatches.has(4) ? cachedFinancials : undefined;
+        const useCachedFin = !skipBatches.has(3) ? cachedFinancials : undefined;
 
-        // fin_preview: send financials immediately from raw cache if batch 4 hasn't loaded yet
-        if (!skipBatches.has(4)) {
+        // fin_preview: send financials immediately from raw cache if batch 3 hasn't loaded yet
+        if (!skipBatches.has(3)) {
           const quickFin = (rawEdgar || rawDart)
             ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR')
             : (useCachedFin ?? null);
@@ -695,12 +698,12 @@ router.post('/stream', async (req: Request, res: Response) => {
           contextText || undefined,
           async (batchNum, data) => {
             completedCount++;
-            send('batch', { batch: batchNum, data, completed: completedCount, total: 5, analysisId: cached.id });
+            send('batch', { batch: batchNum, data, completed: completedCount, total: 4, analysisId: cached.id });
             const fields = getBatchDbFields(batchNum, data);
             if (Object.keys(fields).length > 0) {
               await supabase.from('analyses').update(fields).eq('id', cached.id);
             }
-            if (batchNum === 4 && !cachedFinancials && data.financials_v2) {
+            if (batchNum === 3 && !cachedFinancials && data.financials_v2) {
               await supabase.from('financials_v2_cache').upsert(
                 { company_name: name, financials_v2: data.financials_v2, updated_at: new Date().toISOString() },
                 { onConflict: 'company_name' },
@@ -720,7 +723,7 @@ router.post('/stream', async (req: Request, res: Response) => {
         }
         // SSE 전송은 프리미엄 유저에게만 — 무료 유저는 이 이벤트 자체를 받지 않는다.
         if (growthScenario && isPremium) {
-          send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: completedCount, total: 5, analysisId: cached.id });
+          send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: completedCount, total: 4, analysisId: cached.id });
         }
 
         await attachIndustryData(analysis.financials_v2, analysis.competitors_v2, dataSource, rawEdgar);
@@ -784,6 +787,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               value_chain_v2:      null,
               business_model_v2:   null,
               competitors_v2:      null,
+              cross_industry_nudge_v1: null,
               strategy_v2:         null,
               financials_v2:       null,
               founder_v2:          null,
@@ -791,16 +795,16 @@ router.post('/stream', async (req: Request, res: Response) => {
             .select('id, created_at')
             .single();
           if (!error && saved) { savedId = saved.id; savedAt = saved.created_at; }
-          send('batch', { batch: batchNum, data, completed: batchCount, total: 5, analysisId: savedId });
+          send('batch', { batch: batchNum, data, completed: batchCount, total: 4, analysisId: savedId });
 
         } else if (savedId) {
           const fields = getBatchDbFields(batchNum, data);
           if (Object.keys(fields).length > 0) {
             await supabase.from('analyses').update(fields).eq('id', savedId);
           }
-          send('batch', { batch: batchNum, data, completed: batchCount, total: 5, analysisId: savedId });
+          send('batch', { batch: batchNum, data, completed: batchCount, total: 4, analysisId: savedId });
 
-          if (batchNum === 4 && !cachedFinancials && data.financials_v2) {
+          if (batchNum === 3 && !cachedFinancials && data.financials_v2) {
             await supabase.from('financials_v2_cache').upsert(
               { company_name: name, financials_v2: data.financials_v2, updated_at: new Date().toISOString() },
               { onConflict: 'company_name' },
@@ -821,7 +825,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     }
     // SSE 전송은 프리미엄 유저에게만 — 무료 유저는 이 이벤트 자체를 받지 않는다.
     if (growthScenario && savedId && isPremium) {
-      send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: batchCount, total: 5, analysisId: savedId });
+      send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: batchCount, total: 4, analysisId: savedId });
     }
 
     await attachIndustryData(analysis.financials_v2, analysis.competitors_v2, dataSource, rawEdgar);
@@ -850,6 +854,7 @@ const REANALYZE_SECTION_MAP: Record<string, string> = {
   industry:       'industry_history_v2',
   business_model: 'business_model_v2',
   competitors:    'competitors_v2',
+  nudge:          'cross_industry_nudge_v1',
   tech:           'tech_evolution_v2',
   value_chain:    'value_chain_v2',
   strategy:       'strategy_v2',
@@ -924,6 +929,71 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
   } catch (err) {
     console.error(`[reanalyze] ${section} FAIL`, err);
     res.status(500).json({ error: '재분석 중 오류가 발생했습니다.' });
+  }
+});
+
+// ── POST /api/analyze/:id/pain-diagnosis — "pain 진단 시작" 버튼 ───────────────────
+// industry_history_v2 + tech_evolution_v2를 한 번에 생성한다(2026-08, 기존 탭별 개별
+// 자동생성 방식을 명시적 버튼 트리거로 대체). 내부적으로 reanalyzeSingleSection을 그대로
+// 재사용 — 새 생성 로직을 만들지 않는다. 각 섹션이 실측 90~106초 걸리므로(2026-08 3개사
+// 실측) 두 섹션을 병렬로 돌려도 기존 75초 배치 타임아웃으로는 부족해 전용 10분 타임아웃을 둔다.
+const PAIN_DIAGNOSIS_TIMEOUT = 10 * 60 * 1000;
+
+router.post('/:id/pain-diagnosis', async (req: Request, res: Response) => {
+  // /reanalyze와 동일하게 하드 401만 적용 — 소유권(403) 체크 없음(공용 캐시 협업 UX,
+  // 실전 발견 이력 16번과 동일한 설계 판단).
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
+  const analysisId = String(req.params.id ?? '').trim();
+  const { companyName } = req.body as { companyName?: string };
+  if (!analysisId || !companyName?.trim()) {
+    res.status(400).json({ error: 'companyName이 필요합니다.' });
+    return;
+  }
+  const name = companyName.trim();
+
+  try {
+    // 이미 둘 다 생성돼 있으면 재생성 없이 즉시 반환 (불필요한 비용 발생 방지)
+    const { data: existing } = await supabase
+      .from('analyses')
+      .select('industry_history_v2, tech_evolution_v2')
+      .eq('id', analysisId)
+      .maybeSingle();
+    if (existing?.industry_history_v2 && existing?.tech_evolution_v2) {
+      res.json({ industry_history_v2: existing.industry_history_v2, tech_evolution_v2: existing.tech_evolution_v2 });
+      return;
+    }
+
+    console.log(`[pain-diagnosis] START for "${name}"`);
+    const [industryHistory, techEvolution] = await withTimeout(
+      Promise.all([
+        reanalyzeSingleSection(name, 'industry_history_v2'),
+        reanalyzeSingleSection(name, 'tech_evolution_v2'),
+      ]),
+      PAIN_DIAGNOSIS_TIMEOUT,
+      'pain-diagnosis',
+    );
+
+    if (!industryHistory && !techEvolution) {
+      res.status(422).json({ error: 'pain 진단 생성에 실패했습니다. 잠시 후 다시 시도해주세요.' });
+      return;
+    }
+
+    const dbFields: Record<string, any> = {};
+    if (industryHistory) dbFields.industry_history_v2 = industryHistory;
+    if (techEvolution)   dbFields.tech_evolution_v2   = techEvolution;
+    const { error: updateErr } = await supabase.from('analyses').update(dbFields).eq('id', analysisId);
+    if (updateErr) throw updateErr;
+
+    console.log(`[pain-diagnosis] OK for "${name}"`);
+    res.json({ industry_history_v2: industryHistory ?? null, tech_evolution_v2: techEvolution ?? null });
+  } catch (err) {
+    console.error('[pain-diagnosis] FAIL', err);
+    res.status(500).json({ error: 'pain 진단 중 오류가 발생했습니다.' });
   }
 });
 

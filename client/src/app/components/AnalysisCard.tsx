@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, memo, useCallback, useMemo, useTransition } from 'react';
+import { useState, useEffect, memo, useCallback, useMemo, useTransition } from 'react';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { buildAuthHeaders } from '@/lib/authHeaders';
@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
-  TrendingUp, Lock, Copy, Check,
+  TrendingUp, Lock, Copy, Check, Lightbulb,
 } from 'lucide-react';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
 import {
@@ -33,6 +33,7 @@ import {
   ValueChainV2,
   BusinessModelV2,
   CompetitorsV2,
+  CrossIndustryNudgeV1,
   StrategyV2,
   FinancialsV2,
   FinancialsV2Row,
@@ -763,70 +764,6 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
   );
 });
 
-// ── Legacy Tab: 산업역사 ──────────────────────────────────────────────────────
-
-function Timeline({ text, sourcesKey, data }: {
-  text: string;
-  sourcesKey: keyof typeof data.sources;
-  data: AnalysisDetail;
-}) {
-  type Item = { period: string; sortYear: number; content: string };
-  const { items, hasYears } = useMemo(() => {
-    const lines = splitLines(text);
-    const parsed: Item[] = [];
-    for (const line of lines) {
-      const m = line.match(/^((?:19|20)\d{2}(?:년대?|s)?(?:\s*[~\-–]\s*(?:(?:19|20)\d{2}(?:년대?|s)?|현재))?)\s*[:·]?\s*/);
-      if (m) {
-        const yearNum = parseInt(m[1].match(/\d{4}/)?.[0] ?? '0');
-        parsed.push({ period: m[1], sortYear: yearNum, content: line.slice(m[0].length) });
-      } else if (parsed.length > 0) {
-        parsed[parsed.length - 1].content += ' ' + line;
-      } else {
-        parsed.push({ period: '', sortYear: 0, content: line });
-      }
-    }
-    const hy = parsed.some(it => it.period !== '');
-    if (hy) parsed.sort((a, b) => a.sortYear - b.sortYear);
-    return { items: parsed, hasYears: hy };
-  }, [text]);
-
-  return (
-    <>
-      <div>
-        {items.map((item, i) => {
-          const isLast = i === items.length - 1;
-          const badgeText = item.period.match(/\d{2,4}/)?.[0] ?? '·';
-          return (
-            <div key={i} className="flex gap-4">
-              <div className="flex flex-col items-center w-9 shrink-0">
-                <div className="w-9 h-9 rounded-full bg-blue-50 border-2 border-blue-300 flex items-center justify-center shrink-0">
-                  <span className="text-[10px] font-semibold text-blue-800 text-center leading-none">{badgeText}</span>
-                </div>
-                {!isLast && <div className="w-0.5 bg-gray-100 flex-1 my-1 min-h-[1.5rem]" />}
-              </div>
-              <div className="pb-5 flex-1 min-w-0 pt-1">
-                {item.period && hasYears && (
-                  <div className="text-[11px] text-blue-600 font-medium mb-1">{item.period}</div>
-                )}
-                <p className="text-sm text-gray-700 leading-relaxed">{item.content}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <SourcesList sources={data.sources?.[sourcesKey] as Source[] | undefined} />
-    </>
-  );
-}
-
-function IndustryHistoryTab({ data }: { data: AnalysisDetail }) {
-  return (
-    <SectionCard title="산업 발전 연혁" dotColor="bg-blue-400">
-      <Timeline text={data.industry_history} sourcesKey="industry_history" data={data} />
-    </SectionCard>
-  );
-}
-
 // ── V2 Tab: 기술변화 ──────────────────────────────────────────────────────────
 
 const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t: TechEvolutionV2; sources: Source[] | undefined }) {
@@ -892,50 +829,6 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
     </div>
   );
 });
-
-// ── Legacy Tab: 기술변화 ──────────────────────────────────────────────────────
-
-const TECH_BULLET_RE = /^(\d+[.)]\s|[①②③④⑤⑥⑦⑧⑨]\s?|\d+단계[:\s]|[•·▶→■◆]\s?)/;
-
-function TechEvolutionTab({ data }: { data: AnalysisDetail }) {
-  const lines = splitLines(data.tech_evolution);
-  const points: string[] = [];
-  let buf = '';
-  for (const line of lines) {
-    if (TECH_BULLET_RE.test(line)) {
-      if (buf) points.push(buf.trim());
-      buf = line.replace(TECH_BULLET_RE, '');
-    } else {
-      buf = buf ? buf + ' ' + line : line;
-    }
-  }
-  if (buf) points.push(buf.trim());
-  if (points.length === 0 && data.tech_evolution) points.push(data.tech_evolution);
-
-  return (
-    <SectionCard title="기술 변화 트렌드" dotColor="bg-purple-400">
-      <div className="space-y-4">
-        {points.map((point, i) => {
-          const yearMatch = point.match(/^((?:19|20)\d{2}(?:년대?|s)?(?:\s*[-~]\s*(?:(?:19|20)\d{2}(?:년대?|s)?|현재))?)\s*[:·—]?\s*/);
-          const yearText = yearMatch?.[1] ?? '';
-          const restText = yearMatch ? point.slice(yearMatch[0].length) : point;
-          return (
-            <div key={i} className="flex gap-3 items-start">
-              <div className="w-6 h-6 rounded-full bg-purple-50 border-2 border-purple-400 flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-[11px] font-semibold text-purple-800">{i + 1}</span>
-              </div>
-              <div className="flex-1">
-                {yearText && <div className="text-[11px] text-purple-600 font-medium mb-1">{yearText}</div>}
-                <p className="text-sm text-gray-700 leading-relaxed">{restText}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <SourcesList sources={data.sources?.tech_evolution} />
-    </SectionCard>
-  );
-}
 
 // ── V2 Tab: 밸류체인 ──────────────────────────────────────────────────────────
 
@@ -1566,6 +1459,38 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
     </div>
   );
 }
+
+// ── V2 Tab: 크로스인더스트리 넛지 (pain 진단 그룹) ────────────────────────────────
+
+const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
+  { n, sources }: { n: CrossIndustryNudgeV1; sources: Source[] | undefined },
+) {
+  return (
+    <div className="space-y-4">
+      <KeyBulletsBlock bullets={n.key_bullets} />
+
+      <SectionCard title="업종 공통 Pain" dotColor="bg-amber-400">
+        <div className="text-sm font-semibold text-gray-800 mb-1.5">{n.industry_pain.title}</div>
+        <CitedText text={n.industry_pain.description} className="text-sm text-gray-600 leading-relaxed block mb-2" />
+        {n.industry_pain.financial_impact_question && (
+          <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-800 leading-relaxed">
+            {n.industry_pain.financial_impact_question}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="타산업 해결 사례" dotColor="bg-blue-400">
+        <div className="flex items-center gap-2 mb-1.5">
+          <Tag label={n.cross_industry_example.source_industry} color="blue" />
+          <span className="text-sm font-semibold text-gray-800">{n.cross_industry_example.case_name}</span>
+        </div>
+        <CitedText text={n.cross_industry_example.solution_description} className="text-sm text-gray-600 leading-relaxed block" />
+      </SectionCard>
+
+      <SourcesList sources={sources} />
+    </div>
+  );
+});
 
 // ── V2 Tab: 전략 ──────────────────────────────────────────────────────────────
 
@@ -2370,24 +2295,6 @@ function SummarySkeleton() {
   );
 }
 
-function TimelineSkeleton() {
-  return (
-    <div className="space-y-4">
-      <Sk h="h-14" />
-      {[0,1,2,3].map(i => (
-        <div key={i} className="flex gap-4">
-          <Sk w="w-10 shrink-0" h="h-10" />
-          <div className="flex-1 space-y-2 pt-1">
-            <Sk w="w-1/2" />
-            <Sk />
-            <Sk w="w-3/4" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function CardsSkeleton({ count = 3 }: { count?: number }) {
   return (
     <div className="space-y-4">
@@ -2400,17 +2307,36 @@ function CardsSkeleton({ count = 3 }: { count?: number }) {
   );
 }
 
-// 온디맨드 섹션 생성 중 표시 — 배치 스트리밍 스켈레톤(TimelineSkeleton 등)과 달리
+// 온디맨드 섹션 생성 중 표시 — 배치 스트리밍 스켈레톤(CardsSkeleton 등)과 달리
 // "지금 이 요청으로 생성 중"임을 명시적으로 알림 (financials 새로고침과 동일한 패턴).
 // 예상 소요시간 안내 — 웹서치 2회 + Claude 생성이 포함돼 실제로 90~106초(3개 기업 실측
-// 평균 industry_history 103s/tech_evolution 95s) 걸림. 안내 없이 스피너만 있으면 실패한
-// 것처럼 보여 "로딩만 계속 돈다"는 오인으로 이어지기 쉬움 — 진짜 버그는 아니었지만 UX상
-// 예상 시간을 명시해 체감 대기감을 줄인다.
+// 평균 industry_history 103s/tech_evolution 95s) 걸림. "pain 진단 시작" 버튼(2026-08)은
+// 이 두 섹션을 동시에 병렬 생성하므로 서버 타임아웃도 10분으로 넉넉하게 잡아뒀다 — 안내
+// 없이 스피너만 있으면 실패한 것처럼 보여 "로딩만 계속 돈다"는 오인으로 이어지기 쉬움.
 function SectionGenerating({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
       <RefreshCw size={20} className="animate-spin" />
-      <span className="text-sm">{label} 생성 중... (최대 5분 정도 소요될 수 있어요)</span>
+      <span className="text-sm">{label} 생성 중... (최대 10분 정도 소요될 수 있어요)</span>
+    </div>
+  );
+}
+
+// "pain 진단 시작" CTA — industry_history_v2/tech_evolution_v2는 탭 열람만으론 생성되지
+// 않고(2026-08, 기존 탭별 자동생성 방식 대체), 이 버튼 클릭 1번으로 두 섹션이 함께 생성된다.
+function PainDiagnosisStart({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <Lightbulb size={20} className="text-amber-400" />
+      <p className="text-sm text-gray-500 max-w-xs leading-relaxed">
+        산업 역사와 기술 변화를 함께 진단해요.<br />약 7~10분 소요될 수 있어요.
+      </p>
+      <button
+        onClick={onStart}
+        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+      >
+        pain 진단 시작
+      </button>
     </div>
   );
 }
@@ -2818,45 +2744,50 @@ function CopyButton({ getMarkdown, label = '복사', shortLabel }: { getMarkdown
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+// 사이드바 2그룹 분리(2026-08) — "기업분석"은 기존 8개 탭 그대로, "pain 진단"은
+// 크로스인더스트리 넛지(신규, 배치2) + 산업역사/기술역사(온디맨드, "pain 진단 시작" 버튼)로
+// 구성된다. 그룹은 표시 순서/헤더 렌더링에만 쓰이고 TabKey 자체는 그대로 flat union.
+const TAB_GROUPS = [
+  { key: 'company', label: '기업분석' },
+  { key: 'pain',    label: 'pain 진단' },
+] as const;
+
 const TABS = [
-  { key: 'summary',          label: '요약',         icon: Briefcase,  tooltip: '이 회사가 뭐 하는 곳인지 한눈에 확인할 수 있어요' },
-  { key: 'industry_history', label: '산업역사',     icon: Clock,      tooltip: '이 산업이 어떻게 발전해왔는지 확인할 수 있어요' },
-  { key: 'tech_evolution',   label: '기술변화',     icon: Zap,        tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
-  { key: 'value_chain',      label: '밸류체인',     icon: GitBranch,  tooltip: '이 회사가 산업 내 어디에 위치하는지 확인할 수 있어요' },
-  { key: 'business_model',   label: '비즈니스모델', icon: DollarSign, tooltip: '어떻게 돈을 버는지 확인할 수 있어요' },
-  { key: 'competitors',      label: '경쟁사',       icon: Users,      tooltip: '주요 경쟁사와 차별점을 확인할 수 있어요' },
-  { key: 'strategy',         label: '전략',         icon: Target,     tooltip: '앞으로의 성장 전략을 확인할 수 있어요' },
-  { key: 'financials',       label: '재무',         icon: BarChart2,  tooltip: '매출, 이익, 현금흐름 등 재무 데이터를 확인할 수 있어요' },
-  { key: 'founder',          label: '창업자',       icon: User,       tooltip: '창업자 배경과 이력을 확인할 수 있어요' },
-  { key: 'growth_scenario',  label: '성장 시나리오', icon: TrendingUp, tooltip: '몬테카를로 시뮬레이션 기반 매출 성장 시나리오를 확인할 수 있어요 (프리미엄)' },
+  { key: 'summary',              group: 'company', label: '요약',         icon: Briefcase,  tooltip: '이 회사가 뭐 하는 곳인지 한눈에 확인할 수 있어요' },
+  { key: 'value_chain',          group: 'company', label: '밸류체인',     icon: GitBranch,  tooltip: '이 회사가 산업 내 어디에 위치하는지 확인할 수 있어요' },
+  { key: 'business_model',       group: 'company', label: '비즈니스모델', icon: DollarSign, tooltip: '어떻게 돈을 버는지 확인할 수 있어요' },
+  { key: 'competitors',          group: 'company', label: '경쟁사',       icon: Users,      tooltip: '주요 경쟁사와 차별점을 확인할 수 있어요' },
+  { key: 'strategy',             group: 'company', label: '전략',         icon: Target,     tooltip: '앞으로의 성장 전략을 확인할 수 있어요' },
+  { key: 'financials',           group: 'company', label: '재무',         icon: BarChart2,  tooltip: '매출, 이익, 현금흐름 등 재무 데이터를 확인할 수 있어요' },
+  { key: 'founder',              group: 'company', label: '창업자',       icon: User,       tooltip: '창업자 배경과 이력을 확인할 수 있어요' },
+  { key: 'growth_scenario',      group: 'company', label: '성장 시나리오', icon: TrendingUp, tooltip: '몬테카를로 시뮬레이션 기반 매출 성장 시나리오를 확인할 수 있어요 (프리미엄)' },
+  { key: 'cross_industry_nudge', group: 'pain',    label: '넛지',         icon: Lightbulb,  tooltip: '이 업종의 공통 pain과 타산업 해결 사례를 확인할 수 있어요' },
+  { key: 'industry_history',     group: 'pain',    label: '산업역사',     icon: Clock,      tooltip: '이 산업이 어떻게 발전해왔는지 확인할 수 있어요' },
+  { key: 'tech_evolution',       group: 'pain',    label: '기술변화',     icon: Zap,        tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
 
-// 콘텐츠 패널의 초기 스켈레톤(TimelineSkeleton/CardsSkeleton 등) 표시 여부 판정 전용
+// 콘텐츠 패널의 초기 스켈레톤(CardsSkeleton/TableSkeleton 등) 표시 여부 판정 전용
 // (아래 batchDone()에서만 사용). 탭 바 체크마크(✓)는 이 값을 안 쓰고 hasTabData()로
 // 판정한다 — 혼동 금지.
 //
-// industry_history/tech_evolution의 2/3은 실제 배치 번호가 아니다 — 이 두 섹션은
-// 온디맨드 전환(2026-07) 이후 어떤 배치로도 생성되지 않고 탭을 열 때 별도
-// /api/analyze/reanalyze 호출로 생성된다. 여기 적힌 2/3은 그 배치가 완료될 때까지
-// "아직 스트리밍 초반"이라고 보고 스켈레톤을 잠깐 보여주는 대략적인 타이머 용도일
-// 뿐 — 실제 데이터 도착이나 완료 순서와는 무관하다(진짜 도착 여부는 스켈레톤이 걷힌
-// 뒤 data.industry_history_v2/data.tech_evolution_v2 존재 여부로 별도 판정). 나머지
-// 탭(business_model/competitors/value_chain/strategy/financials/founder/
-// growth_scenario)은 실제로 그 배치가 해당 탭 데이터를 배달하므로 숫자가 그대로
-// 유효하다.
+// industry_history/tech_evolution은 2026-08부터 배치와 완전히 무관해졌다("pain 진단 시작"
+// 버튼 전용 온디맨드) — 아래 숫자는 이제 어떤 스켈레톤 판정에도 쓰이지 않는 vestigial 값(타입
+// 완결성 때문에 Record<TabKey, number>에 키는 남겨둠). 실제 렌더링은 하단 tab content에서
+// batchDone을 아예 거치지 않고 data 존재/isReanalyzing만으로 분기한다.
 const TAB_BATCH: Record<TabKey, number> = {
-  summary:          1,
-  industry_history: 2,
-  business_model:   2,
-  competitors:      2,
-  tech_evolution:   3,
-  value_chain:      3,
-  strategy:         3,
-  financials:       40,
-  founder:          5,
-  growth_scenario:  6,
+  summary:              1,
+  business_model:       2,
+  competitors:          2,
+  cross_industry_nudge: 2,
+  value_chain:          3,
+  strategy:             3,
+  financials:           40,
+  founder:              4,
+  growth_scenario:      6,
+  industry_history:     0,
+  tech_evolution:       0,
 };
 
 // 탭 바 체크마크(✓) 전용 — TAB_BATCH(위 주석 참고, 스켈레톤 표시용일 뿐 실제 완료 순서와
@@ -2865,27 +2796,32 @@ const TAB_BATCH: Record<TabKey, number> = {
 // tech_evolution 탭이 아직 생성되지도 않았는데 배치2/3 완료 즉시 ✓가 뜨는 버그가 있었다.
 function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV2 | undefined): boolean {
   switch (key) {
-    case 'summary':          return !!data.summary_v2;
-    case 'industry_history': return !!data.industry_history_v2;
-    case 'tech_evolution':   return !!data.tech_evolution_v2;
-    case 'value_chain':      return !!data.value_chain_v2;
-    case 'business_model':   return !!data.business_model_v2;
-    case 'competitors':      return !!data.competitors_v2;
-    case 'strategy':         return !!data.strategy_v2;
-    case 'financials':       return !!financialsV2;
-    case 'founder':          return !!data.founder_v2;
-    case 'growth_scenario':  return !!data.growth_scenario_v2;
-    default:                 return false;
+    case 'summary':              return !!data.summary_v2;
+    case 'industry_history':     return !!data.industry_history_v2;
+    case 'tech_evolution':       return !!data.tech_evolution_v2;
+    case 'value_chain':          return !!data.value_chain_v2;
+    case 'business_model':       return !!data.business_model_v2;
+    case 'competitors':          return !!data.competitors_v2;
+    case 'cross_industry_nudge': return !!data.cross_industry_nudge_v1;
+    case 'strategy':             return !!data.strategy_v2;
+    case 'financials':           return !!financialsV2;
+    case 'founder':              return !!data.founder_v2;
+    case 'growth_scenario':      return !!data.growth_scenario_v2;
+    default:                     return false;
   }
 }
 
 // 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
 const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
 
-function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
+function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosisStart, isPremium }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
+  // "pain 진단 시작" 버튼 전용 — industry_history_v2/tech_evolution_v2를 한 번에 생성
+  // (2026-08, POST /api/analyze/:id/pain-diagnosis). onReanalyze와 별도 prop인 이유:
+  // onReanalyze는 섹션 하나만 재생성하는 범용 경로라 두 섹션 동시 생성을 표현할 수 없다.
+  onPainDiagnosisStart?: () => void;
   isPremium?: boolean;
 }) {
   const { user, session, signInWithGoogle } = useAuth();
@@ -2917,25 +2853,20 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
     }
   }, [completedBatches]);
 
-  // industry_history_v2/tech_evolution_v2는 초기 배치에서 생성하지 않고 온디맨드 전환됨 —
-  // 해당 탭을 열었는데 데이터가 없으면 기존 "탭별 재분석" 경로(onReanalyze)로 자동 생성 요청.
-  // onReanalyze가 없는 화면(히스토리/공유 링크)에서는 기존 수동 재분석 버튼 UI로 폴백.
-  const autoGenTriggered = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const maybeAutoGenerate = (key: string, hasData: boolean) => {
-      if (!onReanalyze || hasData) return;
-      if (autoGenTriggered.current.has(key) || isReanalyzing(key)) return;
-      autoGenTriggered.current.add(key);
-      onReanalyze(key);
-    };
-    if (tab === 'industry_history') maybeAutoGenerate('industry', !!data.industry_history_v2);
-    if (tab === 'tech_evolution')   maybeAutoGenerate('tech', !!data.tech_evolution_v2);
-  }, [tab, data.industry_history_v2, data.tech_evolution_v2, onReanalyze, reanalyzingTabs]);
+  // industry_history_v2/tech_evolution_v2는 탭을 여는 것만으로 더 이상 자동 생성되지
+  // 않는다(2026-08 — 예전엔 탭 오픈 시 자동 트리거였으나, "pain 진단 시작" 버튼 클릭이
+  // 유일한 트리거로 바뀜). painDiagnosisStarted는 이번 화면 방문에서 버튼을 눌렀는지만
+  // 추적 — 누른 뒤에도 데이터가 없으면(실패) CTA 대신 기존 "↻ 다시 분석" 폴백을 보여준다.
+  const [painDiagnosisStarted, setPainDiagnosisStarted] = useState(false);
+  const handlePainDiagnosisClick = () => {
+    setPainDiagnosisStarted(true);
+    onPainDiagnosisStart?.();
+  };
 
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
 
-  // data.financials_v2는 스트리밍 도중 fin_preview(프리뷰) → batch4(확정본) 순으로 갱신되는데,
+  // data.financials_v2는 스트리밍 도중 fin_preview(프리뷰) → batch3(확정본) 순으로 갱신되는데,
   // useState 초기값은 마운트 시점 한 번만 캡처되고 이후 prop 변경엔 재동기화되지 않는 게
   // 기본 React 동작이다 — 이 로컬 state를 그대로 두면 재무 탭이 프리뷰에 고착되거나(마운트
   // 시점에 fin_preview가 이미 왔던 경우), fin_preview가 없는 기업은 batch4가 와도 계속
@@ -3007,59 +2938,67 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
         </div>
       </div>
 
-      {/* Tab bar */}
+      {/* Tab bar — 2026-08부터 기업분석/pain 진단 2그룹으로 분리, 그룹 라벨만 추가되고
+          개별 탭 버튼 로직(체크마크/스피너 등)은 그대로 */}
       <div className="flex overflow-x-auto border-b border-gray-100 bg-white px-2">
-        {TABS.map(t => {
-          const Icon = t.icon;
-          const active = tab === t.key;
-          const isStreaming = completedBatches.has(-1);
-          const batch1Done = completedBatches.has(1);
-          // tabDone: 배치 번호가 아니라 해당 탭 데이터가 실제로 존재하는지로만 판정 —
-          // industry_history/tech_evolution은 온디맨드라 배치 번호 자체가 없다.
-          const tabDone = hasTabData(t.key, data, financialsV2Local);
-          // waiting: streaming, batch1 not done, non-summary tab (batches haven't notified yet)
-          const isWaiting    = isStreaming && !batch1Done && t.key !== 'summary';
-          // in-progress: streaming, batch1 done (or is summary tab), this tab not done
-          const isInProgress = isStreaming && !tabDone && !isWaiting;
-          // done: streaming and this tab's batch has arrived
-          const isDoneNow    = isStreaming && tabDone;
-          return (
-            <button
-              key={t.key}
-              onClick={() => {
-                trackEvent('tab_clicked', { tab: t.key });
-                if (t.key === 'financials') trackEvent('financials_tab_reached', { companyName: data.companyName });
-                startTransition(() => setTab(t.key));
-              }}
-              onMouseEnter={() => setHoveredTooltip(t.tooltip)}
-              onMouseLeave={() => setHoveredTooltip(null)}
-              className={`shrink-0 flex items-center gap-1 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
-                active
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Icon size={12} />
-              {t.label}
-              {t.key === 'growth_scenario' && !isPremium && (
-                <span className="text-[9px] font-bold text-amber-500 bg-amber-50 border border-amber-200 rounded px-1 py-[1px] ml-0.5 leading-none">
-                  PRO
-                </span>
-              )}
-              {isWaiting && (
-                <span className="flex gap-[2px] items-center ml-0.5" aria-hidden>
-                  {[0,1,2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
-                </span>
-              )}
-              {isInProgress && (
-                <span className="w-2 h-2 shrink-0 border border-current border-t-transparent rounded-full animate-spin opacity-40 ml-0.5" />
-              )}
-              {isDoneNow && (
-                <span key={`done-${t.key}`} className="text-emerald-500 text-[10px] font-bold anim-fadein leading-none ml-0.5">✓</span>
-              )}
-            </button>
-          );
-        })}
+        {TAB_GROUPS.map((g, gi) => (
+          <div key={g.key} className={`flex items-stretch shrink-0 ${gi > 0 ? 'border-l border-gray-100 ml-1 pl-1' : ''}`}>
+            <div className="flex items-center shrink-0 px-2">
+              <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 whitespace-nowrap">{g.label}</span>
+            </div>
+            {TABS.filter(t => t.group === g.key).map(t => {
+              const Icon = t.icon;
+              const active = tab === t.key;
+              const isStreaming = completedBatches.has(-1);
+              const batch1Done = completedBatches.has(1);
+              // tabDone: 배치 번호가 아니라 해당 탭 데이터가 실제로 존재하는지로만 판정 —
+              // industry_history/tech_evolution은 온디맨드라 배치 번호 자체가 없다.
+              const tabDone = hasTabData(t.key, data, financialsV2Local);
+              // waiting: streaming, batch1 not done, non-summary tab (batches haven't notified yet)
+              const isWaiting    = isStreaming && !batch1Done && t.key !== 'summary';
+              // in-progress: streaming, batch1 done (or is summary tab), this tab not done
+              const isInProgress = isStreaming && !tabDone && !isWaiting;
+              // done: streaming and this tab's batch has arrived
+              const isDoneNow    = isStreaming && tabDone;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => {
+                    trackEvent('tab_clicked', { tab: t.key });
+                    if (t.key === 'financials') trackEvent('financials_tab_reached', { companyName: data.companyName });
+                    startTransition(() => setTab(t.key));
+                  }}
+                  onMouseEnter={() => setHoveredTooltip(t.tooltip)}
+                  onMouseLeave={() => setHoveredTooltip(null)}
+                  className={`shrink-0 flex items-center gap-1 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
+                    active
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon size={12} />
+                  {t.label}
+                  {t.key === 'growth_scenario' && !isPremium && (
+                    <span className="text-[9px] font-bold text-amber-500 bg-amber-50 border border-amber-200 rounded px-1 py-[1px] ml-0.5 leading-none">
+                      PRO
+                    </span>
+                  )}
+                  {isWaiting && (
+                    <span className="flex gap-[2px] items-center ml-0.5" aria-hidden>
+                      {[0,1,2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
+                    </span>
+                  )}
+                  {isInProgress && (
+                    <span className="w-2 h-2 shrink-0 border border-current border-t-transparent rounded-full animate-spin opacity-40 ml-0.5" />
+                  )}
+                  {isDoneNow && (
+                    <span key={`done-${t.key}`} className="text-emerald-500 text-[10px] font-bold anim-fadein leading-none ml-0.5">✓</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       {/* Tab tooltip strip — desktop only */}
@@ -3077,21 +3016,32 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium }: {
             ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => startTransition(() => setTab(key as TabKey))} />
             : <SummaryTab data={data} />
         )}
+        {tab === 'cross_industry_nudge' && (
+          (isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <CardsSkeleton count={2} /> :
+          data.cross_industry_nudge_v1
+            ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
+            : <>{reanalyzeBtn('nudge')}<p className="text-sm text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>
+        )}
+        {/* industry_history/tech_evolution: 2026-08부터 배치와 무관 — "pain 진단 시작" 버튼
+            클릭 1번으로 둘 다 동시 생성된다. batchDone 게이트 없이 data 존재/reanalyzing
+            상태로만 분기(카드 자체가 batch1 완료 후에만 마운트되므로 별도 스켈레톤 불필요). */}
         {tab === 'industry_history' && (
-          !batchDone(TAB_BATCH.industry_history) ? <TimelineSkeleton /> :
           data.industry_history_v2
             ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
-            : isReanalyzing('industry')
+            : (isReanalyzing('industry') || isReanalyzing('tech'))
               ? <SectionGenerating label="산업 역사" />
-              : <>{reanalyzeBtn('industry')}<IndustryHistoryTab data={data} /></>
+              : painDiagnosisStarted
+                ? <>{reanalyzeBtn('industry')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
+                : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
         )}
         {tab === 'tech_evolution' && (
-          !batchDone(TAB_BATCH.tech_evolution) ? <CardsSkeleton count={4} /> :
           data.tech_evolution_v2
             ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
-            : isReanalyzing('tech')
+            : (isReanalyzing('industry') || isReanalyzing('tech'))
               ? <SectionGenerating label="기술 변화" />
-              : <>{reanalyzeBtn('tech')}<TechEvolutionTab data={data} /></>
+              : painDiagnosisStarted
+                ? <>{reanalyzeBtn('tech')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
+                : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
         )}
         {tab === 'value_chain' && (
           (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :

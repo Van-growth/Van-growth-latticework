@@ -64,6 +64,7 @@ router.get('/:token', async (req: Request, res: Response) => {
       value_chain_v2:      row.value_chain_v2      ?? null,
       business_model_v2:   row.business_model_v2   ?? null,
       competitors_v2:      row.competitors_v2      ?? null,
+      cross_industry_nudge_v1: row.cross_industry_nudge_v1 ?? null,
       strategy_v2:         row.strategy_v2         ?? null,
       financials_v2:       row.financials_v2        ?? null,
       founder_v2:          row.founder_v2           ?? null,
