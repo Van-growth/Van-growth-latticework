@@ -39,6 +39,7 @@ import {
   FinancialsV2Row,
   FounderV2,
   GrowthScenarioV2,
+  SecBenchmarkComparison,
 } from '@/types';
 import { isPlaceholder, countFinancialsReliability } from '@/lib/financialsReliability';
 
@@ -1759,6 +1760,57 @@ function normalizeYoy(v: string | undefined): string {
   return '—';
 }
 
+// SEC 산업 벤치마크 막대비교 — 회사 자신의 수치 vs 업종 중앙값(SIC 전체 SEC 제출 기업
+// 기반, server/src/lib/secIndustryBenchmark.ts가 서버에서 계산). 숫자를 문장으로 반복하지
+// 않고 막대 두 개 + 해석 한 줄로만 보여준다(콘텐츠 포맷 원칙 — KPI/서사 숫자 중복 방지).
+function SecBenchmarkBar({ label, value, unit, colorClass, maxAbs }: { label: string; value: number; unit: string; colorClass: string; maxAbs: number }) {
+  const decimals = unit === 'x' ? 2 : 1;
+  const widthPct = maxAbs > 0 ? Math.min(100, (Math.abs(value) / maxAbs) * 100) : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-gray-400 w-24 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-3.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full ${colorClass} rounded-full transition-all`} style={{ width: `${widthPct}%` }} />
+      </div>
+      <span className="text-xs font-semibold text-gray-700 w-16 text-right shrink-0">{value.toFixed(decimals)}{unit}</span>
+    </div>
+  );
+}
+
+function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkComparison }) {
+  if (comparison.status === 'insufficient_sample') {
+    return (
+      <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-indigo-400">
+        <p className="text-xs text-gray-500 leading-relaxed">
+          이 업종(SIC {comparison.sicCode})은 공개 동종업계 비교 표본이 적어(최대 {comparison.maxN ?? 0}개사) 벤치마크 비교가 제한적이에요. 재무 상황은 직접 확인하는 게 더 정확할 수 있어요.
+        </p>
+      </SectionCard>
+    );
+  }
+  if (!comparison.items?.length) return null;
+  return (
+    <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-indigo-400">
+      <div className="space-y-4">
+        {comparison.items.map((item, i) => {
+          const maxAbs = Math.max(Math.abs(item.companyValue), Math.abs(item.median)) || 1;
+          return (
+            <div key={i} className={i > 0 ? 'pt-4 border-t border-gray-100' : ''}>
+              <div className="text-xs font-semibold text-gray-700 mb-2">{item.label}</div>
+              <div className="space-y-1.5">
+                <SecBenchmarkBar label="이 회사" value={item.companyValue} unit={item.unit} colorClass="bg-blue-500" maxAbs={maxAbs} />
+                <SecBenchmarkBar label={`업종 중앙값(n=${item.n})`} value={item.median} unit={item.unit} colorClass="bg-gray-300" maxAbs={maxAbs} />
+              </div>
+              {item.interpretation && (
+                <p className="text-xs text-gray-500 leading-relaxed mt-2">{item.interpretation}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
 const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, isRefreshing, dataSource }: {
   f: FinancialsV2;
   sources: Source[] | undefined;
@@ -1827,6 +1879,12 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
             ))}
           </div>
         </SectionCard>
+      )}
+
+      {/* SEC 산업 벤치마크 막대비교 — EDGAR 기업 전용, 표본 부족이거나 편차 없는 지표는
+          서버가 이미 걸러서 넘김(sec_benchmark_comparison null이면 아예 렌더링 안 됨) */}
+      {dataSource === 'edgar' && f.sec_benchmark_comparison && (
+        <SecBenchmarkComparisonBlock comparison={f.sec_benchmark_comparison} />
       )}
 
       {/* Narrative */}
@@ -3053,18 +3111,24 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
             ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
             : (isReanalyzing('industry') || isReanalyzing('tech'))
               ? <SectionGenerating label="산업 역사" />
-              : painDiagnosisStarted
-                ? <>{reanalyzeBtn('industry')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
-                : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
+              : !onPainDiagnosisStart
+                // 히스토리/공유 링크 등 읽기 전용 화면 — 버튼을 눌러도 아무 요청도 안 나가면서
+                // "결과를 불러오지 못했다"는 오해성 실패 메시지만 뜨는 걸 방지(2026-08-12 발견).
+                ? <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
+                : painDiagnosisStarted
+                  ? <>{reanalyzeBtn('industry')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
+                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
         )}
         {tab === 'tech_evolution' && (
           data.tech_evolution_v2
             ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
             : (isReanalyzing('industry') || isReanalyzing('tech'))
               ? <SectionGenerating label="기술 변화" />
-              : painDiagnosisStarted
-                ? <>{reanalyzeBtn('tech')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
-                : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
+              : !onPainDiagnosisStart
+                ? <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
+                : painDiagnosisStarted
+                  ? <>{reanalyzeBtn('tech')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
+                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
         )}
         {tab === 'value_chain' && (
           (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :

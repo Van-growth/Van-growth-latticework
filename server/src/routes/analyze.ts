@@ -2,10 +2,10 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import {
   analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, reanalyzeSingleSection,
-  generateGrowthScenarioNarrative, withTimeout,
+  generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, SecBenchmarkComparison, withTimeout,
 } from '../lib/claude';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
-import { buildSecBenchmarkContext } from '../lib/secIndustryBenchmark';
+import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
 import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
 } from '../services/monteCarloService';
@@ -88,6 +88,79 @@ async function computeGrowthScenario(
 
   const narrative = await generateGrowthScenarioNarrative(companyName, scenario as any);
   return { ...scenario, narrative };
+}
+
+// ── EDGAR/SEC 출처 URL 서버 조립 (2026-08-12) ───────────────────────────────────
+// Claude가 "SEC EDGAR"류 출처의 url을 스스로 지어내면(기억에서 재구성) 깨진 링크가
+// 나올 수 있다는 게 실측으로 확인됨(예: SEC Financial Statement Data Sets URL —
+// secIndustryBenchmark.ts 참고). "SEC EDGAR" 자체를 가리키는 일반 출처(특정 문서가
+// 아니라 "이 회사의 EDGAR 공시 전반")는 회사 CIK만 있으면 항상 유효한 URL을 서버가
+// 직접 조립할 수 있으므로, Claude가 뭐라고 썼든 이 URL로 덮어쓴다. organization이
+// "SEC"/"EDGAR"를 언급하는 모든 섹션의 sources[]에 적용(회사 자체 공시를 인용하는
+// 섹션이면 어디든 나올 수 있어 특정 섹션에 국한하지 않음).
+const SEC_ORG_PATTERN = /\bsec\b|edgar/i;
+
+function fixEdgarSourceUrls(sources: { organization?: string; url?: string }[] | null | undefined, cik: string | undefined): void {
+  if (!sources?.length || !cik) return;
+  const cleanCik = String(cik).replace(/^CIK/i, '');
+  const officialUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cleanCik}&type=10-K&dateb=&owner=include&count=40`;
+  for (const s of sources) {
+    if (s.organization && SEC_ORG_PATTERN.test(s.organization)) {
+      s.url = officialUrl;
+    }
+  }
+}
+
+// analyzeCompany() 결과의 모든 섹션 sources[]를 순회해 EDGAR 출처 URL을 고정한다.
+// DART/web_search 소스는 cik가 없어 fixEdgarSourceUrls 내부에서 자동 스킵.
+function fixAllEdgarSourceUrls(analysis: Partial<AnalysisData>, cik: string | undefined): void {
+  fixEdgarSourceUrls(analysis.summary_v2?.sources, cik);
+  fixEdgarSourceUrls(analysis.business_model_v2?.sources, cik);
+  fixEdgarSourceUrls(analysis.competitors_v2?.sources, cik);
+  fixEdgarSourceUrls(analysis.value_chain_v2?.sources, cik);
+  fixEdgarSourceUrls(analysis.strategy_v2?.sources, cik);
+  fixEdgarSourceUrls(analysis.financials_v2?.sources, cik);
+  fixEdgarSourceUrls(analysis.founder_v2?.sources, cik);
+  fixEdgarSourceUrls(analysis.cross_industry_nudge_v1?.sources, cik);
+}
+
+// ── SEC 산업 벤치마크 막대비교 (2026-08-12) ──────────────────────────────────────
+// 숫자(편차 계산)는 secIndustryBenchmark.ts가 순수 계산, interpretation 한 줄만 별도
+// Claude 호출(claude.ts). financials_v2.narrative에는 이 숫자를 넣지 않음(막대비교
+// 컴포넌트가 전담) — KPI 카드와의 숫자 중복 방지 원칙.
+async function buildSecBenchmarkComparison(companyName: string, rawEdgar: any): Promise<SecBenchmarkComparison | null> {
+  const deviations = await computeSecBenchmarkDeviations(rawEdgar);
+  if (!deviations) return null;
+  if (deviations.status === 'insufficient_sample') {
+    return { sicCode: deviations.sicCode, status: 'insufficient_sample', maxN: deviations.maxN };
+  }
+  const items = deviations.items ?? [];
+  const interpretations = await generateSecBenchmarkInterpretations(companyName, deviations.sicCode, items);
+  return {
+    sicCode: deviations.sicCode,
+    status: 'compared',
+    items: items.map((it, i) => ({ ...it, interpretation: interpretations[i] ?? '' })),
+  };
+}
+
+// financials_v2에 벤치마크 비교를 붙이고, 실제로 비교 수치를 인용했다면 sources[]에도
+// L1(🟢 공식) 출처를 남긴다 — attachIndustryData가 industry_benchmark_cache에 대해 하는
+// 것과 동일한 패턴(기존 출처 뱃지 시스템 재사용, 새 뱃지 체계 안 만듦).
+function attachSecBenchmarkToFinancials(financialsV2: FinancialsV2 | null | undefined, comparison: SecBenchmarkComparison | null): void {
+  if (!financialsV2 || !comparison) return;
+  financialsV2.sec_benchmark_comparison = comparison;
+  if (comparison.status !== 'compared' || !comparison.items?.length) return;
+  const sources: SectionSource[] = financialsV2.sources ?? [];
+  for (const item of comparison.items) {
+    sources.push({
+      index: sources.length + 1,
+      level: 'L1',
+      organization: 'SEC Financial Statement Data Sets',
+      content: `SIC ${comparison.sicCode}, n=${item.n} (${item.label})`,
+      url: SEC_BENCHMARK_SOURCE_URL,
+    });
+  }
+  financialsV2.sources = sources;
 }
 
 // ── 업종 벤치마크(재무 탭) + 매출 순위(경쟁사 탭) — EDGAR 기업 전용 ───────────────
@@ -387,10 +460,12 @@ router.post('/', async (req: Request, res: Response) => {
 
     const listings = await fetchCompanyListings(companyId ?? company.id);
     const { source: dataSource, contextText, rawEdgar } = await fetchFinancialContext(name, listings);
-    const secBenchmarkContext = dataSource === 'edgar' && rawEdgar
-      ? await buildSecBenchmarkContext(rawEdgar).catch(() => null)
-      : null;
-    const analysis = await analyzeCompany(name, contextText || undefined, undefined, { secBenchmarkContext });
+    const analysis = await analyzeCompany(name, contextText || undefined);
+    fixAllEdgarSourceUrls(analysis, rawEdgar?.cik);
+    if (dataSource === 'edgar' && rawEdgar) {
+      const comparison = await buildSecBenchmarkComparison(name, rawEdgar).catch(() => null);
+      attachSecBenchmarkToFinancials(analysis.financials_v2, comparison);
+    }
 
     const { data: savedAnalysis, error: analysisErr } = await supabase
       .from('analyses')
@@ -697,17 +772,22 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
 
-        // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — 실패해도 financials_v2
-        // 생성 자체를 막지 않도록 방어.
-        const secBenchmarkContext = dataSource === 'edgar' && rawEdgar
-          ? await buildSecBenchmarkContext(rawEdgar).catch(() => null)
-          : null;
+        // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — analyzeCompany()와
+        // 병렬로 미리 시작해두고 batch3(financials_v2) 완료 시점에 await해서 붙인다. 계산
+        // 자체는 rawEdgar만 있으면 되므로 다른 배치를 기다릴 필요가 없어 지연을 숨긴다.
+        const secBenchmarkPromise = dataSource === 'edgar' && rawEdgar
+          ? buildSecBenchmarkComparison(name, rawEdgar).catch(() => null)
+          : Promise.resolve(null);
 
         const analysis = await analyzeCompany(
           name,
           contextText || undefined,
           async (batchNum, data) => {
             completedCount++;
+            fixAllEdgarSourceUrls(data, rawEdgar?.cik);
+            if (batchNum === 3 && data.financials_v2) {
+              attachSecBenchmarkToFinancials(data.financials_v2, await secBenchmarkPromise);
+            }
             send('batch', { batch: batchNum, data, completed: completedCount, total: 4, analysisId: cached.id });
             const fields = getBatchDbFields(batchNum, data);
             if (Object.keys(fields).length > 0) {
@@ -720,7 +800,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               );
             }
           },
-          { skipBatches, initialData, cachedFinancials: useCachedFin, secBenchmarkContext },
+          { skipBatches, initialData, cachedFinancials: useCachedFin },
         );
 
         if (analysis.sources) await saveSources(cached.id, name, analysis.sources);
@@ -767,11 +847,11 @@ router.post('/stream', async (req: Request, res: Response) => {
       }
     }
 
-    // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — 실패해도 financials_v2
-    // 생성 자체를 막지 않도록 방어.
-    const secBenchmarkContext = dataSource === 'edgar' && rawEdgar
-      ? await buildSecBenchmarkContext(rawEdgar).catch(() => null)
-      : null;
+    // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — analyzeCompany()와
+    // 병렬로 미리 시작해두고 batch3(financials_v2) 완료 시점에 await해서 붙인다.
+    const secBenchmarkPromise = dataSource === 'edgar' && rawEdgar
+      ? buildSecBenchmarkComparison(name, rawEdgar).catch(() => null)
+      : Promise.resolve(null);
 
     let savedId: string | null = null;
     let savedAt: string | null = null;
@@ -782,6 +862,10 @@ router.post('/stream', async (req: Request, res: Response) => {
       contextText || undefined,
       async (batchNum, data) => {
         batchCount++;
+        fixAllEdgarSourceUrls(data, rawEdgar?.cik);
+        if (batchNum === 3 && data.financials_v2) {
+          attachSecBenchmarkToFinancials(data.financials_v2, await secBenchmarkPromise);
+        }
 
         if (batchNum === 1) {
           const { data: saved, error } = await supabase
@@ -828,7 +912,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
       },
-      { cachedFinancials, secBenchmarkContext },
+      { cachedFinancials },
     );
 
     if (savedId && analysis.sources) await saveSources(savedId, name, analysis.sources);

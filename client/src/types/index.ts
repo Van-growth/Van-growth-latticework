@@ -400,6 +400,26 @@ export interface FinancialsV2 {
   sources?: Source[];
   // EDGAR 기업 전용 — industryBenchmarkService가 순수 계산 후 병합(Claude 미생성)
   industry_benchmark?: IndustryBenchmarkResult | null;
+  // EDGAR 기업 전용, SEC 전수 벌크 데이터 기반 — server/src/lib/secIndustryBenchmark.ts가
+  // 순수 계산 후 병합(Claude 미생성, interpretation 한 줄만 별도의 작은 Claude 호출)
+  sec_benchmark_comparison?: SecBenchmarkComparison | null;
+}
+
+export interface SecBenchmarkComparisonItem {
+  metric: string;
+  label: string;
+  unit: string; // '%' | 'x'
+  companyValue: number;
+  median: number;
+  n: number;
+  interpretation: string;
+}
+
+export interface SecBenchmarkComparison {
+  sicCode: string;
+  status: 'compared' | 'insufficient_sample';
+  maxN?: number;
+  items?: SecBenchmarkComparisonItem[];
 }
 
 export interface IndustryBenchmarkMetric {

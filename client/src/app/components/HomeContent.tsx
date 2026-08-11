@@ -397,9 +397,16 @@ export default function HomeContent() {
   async function handlePainDiagnosisStart() {
     const targetId = analysisIdRef.current ?? result?.id;
     const targetName = result?.companyName || companyName.trim();
-    if (!targetId || !targetName) return;
+    // 이 두 케이스는 버튼 클릭 즉시 조용히 no-op되던 지점 — AnalysisCard의 painDiagnosisStarted
+    // 로컬 state는 이미 true로 바뀐 채라, 아무 안내 없이 리턴하면 "방금 실패했다"는 오해를
+    // 주기 쉽다(2026-08-12 발견). 토스트로 명시적 피드백을 준다.
+    if (!targetId || !targetName) {
+      showToast('분석 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     if (!session) { signInWithGoogle(); return; }
     setReanalyzingTabs(prev => new Set([...prev, 'industry', 'tech']));
+    showToast('pain 진단을 시작했어요 — 최대 10분 정도 걸릴 수 있어요.');
     try {
       const resp = await fetch(`${API_URL}/api/analyze/${targetId}/pain-diagnosis`, {
         method: 'POST',
@@ -423,9 +430,12 @@ export default function HomeContent() {
           setResult(updated);
           setAnalysisData(updated);
         }
+      } else {
+        showToast('pain 진단 생성에 실패했어요. 다시 시도해주세요.');
       }
     } catch (err) {
       console.error('[pain-diagnosis]', err);
+      showToast('pain 진단 생성에 실패했어요. 다시 시도해주세요.');
     } finally {
       setReanalyzingTabs(prev => { const s = new Set(prev); s.delete('industry'); s.delete('tech'); return s; });
     }

@@ -1,31 +1,34 @@
-// financials_v2 프롬프트 전용 — SEC 산업 벤치마크(industry_benchmark 테이블,
+// financials_v2 막대비교 컴포넌트 전용 — SEC 산업 벤치마크(industry_benchmark 테이블,
 // server/scripts/secBenchmarkPrecompute.ts가 SEC Financial Statement Data Sets 벌크
-// 파싱으로 채움) 컨텍스트를 만든다.
+// 파싱으로 채움) 대비 이 회사 수치의 편차를 계산한다.
 //
 // 기존 industry_benchmark_cache/industryBenchmarkService.ts(라이브 캐시, 이 앱에서 실제
 // 검색된 EDGAR 기업만 대상이라 표본이 좁음, financials_v2.industry_benchmark 구조화 필드로
 // 첨부돼 별도 UI 카드로 렌더링)와는 완전히 별개 시스템이다 — 이쪽은 SEC 전수 벌크 데이터
-// 기반의 훨씬 큰 표본이고, 구조화 필드가 아니라 Claude 프롬프트에 직접 주입돼
-// narrative/outlook 문장에 자연스럽게 녹아든다(2026-08-11).
+// 기반의 훨씬 큰 표본이다.
+//
+// 2026-08-12 재설계: 처음엔 이 컨텍스트를 Claude 프롬프트에 텍스트로 주입해 narrative/
+// outlook 문장에 녹아들게 했으나, "KPI 카드와 중복되는 숫자는 서사에서 제거하고 막대비교
+// 컴포넌트로 뺀다"는 콘텐츠 포맷 원칙에 따라 순수 계산 결과(숫자)만 반환하도록 변경 —
+// Claude는 이 숫자에 손대지 않고, interpretation 한 줄만 별도의 작은 호출
+// (claude.ts의 generateSecBenchmarkInterpretations)로 채운다. 화면 렌더링은
+// AnalysisCard.tsx의 SecBenchmarkComparisonBlock 참고.
 //
 // 회사 자신의 5개 지표는 서버에서 직접 계산한다(rawEdgar 시계열 기반, industryBenchmarkService.ts
 // 의 extractLatestRatios와 동일한 "지표별로 독립적으로 가장 최근에 두 값이 다 있는 연도를
-// 찾는다" 패턴 — 한 지표가 최신연도에 없다고 다른 지표까지 오래된 연도를 쓰거나 버리지
-// 않음) — Claude에게 편차(%) 계산을 맡기지 않는다. 서버가 이미 ±30% 이상 벗어난 지표만
-// 걸러서 넘기므로, 프롬프트는 "언급 여부를 재판단"할 필요 없이 자연스럽게 서술만 하면 된다.
+// 찾는다" 패턴 — 한 지표가 최신연도에 없다고 다른 지표까지 오래된 연도를 쓰거나 버리지 않음).
 import { supabase } from './supabase';
 import { MIN_SECTOR_SAMPLE_SIZE } from '../services/monteCarloService';
 import type { EdgarRawSeries } from './edgar';
 
 const DEVIATION_THRESHOLD = 0.30; // ±30% 이상 벌어질 때만 언급
 
-// sources[].url에 쓸 정확한 URL을 프롬프트에 직접 박아준다 — 안 주면 Claude가 그럴듯한
-// URL을 지어내는데, 2026-08-11 실측으로 확인된 사례(https://www.sec.gov/dera/data/
-// financial-statements, 실제로는 404 — 옛 URL 구조로 추정됨)처럼 깨진 링크가 나올 수 있다.
-const SEC_BENCHMARK_SOURCE_URL = 'https://www.sec.gov/data-research/sec-markets-data/financial-statement-data-sets';
+// sources[] 인용 URL — Claude가 스스로 지어내면 깨진 링크가 나올 수 있어(2026-08-11 실측,
+// sec.gov/dera/data/financial-statements가 404였음) 서버가 이 상수 하나로 고정한다.
+export const SEC_BENCHMARK_SOURCE_URL = 'https://www.sec.gov/data-research/sec-markets-data/financial-statement-data-sets';
 
-const METRIC_KEYS = ['debt_equity_ratio', 'cfo_revenue_ratio', 'operating_margin', 'asset_turnover', 'revenue_growth'] as const;
-type MetricKey = (typeof METRIC_KEYS)[number];
+export const METRIC_KEYS = ['debt_equity_ratio', 'cfo_revenue_ratio', 'operating_margin', 'asset_turnover', 'revenue_growth'] as const;
+export type MetricKey = (typeof METRIC_KEYS)[number];
 
 const METRIC_LABELS: Record<MetricKey, { label: string; unit: string }> = {
   debt_equity_ratio: { label: 'Debt/Equity ratio', unit: '%' },
@@ -88,17 +91,31 @@ function sampleNOf(row: BenchmarkRow, key: MetricKey): number | null {
   return (row as unknown as Record<string, number | null>)[`${key}_n`];
 }
 
+export interface SecBenchmarkDeviationItem {
+  metric: MetricKey;
+  label: string;
+  unit: string;
+  companyValue: number;
+  median: number;
+  n: number;
+}
+
+export interface SecBenchmarkDeviations {
+  sicCode: string;
+  status: 'compared' | 'insufficient_sample';
+  maxN?: number; // status==='insufficient_sample'일 때만
+  items?: SecBenchmarkDeviationItem[]; // status==='compared'일 때만, ±30%+ 벗어난 지표만
+}
+
 /**
- * financials_v2 전용 컨텍스트 블록. EDGAR 소스 기업에만 적용(DART/web_search는 SIC 체계가
- * 안 맞아 null 반환, 조용히 스킵 — cik가 없으면 그 자체로 null).
- * - 이 SIC의 표본이 전 지표 다 5개 미만(또는 행 자체가 없음): "비교 데이터 부족, 직접
- *   확인 제안" 안내 지시만 반환, 수치는 절대 안 줌.
+ * EDGAR 소스 기업에만 적용(DART/web_search는 SIC 체계가 안 맞아 null 반환 — cik 없으면 그
+ * 자체로 null). 순수 계산만 하고 Claude를 호출하지 않는다(interpretation은 별도 함수).
+ * - 이 SIC의 표본이 전 지표 다 5개 미만(또는 행 자체가 없음): status='insufficient_sample'.
  * - 표본은 충분한데 이 회사 수치가 어느 지표에서도 업종 중앙값 대비 ±30% 이상 안 벗어남:
- *   null 반환(벤치마크 자체를 언급하지 않음 — 매번 코멘트하면 노이즈).
- * - 벗어난 지표가 있으면: 그 지표만 골라 회사값/업종 중앙값/n과 함께 반환, 인용 시 출처
- *   배지(L1)를 어떻게 붙일지까지 지시문에 포함.
+ *   null 반환(컴포넌트 자체를 안 보여줌 — 매번 노출하면 노이즈).
+ * - 벗어난 지표가 있으면 status='compared' + items(그 지표만).
  */
-export async function buildSecBenchmarkContext(rawEdgar: EdgarRawSeries | undefined | null): Promise<string | null> {
+export async function computeSecBenchmarkDeviations(rawEdgar: EdgarRawSeries | undefined | null): Promise<SecBenchmarkDeviations | null> {
   if (!rawEdgar?.cik) return null;
   const cik = String(rawEdgar.cik).replace(/^CIK/, '');
 
@@ -116,15 +133,7 @@ export async function buildSecBenchmarkContext(rawEdgar: EdgarRawSeries | undefi
 
   if (reliableMetrics.length === 0) {
     const maxN = row ? Math.max(0, ...METRIC_KEYS.map(k => sampleNOf(row, k) ?? 0)) : 0;
-    return [
-      `\n[SEC industry benchmark — SIC ${sicCode}]`,
-      `Public peer sample for this SIC code is too small for a reliable comparison (largest available ` +
-        `sample n=${maxN}, below the reliability threshold of ${MIN_SECTOR_SAMPLE_SIZE} companies).`,
-      'Do not state any industry-average figures anywhere in this section. Instead, include one sentence ' +
-        'in the narrative or outlook noting that public peer comparison data is limited for this industry, ' +
-        'and — phrased as a question, never as a stated claim — suggest that confirming the company\'s ' +
-        'financial position directly (e.g. in a meeting) may be more reliable than an industry benchmark here.',
-    ].join('\n');
+    return { sicCode, status: 'insufficient_sample', maxN };
   }
 
   const companyRatios = computeCompanyRatios(rawEdgar);
@@ -135,27 +144,16 @@ export async function buildSecBenchmarkContext(rawEdgar: EdgarRawSeries | undefi
     return Math.abs(companyVal - median) / Math.abs(median) >= DEVIATION_THRESHOLD;
   });
 
-  if (deviating.length === 0) return null; // 벗어난 지표 없음 — 벤치마크 자체를 언급 안 함
+  if (deviating.length === 0) return null; // 벗어난 지표 없음 — 컴포넌트 자체를 안 보여줌
 
-  const lines = [`\n[SEC industry benchmark — SIC ${sicCode}, median across public peer filers]`];
-  for (const k of deviating) {
-    const { label, unit } = METRIC_LABELS[k];
-    const median = medianOf(row!, k)!;
-    const n = sampleNOf(row!, k)!;
-    const companyVal = companyRatios[k]!;
-    // asset_turnover(x)는 은행 등 업종에서 0.01~0.05x대로 작아 소수점 1자리론 둘 다 "0.0x"로
-    // 뭉개져 무의미해진다(JPM 실측으로 발견) — %단위는 1자리, x단위는 2자리로 분리.
-    const decimals = unit === 'x' ? 2 : 1;
-    lines.push(`· ${label}: this company ${companyVal.toFixed(decimals)}${unit} vs. industry median ${median.toFixed(decimals)}${unit} (n=${n}) — differs by 30%+`);
-  }
-  lines.push(
-    'The figures above already differ from this company\'s own by 30% or more, so they may be worth a brief ' +
-    'mention in the narrative or outlook if it fits naturally — do not force a comment on every one of them, ' +
-    'and do not reference any industry figure other than the ones listed above. Phrase any statement about ' +
-    'the financial impact of the difference as a question, never as a stated conclusion. For each figure you ' +
-    'actually reference, add a matching entry to sources[]: level "L1", organization "SEC Financial Statement ' +
-    `Data Sets", content "SIC ${sicCode}, n=<that figure's own n from above>", url "${SEC_BENCHMARK_SOURCE_URL}" ` +
-    '(use this exact URL — do not invent or modify it).',
-  );
-  return lines.join('\n');
+  const items: SecBenchmarkDeviationItem[] = deviating.map(k => ({
+    metric: k,
+    label: METRIC_LABELS[k].label,
+    unit: METRIC_LABELS[k].unit,
+    companyValue: companyRatios[k]!,
+    median: medianOf(row!, k)!,
+    n: sampleNOf(row!, k)!,
+  }));
+
+  return { sicCode, status: 'compared', items };
 }

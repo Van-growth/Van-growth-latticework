@@ -398,6 +398,47 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - Bull/Bear 금지 → 성장 모멘텀/핵심 리스크
 - "확인 필요" 남발 금지 → 추정값이라도 출처와 함께 제공
 
+### 콘텐츠 포맷 원칙 (2026-08-12 신설)
+필드 성격별로 서술 방식을 고정한다 — 전부 문단으로 몰아쓰지 않는다:
+
+1. **수치 비교(회사 vs 벤치마크)는 문장이 아니라 시각 컴포넌트로** — financials_v2의 SEC
+   산업 벤치마크가 대표 사례: 막대 두 개(이 회사 / 업종 중앙값) + 해석 한 줄
+   (`SecBenchmarkComparisonBlock`, `AnalysisCard.tsx`). 숫자 자체는 narrative/outlook 같은
+   서술형 필드에서 반복하지 않는다(KPI 카드·막대비교와의 숫자 중복 방지) — narrative는
+   벤치마크 컨텍스트를 아예 안 받으므로 자연히 언급하지 않게 됨(`server/src/lib/
+   secIndustryBenchmark.ts`, `analyzeCompany()`의 sharedContext와 분리된 별도 경로).
+   비교값이 없는 지표(업종 중앙값 대비 ±30% 미만 차이, 또는 표본 부족)는 컴포넌트 자체를
+   스킵 — 매번 코멘트를 강제하면 노이즈가 된다.
+2. **일반 서술형 필드(문단 유지 대상)** — value_chain_v2의 value_flow/subject_position,
+   strategy_v2의 strategy_coherence/ten_year_durability 등: 문단 형식은 유지하되 [n] 각주는
+   반드시 문장 끝에만(문장 중간 삽입 금지, 여러 출처면 "...다[1][2]." 처럼 끝에 붙여쓰기),
+   길이는 3-4문장으로. `SECTION_SCHEMAS`에 "every [n] source marker must sit at the very end
+   of the sentence" 형태로 명시.
+3. **시계열/단계형 콘텐츠는 처음부터 구조화 필드로** — industry_history_v2의 timeline,
+   tech_evolution_v2의 stages, founder_v2의 career_trajectory 전부 이미 배열 스키마 + 전용
+   타임라인/카드 UI(`IndustryHistoryV2Tab`/`TechEvolutionV2Tab`/`FounderV2Tab`)로 렌더링되고
+   있음(2026-08-12 재확인, 문단 프롬프트로 되어 있지 않은지 실측 샘플로 검증 완료) — 새로 시계열류
+   필드를 추가할 때는 처음부터 이 패턴(배열 스키마 + 점/선 타임라인 또는 카드 리스트)을
+   따를 것, 문단 서술로 시작한 뒤 나중에 구조화로 바꾸지 말 것.
+4. **비동기 액션은 클릭 즉시 눈에 보이는 상태 변화 필수** — "pain 진단 시작" 버튼처럼 결과가
+   나오기까지 수 분 걸리는 액션은, 클릭 즉시(요청 성공/실패와 무관하게) 토스트 안내를 띄우고
+   버튼/탭 콘텐츠가 로딩 상태로 전환되어야 한다. targetId 등 필요한 값이 없어 요청 자체를 못
+   보내는 경로도 침묵 리턴 금지 — 반드시 토스트로 알림(2026-08-12, "클릭했는지 불확실해서
+   재클릭/이탈" 버그 수정 계기 — `HomeContent.tsx`의 `handlePainDiagnosisStart`,
+   `showToast` 재사용). 읽기 전용 화면(히스토리/공유 링크처럼 트리거 핸들러 자체가 없는
+   곳)은 액션 가능한 것처럼 보이는 CTA를 아예 노출하지 말 것 — 눌러도 안 되는데 버튼처럼
+   보이면 그 자체가 불확실한 상태 표시다.
+5. **출처는 "무엇에 대한 사실인가"로 구분해서 인용** — 회사 자체 공식 자료(10-K, IR,
+   보도자료)는 그 회사에 대한 사실(자기 매출, 자기 세그먼트 구성 등)에만 쓴다. 산업 전반의
+   역사/트렌드/경쟁사 동향 서술에는 반드시 web_search로 찾은 외부 출처(기술사 자료, 업계
+   리포트, 언론)를 별도로 인용 — 회사 출처를 산업 서사에 재사용 금지. 항목 수 대비 각주
+   개수가 지나치게 적으면(예: 6개 시대에 출처 1-2개) 출처를 대충 재사용하고 있다는 신호이니
+   점검할 것. 2026-08-12 실측(NVIDIA industry_history_v2)으로 확인된 사례 — NVIDIA 자체
+   SEC 공시/IR 출처가 "GPU가 병렬처리 아키텍처의 기초를 놓았다", "정부가 소버린 컴퓨트에
+   수천억 달러 투입 중" 같은 산업 전반 주장 4곳에 재사용되고 있었음(그 회사 공시가 뒷받침할
+   수 없는 내용). `SECTION_SCHEMAS`의 industry_history_v2/tech_evolution_v2에 "Sourcing
+   discipline" 지시로 명시.
+
 ### 성능 원칙
 - 외부 실시간 위젯 (iframe) 금지 — 정적 이미지로 대체
 - 탭 콘텐츠 조건부 렌더링 (unmount) 유지
