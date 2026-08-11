@@ -9,40 +9,36 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-04
-**커밋**: a6fc3e6 (온디맨드 소요시간 안내 문구 보수적 상한으로 변경), 3e7585b (영어 단일화 1단계 — Claude 분석 프롬프트 영어 고정), origin/main push 완료
-**Render 배포**: 미확인 — 이 환경에 Render API 토큰/CLI 없어 자동 확인 불가. origin/main은 3e7585b까지 push 완료(자동배포는 트리거됐을 것으로 추정)이나 실제 빌드 성공 여부는 대시보드에서 사용자가 직접 확인 필요(7d83ff5부터 계속 이월 중인 미확인 항목)
+**날짜**: 2026-08-12
+**커밋**: 9bd0e50, 5a99a47, 3cb9d91, 0a5ce81, d375343, 162c770, 5b9bc52, 56ee21a, 947bd6f — origin/main push 완료
+**Render 배포**: 미확인 — 이 환경에 Render API 토큰/CLI/MCP 없음(이번 세션에도 재확인 시도했으나 가용 수단 없음). origin/main은 947bd6f까지 push 완료(자동배포 트리거됐을 것으로 추정)이나 실제 빌드 성공 여부는 대시보드에서 직접 확인 필요
 
 ### 완료
-- 온디맨드 섹션(산업역사/기술변화) 로딩 안내 문구 "(약 1~2분 소요)" → "(최대 5분 정도 소요될 수 있어요)" 교체 — `SectionGenerating` 컴포넌트 한 곳만 수정, 커밋 a6fc3e6
-- **영어 단일화 1단계**(다국어 토글 계획 취소, EN-only 확정, DART 예외): `server/src/lib/claude.ts`의 SECTION_SYSTEM + 9개 SECTION_SCHEMAS 전체(summary_v2~sources) + gatherResearch1/2 + founder/재무 리서치 + growth_scenario 내러티브 시스템 프롬프트를 전부 영어로 교체. JSON key 유지, few-shot 예시는 미국 B2B 실무자(Sales/BD/Strategy) 톤(Gong/HubSpot/Salesforce 블로그 톤, leverage/GTM motion/ICP/champion/ACV 등)으로 재작성, 투자자 언어 금지 원칙 유지. 커밋 3e7585b
-- `financialContext.ts`의 `buildEdgarContext`(라이브 조회)와 `edgarBatchPrecompute.ts`의 context_text 생성부(배치 프리컴퓨트) 양쪽 다 영어화 — 라이브/배치 드리프트 방지 원칙 준수. `buildDartContext`는 의도적으로 한국어 그대로 유지
-- 클라이언트 마커 문자열(`AnalysisCard.tsx`/`AnalysisPdf.tsx`/`financialsReliability.ts`/`types/index.ts`)을 "확인 필요"→"Not disclosed" 등 새 영어 마커와 OR 매칭되도록 갱신 — 기존 한국어 캐시 레코드도 그대로 정상 렌더링됨(변환 없음)
-- `routes/analyze.ts`의 fin_preview 부수 버그 발견·수정: `cash_flow.fcf` 플레이스홀더가 `isKr` 분기 없이 항상 한국어였음 → EDGAR 프리뷰 표시 시 영어로 통일
-- 검증: TSLA/Adobe로 `analyzeCompany()` 직접 호출(HTTP 인증 레이어는 실 구글 로그인 필요해 자동화 불가 — 동일 파이프라인 직접 호출로 우회) → 전체 결과 JSON 한글 문자 0건 확인, TSLA는 financial_cache가 구 한국어 라벨 상태였는데도 최종 출력은 깨끗한 영어로 나옴을 실측 확인
-- client `next build`+`tsc --noEmit`, server `tsc`, `edgarBatchPrecompute.ts` 단독 타입체크 전부 클린. 임시 검증 스크립트(`server/scripts/_tmpTestEnglishPrompts.ts` 등) 커밋 전 삭제 확인
-- CLAUDE.md 언어 정책 섹션 전면 교체 + 백로그/버전 히스토리(v2.2.0)의 EN/KR 토글 관련 서술 정리
+- 3단 탭 구조(Company Intelligence/Pain Diagnosis/AE Skills) 배포 — 커밋 5a99a47
+- SEC Financial Statement Data Sets 기반 `industry_benchmark` 파이프라인(중앙값 방식, 최소 분모 기준, 백분위수 윈저라이징) 신설 + `financials_v2` 막대비교 컴포넌트 연결 — 커밋 3cb9d91, 0a5ce81, d375343
+- 출처 신뢰성 수정: EDGAR 출처 URL을 서버가 CIK+accession으로 직접 조립(Claude 환각 방지), 웹서치 출처는 검색 결과 URL 그대로 강제, `industry_history_v2`/`tech_evolution_v2`가 회사 자체 공시를 산업 전체 주장 근거로 잘못 인용하던 문제 수정(NVIDIA 2회 재생성으로 안정성 검증 완료) — 커밋 d375343
+- 재무수치 그라운딩 규칙 추가: 컨텍스트에 있는 수치는 재계산/타 연도 대체 없이 그대로 인용하도록 프롬프트 명시(과거 Apple/Berkshire 사고와 같은 클래스 위험 차단) — 커밋 162c770
+- 요약 탭 KPI 카드에서 "(EDGAR, FY2026)" 같은 출처/연도 텍스트 제거, `[n]` 각주로 대체(Adobe로 실측 검증) — 커밋 5b9bc52
+- 비즈니스모델 탭 "사업 세그먼트"/"Revenue Streams" 중복 제거 — 이름 매칭으로 세그먼트의 금액/배경 설명을 Revenue Streams 항목 아래로 이동, MOAT는 유지(NVIDIA 실데이터로 4/4 매칭 검증) — 커밋 56ee21a
+- 콘텐츠 포맷 원칙 재정리(코드 반영 완료, **CLAUDE.md 문서화는 아래 "남음" 참고**): 요약(bull/bear_case)·밸류체인(value_flow/subject_position)·넛지(industry_pain.description)·산업역사(why_durable)·전략(ten_year_durability) 문단→불릿 전환, `strategy_coherence`만 문단 예외, 기술변화 `current_stage`/`next_inflection`을 `{label, detail}` 구조화 객체로 변경, 재무 탭 "재무 서사" 섹션 삭제(막대비교 해석과 중복) — Microsoft로 7개 섹션 실측 검증, 커밋 947bd6f
+- 재현성 조사: NVIDIA 데이터가 재생성마다 달라 보이던 원인은 오늘 작업(강제 재분석)이 아니라 회사명 캐시 분절 버그였음을 규명(아래 "발견" 참고) — 크로스인더스트리 넛지/출처 매칭 안정성은 구조적으로 안전함을 코드 검토 + 실측으로 확인
 
 ### 남음
-- Render 대시보드에서 최신 배포(3e7585b, 이전 7d83ff5부터 이월) 성공 확인 — 대시보드 직접 확인 또는 Render API 토큰 필요(이 환경에 없음)
-- 모바일 SSE 재연결/온디맨드 소요시간 안내/MSFT 재무탭 다년도 표시 — 실브라우저 검증 여전히 안 됨(자동화 불가, 구글 로그인 필요), 2세션째 이월
-- 영어 단일화 **2단계**(미착수, 이번 세션 범위 밖으로 명시적으로 분리): 웹 UI 카피(탭 제목·버튼 등 `AnalysisCard.tsx` 전반)는 여전히 한국어 — 1단계는 Claude 프롬프트 출력만 영어화. 필요 시 별도 세션에서 착수
-- GOOGL 회계연도 비연속(fiscalYears가 [2025,2021,2020,2017,2016]처럼 건너뜀) — 원인 미규명, `pickConcept`의 revenue concept 선택 로직 관련 가능성, 이월
-- EBITDA가 D&A 데이터 미노출로 항상 "확인 필요"/"Not disclosed" — 별도 소규모 gap, 필요 시 DepreciationDepletionAndAmortization 다년도 노출 추가, 이월
-- STEP 2 게이팅 해제: 성장시나리오/PDF를 상수 하나로 온오프 가능하게 로그인 유저 전원 개방 — 별도 세션(이전부터 이월)
-- STEP 3 웹/PDF 패리티 감사 + 성장시나리오 PDF 추가 — 별도 세션(사용자 지정)
-- Batch1 조용한 폴백 수정 여부/방식 결정 — 사용자가 "수정 계획은 다음에 결정"이라 보류, 결정 나면 착수
+- **CLAUDE.md 문서화 3건 — git/현재 파일에 반영된 커밋이 없어 이번 `/done`에서 발견**(사용자가 제공한 세션 요약에는 "완료"로 되어 있었으나 실제 파일 상태와 불일치, 다른 세션/창에서 작업 중이었을 가능성):
+  1. "콘텐츠 포맷 원칙" 섹션을 새 규칙("종합 해석은 불릿 기본, 문단은 strategy_coherence만 예외")으로 갱신 — 현재 CLAUDE.md엔 2026-08-12 구버전(SEC 벤치마크/각주 위치 5항목)이 그대로 남아있음
+  2. "재현성 방어 원칙"(표현 차이는 허용, 사실 차이는 버그) 문서화 — 현재 CLAUDE.md에 해당 섹션 없음
+  3. "핵심 포지셔닝 + 검증 테스트 설계"(속도/뎁스/신뢰성/WTP/결제방식) 반영 — 현재 CLAUDE.md에 해당 내용 없음, 이번 대화 세션에서 다룬 적 없는 주제라 다른 세션 산출물로 추정
+- dev/ops 서버 분리(Render) — 여러 세션째 이월, 사용자가 "계속 미뤄짐, 이제 진행 필요"로 명시 → 다음 세션 우선순위
+- Reddit r/Sales_Professionals 반응 지속 확인 및 답글 — 별도 세션(GTM, 코드 작업 아님)
+- AE 인터뷰 추가 진행(3~5명 목표, 1명 완료) — 별도 세션(GTM, 코드 작업 아님)
 
 ### 발견 (미처리)
-- Batch1(summary_v2) 실패 시 DEFAULT_ANALYSIS_DATA로 조용히 폴백돼 "성공"처럼 저장됨: 원인 규명 완료 — prod 119건 중 6건 영향(Rocket Lab/Exxon Mobil/쎄트렉아이 3건은 동일 패턴, palantir 3건은 2026-05-02 초기 테스트 잔재로 별개 원인)
-- caee208 quality-gate 로깅이 이 전체 실패(Rule 2 콘텐츠 전무)는 못 잡음: 원인 규명 완료 — return null이 로깅 코드 도달 전에 실행돼 구조적으로 커버 불가
-- golden-set 검증이 summary_v2를 검사 대상에서 누락: 원인 규명 완료 — company 필드는 폴백이 직접 채워 위장, emptySectionCount 배열에 summary_v2 자체가 없음
-- financials_v2.outlook 웹 미노출(이전 세션 발견): PDF(관리자 전용)에만 렌더링 — 제품 판단 필요
-- SectionSource date/isEstimate 누락(이전 세션 발견): 웹 8개 탭 출처 목록 날짜/추정뱃지 미표시
-- GOOGL 회계연도 비연속(위 "남음" 참고) — 원인 미규명
+- 회사명 캐시 키 분절 버그: NVIDIA 포함 최소 8개 회사가 대소문자/공백/마크다운 차이(`NVIDIA`/`Nvidia`/`nvidia`/`**엔비디아 (NVIDIA)**`/`NVIDIA CORP`)로 서로 다른 `company_id`로 쪼개져 캐시가 공유되지 않음. 원인 규명 완료 — `companies.name` upsert가 정규화 없는 exact-string 키. 2026-07-16 typeahead 강제 흐름 도입 이후 신규 검색은 안전(canonical name만 사용), 과거 잔재만 남음 — 정리는 사용자 판단으로 보류(재작업 금지 대상)
+- Quality Gate 재현성 체크(같은 날 재생성 시 핵심 수치를 이전 값과 비교) — 설계만 논의, false positive 판정 기준(fin_preview→확정값 전환, EDGAR 정정, TTL 만료 등 정상 변동과 실제 버그 구분) 미정으로 구현 보류
+- SEC 링크 유효성 자동 검증 — 스코프 밖으로 보류. EDGAR는 서버 조립으로 근본 해결, 웹서치 출처는 원본 페이지 소실이 주원인이라 주기적 재체크로도 이미 생성된 분석은 못 고침(재분석 필요)
 
 ### 다음 세션 우선순위
-1. Render 대시보드에서 3e7585b(및 이전 7d83ff5) 배포 성공 확인 — 2세션째 이월 중인 최우선 미확인 항목
+1. dev/ops 서버 분리(Render) 진행
 
 ## Vision & Mission
 
