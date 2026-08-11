@@ -186,7 +186,7 @@ function FinancialValue({ text, dataSource }: { text: string | null | undefined;
   );
 }
 
-function MetricCard({ value, label, trend }: { value: string; label: string; trend?: 'up' | 'down' | 'flat' }) {
+function MetricCard({ value, label, trend, sourceIndex }: { value: string; label: string; trend?: 'up' | 'down' | 'flat'; sourceIndex?: number | null }) {
   const cleaned = cleanMetricValue(value);
   const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || cleaned === 'Not disclosed' || cleaned === 'Not applicable' || isPlaceholder(cleaned);
   const displayValue = isPlaceholder(cleaned) ? '—' : cleaned;
@@ -205,6 +205,11 @@ function MetricCard({ value, label, trend }: { value: string; label: string; tre
           <DataValue text={displayValue} />
         </span>
         {!isUnknown && trendEl}
+        {!isUnknown && sourceIndex != null && (
+          <sup className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-bold ml-0.5 align-top mt-0.5 shrink-0">
+            {sourceIndex}
+          </sup>
+        )}
       </div>
     </div>
   );
@@ -454,7 +459,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
       {filteredMetrics.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {filteredMetrics.map((m, i) => (
-            <MetricCard key={i} value={m.value} label={m.label} trend={m.trend} />
+            <MetricCard key={i} value={m.value} label={m.label} trend={m.trend} sourceIndex={m.source_index} />
           ))}
         </div>
       )}

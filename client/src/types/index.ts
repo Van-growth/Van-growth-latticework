@@ -164,7 +164,7 @@ export interface SummaryV2 {
   hq: string;
   value_chain_position: 'upstream' | 'midstream' | 'downstream';
   products: { name: string; revenue_share: number }[];
-  key_metrics: { label: string; value: string; trend: 'up' | 'down' | 'flat' }[];
+  key_metrics: { label: string; value: string; trend: 'up' | 'down' | 'flat'; source_index?: number | null }[];
   top_customers: string[];
   customer_concentration?: {
     customers: { name: string; revenue_share: number }[];
