@@ -2790,6 +2790,13 @@ const TAB_BATCH: Record<TabKey, number> = {
   tech_evolution:       0,
 };
 
+// 최상위 3단 탭(Company Intelligence/Pain Diagnosis/AE Skills, 2026-08)에서 활성 그룹이
+// 바뀔 때 그 그룹의 첫 탭을 골라주는 헬퍼 — activeGroup이 없으면(ShareContent 등 기존
+// 호출부) 항상 'summary'로 폴백해 기존 동작 그대로 유지.
+function firstTabOfGroup(group?: 'company' | 'pain'): TabKey {
+  return (group ? TABS.find(t => t.group === group)?.key : undefined) ?? 'summary';
+}
+
 // 탭 바 체크마크(✓) 전용 — TAB_BATCH(위 주석 참고, 스켈레톤 표시용일 뿐 실제 완료 순서와
 // 무관)와는 완전히 별개 판정 경로다. 체크마크는 반드시 "그 탭 데이터가 실제로
 // 존재하는가"만으로 판정한다 — 예전엔 TAB_BATCH를 재사용해서 industry_history/
@@ -2814,7 +2821,7 @@ function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV
 // 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
 const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
 
-function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosisStart, isPremium }: {
+function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosisStart, isPremium, activeGroup }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
@@ -2823,10 +2830,14 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
   // onReanalyze는 섹션 하나만 재생성하는 범용 경로라 두 섹션 동시 생성을 표현할 수 없다.
   onPainDiagnosisStart?: () => void;
   isPremium?: boolean;
+  // 최상위 3단 탭(2026-08, HomeContent.tsx)이 "Company Intelligence"/"Pain Diagnosis" 중
+  // 무엇을 골랐는지 — 지정되면 그 그룹의 탭만 필터링해서 보여준다. undefined면(ShareContent
+  // 등 기존 호출부) 기존처럼 두 그룹 다 표시 — 하위호환, 새 사이드바 컴포넌트 안 만듦.
+  activeGroup?: 'company' | 'pain';
 }) {
   const { user, session, signInWithGoogle } = useAuth();
   const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
-  const [tab, setTab] = useState<TabKey>('summary');
+  const [tab, setTab] = useState<TabKey>(() => firstTabOfGroup(activeGroup));
   const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const { completedBatches } = useAnalysis();
@@ -2846,12 +2857,19 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
     </div>
   ) : null;
 
-  // Task 1: 분석 시작 시 요약 탭 자동 이동
+  // Task 1: 분석 시작 시 (activeGroup의) 요약격 탭으로 자동 이동
   useEffect(() => {
     if (completedBatches.size === 1 && completedBatches.has(-1)) {
-      startTransition(() => setTab('summary'));
+      startTransition(() => setTab(firstTabOfGroup(activeGroup)));
     }
-  }, [completedBatches]);
+  }, [completedBatches, activeGroup]);
+
+  // 최상위 3단 탭에서 activeGroup이 바뀌면(Company Intelligence ↔ Pain Diagnosis 전환)
+  // 지금 보고 있던 탭이 새 그룹에 없을 수 있으므로 그 그룹의 첫 탭으로 자동 전환.
+  useEffect(() => {
+    if (!activeGroup) return;
+    setTab(prev => TABS.find(t => t.key === prev)?.group === activeGroup ? prev : firstTabOfGroup(activeGroup));
+  }, [activeGroup]);
 
   // industry_history_v2/tech_evolution_v2는 탭을 여는 것만으로 더 이상 자동 생성되지
   // 않는다(2026-08 — 예전엔 탭 오픈 시 자동 트리거였으나, "pain 진단 시작" 버튼 클릭이
@@ -2939,13 +2957,18 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
       </div>
 
       {/* Tab bar — 2026-08부터 기업분석/pain 진단 2그룹으로 분리, 그룹 라벨만 추가되고
-          개별 탭 버튼 로직(체크마크/스피너 등)은 그대로 */}
+          개별 탭 버튼 로직(체크마크/스피너 등)은 그대로. activeGroup이 지정되면(최상위
+          3단 탭, HomeContent.tsx) 그 그룹만 필터링해서 보여주고 그룹 라벨은 생략 —
+          상단 탭이 이미 그룹을 나타내므로 중복. undefined면(ShareContent 등) 기존처럼
+          두 그룹 다 보여줌 */}
       <div className="flex overflow-x-auto border-b border-gray-100 bg-white px-2">
-        {TAB_GROUPS.map((g, gi) => (
+        {(activeGroup ? TAB_GROUPS.filter(g => g.key === activeGroup) : TAB_GROUPS).map((g, gi) => (
           <div key={g.key} className={`flex items-stretch shrink-0 ${gi > 0 ? 'border-l border-gray-100 ml-1 pl-1' : ''}`}>
-            <div className="flex items-center shrink-0 px-2">
-              <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 whitespace-nowrap">{g.label}</span>
-            </div>
+            {!activeGroup && (
+              <div className="flex items-center shrink-0 px-2">
+                <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 whitespace-nowrap">{g.label}</span>
+              </div>
+            )}
             {TABS.filter(t => t.group === g.key).map(t => {
               const Icon = t.icon;
               const active = tab === t.key;

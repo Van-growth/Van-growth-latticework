@@ -423,6 +423,11 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 탭별 핵심 먼저 표시 + 더 보기 구조
 - 국가 표시: 국기 이모지
 - 모바일 반응형 유지
+- 최상위 3단 탭 구조 (2026-08): Company Intelligence / Pain Diagnosis / AE Skills — 기존
+  좌측 사이드바 기업분석/pain 진단 2그룹은 각각 앞의 두 탭 안으로 편입(사이드바 로직 자체는
+  그대로, `AnalysisCard.tsx`의 `activeGroup` prop으로 필터링만 추가). AE Skills는 검색/로그인
+  플로우와 완전히 분리된 별도 뷰(카테고리 칩 + 카드 피드), 무료 뱃지 + 로그인 게이트 없음.
+  상단 탭 상태는 URL에 반영하지 않음 — 새로고침 시 Company Intelligence로 리셋.
 
 ### 언어 정책 (2026-08 개정 — 다국어 토글 계획 취소, 영어 단일 고정)
 - 언어: 영어 단일 고정. 토글 없음. 모든 신규 분석은 영어로 생성.
@@ -736,6 +741,13 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   커밋 `89f45e2`)으로 인증 없이 `/api/analyze`를 호출하다 깨진 상태 — 되살리려면
   HTTP 계층 우회 리팩터링 필요, 착수 전(2026-07-16 확인, 실전 발견 이력 14번 참고)
 
+### 🔵 탐색 중 (아직 확정 안됨 — 우선순위 미부여, 방향성만 잡힌 상태)
+- [ ] AE Skills 콘텐츠 파이프라인 (VOC.md → DB화) — 최상위 3단 탭 중 "AE Skills"는
+  2026-08에 UI 뼈대(카테고리 칩 + 카드 피드)만 먼저 구현됨(`AeSkillsView.tsx`, 하드코딩
+  더미 카드 4개). 실제 콘텐츠는 VOC(고객 목소리) 수동 관리 문서(VOC.md — 현재 저장소엔
+  없음, 팀 내 별도 관리 중으로 추정) → DB 스키마 설계 → 실 콘텐츠 적재 순서로 별도 작업
+  필요. 카테고리 체계(전체/Discovery/협상/커리어)도 스텁 단계라 확정 아님.
+
 ### ✅ 완료
 - [x] 창업자 탭 추가
 - [x] 출처 각주 시스템 (🟢공식/🟡참고/⚪추정)
@@ -895,6 +907,17 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   동기 배치 5개→4개(진행바 분모도 5→4). 사이드바: `TABS`에 `group` 필드 추가, "기업분석"
   8탭 + "pain 진단" 3탭(넛지/산업역사/기술역사). industry_history_v2/tech_evolution_v2의
   "탭 오픈 시 자동생성"은 완전히 제거되고 "pain 진단 시작" 버튼 명시적 클릭으로 대체.
+- [x] 최상위 3단 탭 구조 (2026-08) — Company Intelligence/Pain Diagnosis/AE Skills.
+  `HomeContent.tsx`에 `topTab` state(URL 미반영, 새로고침 시 Company Intelligence로 리셋)
+  신규, 상단 탭 바 렌더링. Company Intelligence/Pain Diagnosis는 기존 검색+`AnalysisCard`
+  플로우를 그대로 두고 `activeGroup` prop(`AnalysisCard.tsx` 신규)만 전달해 좌측 사이드바를
+  해당 그룹 탭만 필터링 — 사이드바 컴포넌트/로직은 새로 안 만듦(기존 `TABS`/`group` 필드
+  재사용), `activeGroup` 미지정 시(`ShareContent.tsx`) 기존처럼 두 그룹 다 표시해 하위호환
+  유지. AE Skills는 검색폼+AnalysisCard를 통째로 숨기고 신규 `AeSkillsView.tsx`(카테고리 칩
+  + 더미 카드 4개, 하드코딩)로 교체 — 로그인 게이트 없음(이 앱엔 middleware.ts가 없고
+  로그인 체크가 "검색 실행" 등 특정 액션 단위로만 걸려있어, AE Skills 뷰는 그런 액션을
+  아예 거치지 않으므로 자연히 무인증 접근이 됨, 별도 미들웨어 불필요). 실제 콘텐츠
+  파이프라인(VOC.md→DB화)은 백로그 "🔵 탐색 중"에 별도 등록, 이번엔 UI 뼈대만.
 
 ## Security Principles (SSOT)
 
@@ -1384,4 +1407,8 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
   "pain 진단 시작" 버튼 트리거로 전환), 사이드바 기업분석/pain 진단 2그룹 분리, 배치
   재편(2/3/4배치 3개, financials→3배치·founder→4배치 이동, 진행바 분모 5→4). 상세는 위
   "분석 배치 구조"/"Pain 진단" 섹션 참고. |
+| v2.4.0 | 2026-08 — 최상위 3단 탭 구조 신규(Company Intelligence/Pain Diagnosis/AE Skills).
+  기존 기업분석/pain 진단 2그룹은 앞의 두 탭으로 편입(사이드바 로직 재사용, `activeGroup`
+  prop 필터링만 추가), AE Skills는 로그인 게이트 없는 별도 뷰(카테고리 칩 + 카드 피드
+  스텁, 실 콘텐츠 파이프라인은 별도 백로그). 상세는 위 "UI/UX 원칙" 섹션 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

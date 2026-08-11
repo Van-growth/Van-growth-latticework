@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, FormEvent, KeyboardEvent } from '
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
+import AeSkillsView from './AeSkillsView';
 import LoginPromptModal from './LoginPromptModal';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
@@ -22,6 +23,18 @@ const API_URL = (() => {
 // signInWithGoogle()이 전체 페이지가 새로고침되는 OAuth 리다이렉트라 React state로는
 // 못 살리므로, 로그인 후 마운트 시 이 키를 읽어 자동으로 resolve를 이어간다.
 const PENDING_SELECTION_KEY = 'pending_company_selection';
+
+// 최상위 3단 탭 (2026-08) — 기존 좌측 사이드바 2그룹(기업분석/pain 진단)을 감싸는 wrapper.
+// 사이드바 로직 자체는 새로 안 만들고 AnalysisCard.tsx의 activeGroup prop으로 필터링만
+// 한다. AE Skills는 검색/로그인 플로우와 완전히 분리된 별도 뷰 — 로그인 게이트 없음
+// (기존 검색 실행 등 특정 액션에만 로그인 체크가 걸려있고, 페이지 진입 자체엔 게이트가
+// 없으므로 이 탭은 그 어떤 인증 로직도 거치지 않아 자연히 무인증 접근이 된다).
+type TopTabKey = 'company' | 'pain' | 'ae_skills';
+const TOP_TABS: { key: TopTabKey; label: string }[] = [
+  { key: 'company',   label: 'Company Intelligence' },
+  { key: 'pain',      label: 'Pain Diagnosis' },
+  { key: 'ae_skills', label: 'AE Skills' },
+];
 
 function daysAgo(iso: string | null): number {
   if (!iso) return 0;
@@ -133,6 +146,8 @@ export default function HomeContent() {
   const { setAnalysisData, setCompletedBatches, completedBatches } = useAnalysis();
   const { session, signInWithGoogle } = useAuth();
 
+  // 새로고침 시 항상 Company Intelligence로 리셋(URL에 반영 안 함 — 2026-08 결정).
+  const [topTab, setTopTab] = useState<TopTabKey>('company');
   const [companyName, setCompanyName] = useState('');
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -773,6 +788,39 @@ export default function HomeContent() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* 최상위 3단 탭 (2026-08) — Company Intelligence/Pain Diagnosis는 기존 좌측
+          사이드바 2그룹을 감싸는 wrapper일 뿐(사이드바 로직은 AnalysisCard.tsx의
+          activeGroup prop 필터링 재사용, 새로 안 만듦). AE Skills는 검색/AnalysisCard를
+          통째로 숨기고 완전히 다른 뷰(AeSkillsView)로 교체 — 로그인 게이트 없음. */}
+      <div className="flex justify-center gap-1 mb-8">
+        {TOP_TABS.map(t => {
+          const active = topTab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTopTab(t.key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                active ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+              {t.key === 'ae_skills' && (
+                <span className={`text-[9px] font-bold rounded px-1 py-[1px] leading-none ${
+                  active ? 'bg-white/20 text-white' : 'text-emerald-600 bg-emerald-50 border border-emerald-200'
+                }`}>
+                  무료
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {topTab === 'ae_skills' ? (
+        <AeSkillsView />
+      ) : (
+      <>
       {/* Hero */}
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold text-gray-900 mb-3">기업 심층 분석</h1>
@@ -1015,7 +1063,7 @@ export default function HomeContent() {
             </div>
           )}
 
-          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} onPainDiagnosisStart={handlePainDiagnosisStart} isPremium={usage?.isPremium ?? false} />
+          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} onPainDiagnosisStart={handlePainDiagnosisStart} isPremium={usage?.isPremium ?? false} activeGroup={topTab} />
         </div>
       )}
 
@@ -1051,6 +1099,8 @@ export default function HomeContent() {
             )}
           </div>
         </div>
+      )}
+      </>
       )}
 
       {pendingSuggestion && (
