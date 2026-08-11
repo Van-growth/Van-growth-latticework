@@ -19,6 +19,11 @@ import type { EdgarRawSeries } from './edgar';
 
 const DEVIATION_THRESHOLD = 0.30; // ±30% 이상 벌어질 때만 언급
 
+// sources[].url에 쓸 정확한 URL을 프롬프트에 직접 박아준다 — 안 주면 Claude가 그럴듯한
+// URL을 지어내는데, 2026-08-11 실측으로 확인된 사례(https://www.sec.gov/dera/data/
+// financial-statements, 실제로는 404 — 옛 URL 구조로 추정됨)처럼 깨진 링크가 나올 수 있다.
+const SEC_BENCHMARK_SOURCE_URL = 'https://www.sec.gov/data-research/sec-markets-data/financial-statement-data-sets';
+
 const METRIC_KEYS = ['debt_equity_ratio', 'cfo_revenue_ratio', 'operating_margin', 'asset_turnover', 'revenue_growth'] as const;
 type MetricKey = (typeof METRIC_KEYS)[number];
 
@@ -149,7 +154,8 @@ export async function buildSecBenchmarkContext(rawEdgar: EdgarRawSeries | undefi
     'and do not reference any industry figure other than the ones listed above. Phrase any statement about ' +
     'the financial impact of the difference as a question, never as a stated conclusion. For each figure you ' +
     'actually reference, add a matching entry to sources[]: level "L1", organization "SEC Financial Statement ' +
-    `Data Sets", content "SIC ${sicCode}, n=<that figure's own n from above>".`,
+    `Data Sets", content "SIC ${sicCode}, n=<that figure's own n from above>", url "${SEC_BENCHMARK_SOURCE_URL}" ` +
+    '(use this exact URL — do not invent or modify it).',
   );
   return lines.join('\n');
 }
