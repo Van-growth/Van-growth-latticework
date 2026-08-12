@@ -42,6 +42,8 @@ import {
   SecBenchmarkComparison,
 } from '@/types';
 import { isPlaceholder, countFinancialsReliability } from '@/lib/financialsReliability';
+import { useLanguage } from '@/app/context/LanguageContext';
+import { getUiStrings } from '@/lib/i18n/uiStrings';
 
 // ── Country flag map ─────────────────────────────────────────────────────────
 
@@ -1789,6 +1791,8 @@ function SecBenchmarkBar({ label, value, unit, colorClass, maxAbs }: { label: st
 }
 
 function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkComparison }) {
+  const { language } = useLanguage();
+  const chartT = getUiStrings(language).benchmarkChart;
   if (comparison.status === 'insufficient_sample') {
     return (
       <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-indigo-400">
@@ -1808,8 +1812,8 @@ function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkC
             <div key={i} className={i > 0 ? 'pt-4 border-t border-gray-100' : ''}>
               <div className="text-xs font-semibold text-gray-700 mb-2">{item.label}</div>
               <div className="space-y-1.5">
-                <SecBenchmarkBar label="이 회사" value={item.companyValue} unit={item.unit} colorClass="bg-blue-500" maxAbs={maxAbs} />
-                <SecBenchmarkBar label={`업종 중앙값(n=${item.n})`} value={item.median} unit={item.unit} colorClass="bg-gray-300" maxAbs={maxAbs} />
+                <SecBenchmarkBar label={chartT.thisCompany} value={item.companyValue} unit={item.unit} colorClass="bg-blue-500" maxAbs={maxAbs} />
+                <SecBenchmarkBar label={`${chartT.industryMedian}(n=${item.n})`} value={item.median} unit={item.unit} colorClass="bg-gray-300" maxAbs={maxAbs} />
               </div>
               {item.interpretation && (
                 <p className="text-xs text-gray-500 leading-relaxed mt-2">{item.interpretation}</p>
@@ -2369,29 +2373,29 @@ function CardsSkeleton({ count = 3 }: { count?: number }) {
 // 평균 industry_history 103s/tech_evolution 95s) 걸림. "pain 진단 시작" 버튼(2026-08)은
 // 이 두 섹션을 동시에 병렬 생성하므로 서버 타임아웃도 10분으로 넉넉하게 잡아뒀다 — 안내
 // 없이 스피너만 있으면 실패한 것처럼 보여 "로딩만 계속 돈다"는 오인으로 이어지기 쉬움.
-function SectionGenerating({ label }: { label: string }) {
+function SectionGenerating({ label, suffix }: { label: string; suffix: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
       <RefreshCw size={20} className="animate-spin" />
-      <span className="text-sm">{label} 생성 중... (최대 10분 정도 소요될 수 있어요)</span>
+      <span className="text-sm">{label}{suffix}</span>
     </div>
   );
 }
 
 // "pain 진단 시작" CTA — industry_history_v2/tech_evolution_v2는 탭 열람만으론 생성되지
 // 않고(2026-08, 기존 탭별 자동생성 방식 대체), 이 버튼 클릭 1번으로 두 섹션이 함께 생성된다.
-function PainDiagnosisStart({ onStart }: { onStart: () => void }) {
+function PainDiagnosisStart({ onStart, intro, startLabel }: { onStart: () => void; intro: string; startLabel: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
       <Lightbulb size={20} className="text-amber-400" />
-      <p className="text-sm text-gray-500 max-w-xs leading-relaxed">
-        산업 역사와 기술 변화를 함께 진단해요.<br />약 7~10분 소요될 수 있어요.
+      <p className="text-sm text-gray-500 max-w-xs leading-relaxed whitespace-pre-line">
+        {intro}
       </p>
       <button
         onClick={onStart}
         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
       >
-        pain 진단 시작
+        {startLabel}
       </button>
     </div>
   );
@@ -2765,7 +2769,7 @@ function analysisToMd(data: AnalysisDetail): string {
   return parts.filter(Boolean).join('\n\n---\n\n');
 }
 
-function CopyButton({ getMarkdown, label = '복사', shortLabel }: { getMarkdown: () => string; label?: string; shortLabel?: string }) {
+function CopyButton({ getMarkdown, label = '복사', shortLabel, copiedLabel = '복사됨' }: { getMarkdown: () => string; label?: string; shortLabel?: string; copiedLabel?: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(async () => {
     const md = getMarkdown();
@@ -2787,11 +2791,11 @@ function CopyButton({ getMarkdown, label = '복사', shortLabel }: { getMarkdown
       {copied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
       {shortLabel ? (
         <>
-          <span className="hidden sm:inline">{copied ? '복사됨' : label}</span>
-          <span className="sm:hidden">{copied ? '복사됨' : shortLabel}</span>
+          <span className="hidden sm:inline">{copied ? copiedLabel : label}</span>
+          <span className="sm:hidden">{copied ? copiedLabel : shortLabel}</span>
         </>
       ) : (
-        copied ? '복사됨' : label
+        copied ? copiedLabel : label
       )}
     </button>
   );
@@ -2892,6 +2896,12 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
 }) {
   const { user, session, signInWithGoogle } = useAuth();
   const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
+  // 탭 라벨/버튼은 전역 선호값이 아니라 이 리포트 자체의 저장된 언어를 우선한다 —
+  // 안 그러면 KR로 생성해둔 과거 리포트를 열었을 때 콘텐츠는 한국어인데 탭 라벨만
+  // 전역 설정(EN)을 따라가는 불일치가 생긴다. data가 아직 없을 때만 전역값으로 폴백.
+  const { language: globalLanguage } = useLanguage();
+  const reportLanguage = data.language === 'ko' || data.language === 'en' ? data.language : globalLanguage;
+  const uiT = getUiStrings(reportLanguage);
   const [tab, setTab] = useState<TabKey>(() => firstTabOfGroup(activeGroup));
   const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -2907,7 +2917,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
         onClick={() => onReanalyze(t)}
         className="text-[11px] text-gray-400 hover:text-blue-500 hover:underline transition-colors"
       >
-        ↻ 이 섹션 다시 분석
+        {uiT.actions.reanalyzeSection}
       </button>
     </div>
   ) : null;
@@ -2999,12 +3009,12 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
               <h2 className="text-2xl font-semibold text-gray-900 leading-none">{data.companyName}</h2>
             </div>
             <p className="text-xs text-gray-400 ml-6">
-              {new Date(data.createdAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}
+              {new Date(data.createdAt).toLocaleString(reportLanguage === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <CopyButton getMarkdown={() => analysisToMd(data)} label="전체 복사" />
-            <CopyButton getMarkdown={getActiveTabMarkdown} label="이 탭 복사" shortLabel="탭 복사" />
+            <CopyButton getMarkdown={() => analysisToMd(data)} label={uiT.actions.copyAll} copiedLabel={uiT.actions.copied} />
+            <CopyButton getMarkdown={getActiveTabMarkdown} label={uiT.actions.copyTab} shortLabel={uiT.actions.copyTabShort} copiedLabel={uiT.actions.copied} />
             {isAdmin && <ExportPdfButton data={data} />}
             <DataSourceBadge source={data.dataSource ?? 'web_search'} />
           </div>
@@ -3021,7 +3031,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
           <div key={g.key} className={`flex items-stretch shrink-0 ${gi > 0 ? 'border-l border-gray-100 ml-1 pl-1' : ''}`}>
             {!activeGroup && (
               <div className="flex items-center shrink-0 px-2">
-                <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 whitespace-nowrap">{g.label}</span>
+                <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 whitespace-nowrap">{uiT.tabGroups[g.key]}</span>
               </div>
             )}
             {TABS.filter(t => t.group === g.key).map(t => {
@@ -3046,7 +3056,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
                     if (t.key === 'financials') trackEvent('financials_tab_reached', { companyName: data.companyName });
                     startTransition(() => setTab(t.key));
                   }}
-                  onMouseEnter={() => setHoveredTooltip(t.tooltip)}
+                  onMouseEnter={() => setHoveredTooltip(uiT.tabs[t.key].tooltip)}
                   onMouseLeave={() => setHoveredTooltip(null)}
                   className={`shrink-0 flex items-center gap-1 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
                     active
@@ -3055,7 +3065,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
                   }`}
                 >
                   <Icon size={12} />
-                  {t.label}
+                  {uiT.tabs[t.key].label}
                   {t.key === 'growth_scenario' && !isPremium && (
                     <span className="text-[9px] font-bold text-amber-500 bg-amber-50 border border-amber-200 rounded px-1 py-[1px] ml-0.5 leading-none">
                       PRO
@@ -3107,25 +3117,25 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
           data.industry_history_v2
             ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
             : (isReanalyzing('industry') || isReanalyzing('tech'))
-              ? <SectionGenerating label="산업 역사" />
+              ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffix} />
               : !onPainDiagnosisStart
                 // 히스토리/공유 링크 등 읽기 전용 화면 — 버튼을 눌러도 아무 요청도 안 나가면서
                 // "결과를 불러오지 못했다"는 오해성 실패 메시지만 뜨는 걸 방지(2026-08-12 발견).
                 ? <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
                 : painDiagnosisStarted
                   ? <>{reanalyzeBtn('industry')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
-                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
+                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} intro={uiT.actions.painDiagnosisIntro} startLabel={uiT.actions.startPainDiagnosis} />
         )}
         {tab === 'tech_evolution' && (
           data.tech_evolution_v2
             ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
             : (isReanalyzing('industry') || isReanalyzing('tech'))
-              ? <SectionGenerating label="기술 변화" />
+              ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffix} />
               : !onPainDiagnosisStart
                 ? <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
                 : painDiagnosisStarted
                   ? <>{reanalyzeBtn('tech')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
-                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} />
+                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} intro={uiT.actions.painDiagnosisIntro} startLabel={uiT.actions.startPainDiagnosis} />
         )}
         {tab === 'value_chain' && (
           (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :

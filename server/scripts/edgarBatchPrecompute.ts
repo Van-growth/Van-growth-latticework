@@ -109,7 +109,7 @@ function fmtUsdField(val: number | null, series: (number | null)[]): string {
   return 'Not disclosed';
 }
 
-async function processCompany(
+export async function processCompany(
   idx: number,
   total: number,
   cikNum: number,
@@ -305,7 +305,11 @@ async function main() {
   console.log(`\n성공 ${success} / 실패 ${failure} / 소요시간 ${mins}분`);
 }
 
-main().catch(err => {
-  console.error('[edgarBatchPrecompute] Fatal:', err.message);
-  process.exit(1);
-});
+// require.main 가드 — 크론이 이 파일을 직접 실행할 때(main 트리거)와 다른 스크립트가
+// processCompany()만 재사용하려고 import할 때(전체 배치 재실행 방지)를 구분.
+if (require.main === module) {
+  main().catch(err => {
+    console.error('[edgarBatchPrecompute] Fatal:', err.message);
+    process.exit(1);
+  });
+}

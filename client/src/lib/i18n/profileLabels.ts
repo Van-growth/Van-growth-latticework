@@ -1,7 +1,6 @@
 // 온보딩/설정 폼의 선택형 필드 라벨 사전. DB에는 언어중립 영문 소문자 코드로 저장하고,
-// 화면 표시 문자열만 로케일별로 분기한다 — 지금은 'ko'만 채워져 있고 'en'은 ko로 폴백.
-// 영문 UI(백로그 "영문화 EN/KR 토글")가 붙을 때 en 사전만 실제 번역으로 채우면 됨.
-// 이 앱에 아직 별도 로케일 컨텍스트가 없어서 호출부는 지금 'ko'를 고정으로 넘긴다.
+// 화면 표시 문자열만 로케일별로 분기한다. 호출부는 LanguageContext의 useLanguage()로 얻은
+// 값을 넘긴다(client/src/app/context/LanguageContext.tsx).
 
 export type Locale = 'ko' | 'en';
 
@@ -68,8 +67,35 @@ const ko: ProfileLabelDict = {
   region: { kr: '한국', us: '미국', other: '기타' },
 };
 
-// TODO(영문화): 실제 영어 번역으로 교체. 구조만 미리 잡아두고 지금은 ko로 폴백.
-const en: ProfileLabelDict = ko;
+const en: ProfileLabelDict = {
+  orgSize: {
+    '1-10': '1-10', '11-50': '11-50', '51-200': '51-200',
+    '201-500': '201-500', '501-1000': '501-1000', '1000+': '1000+',
+  },
+  industry: {
+    saas: 'SaaS',
+    manufacturing: 'Manufacturing',
+    biotech_healthcare: 'Biotech/Healthcare',
+    retail_commerce: 'Retail/Commerce',
+    finance: 'Finance',
+    media_content: 'Media/Content',
+    hardware_semiconductor: 'Hardware/Semiconductor',
+    energy: 'Energy',
+    logistics_transport: 'Logistics/Transport',
+    consumer_goods: 'Consumer Goods',
+    real_estate_construction: 'Real Estate/Construction',
+    other: 'Other',
+  },
+  jobRole: { sales: 'Sales', bd: 'BD', strategy: 'Strategy', other: 'Other' },
+  jobLevel: { junior: 'Junior', mid: 'Mid', senior: 'Senior', team_lead: 'Team Lead', executive: 'Executive (C-level)' },
+  purpose: {
+    meeting_prep: 'Meeting prep',
+    partner_research: 'Partner research',
+    competitor_analysis: 'Competitor analysis',
+    other: 'Other',
+  },
+  region: { kr: 'Korea', us: 'United States', other: 'Other' },
+};
 
 const DICTS: Record<Locale, ProfileLabelDict> = { ko, en };
 

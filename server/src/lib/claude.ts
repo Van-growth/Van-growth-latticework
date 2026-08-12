@@ -10,6 +10,32 @@ if (!process.env.ANTHROPIC_API_KEY) throw new Error('Missing ANTHROPIC_API_KEY')
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ── Language (output synthesis only — research/web-search stays English) ──────
+
+export type Language = 'ko' | 'en';
+
+const LANGUAGE_DIRECTIVE: Record<Language, string> = {
+  en: 'Generate all content in English (keep company names, technology names, and tickers in their original form).',
+  ko: 'Generate all content in Korean (한국어로 작성) — keep company names, technology names, and tickers in their original form (e.g. "NVIDIA", "GPU", "NASDAQ:NVDA" stay as-is, do not transliterate).',
+};
+
+const FOUNDER_LANGUAGE_DIRECTIVE: Record<Language, string> = {
+  en: 'Generate all content in English (keep names and company names in their original form).',
+  ko: 'Generate all content in Korean (한국어로 작성) — keep names and company names in their original form (do not transliterate).',
+};
+
+const PLACEHOLDER_MARKERS: Record<Language, { notDisclosed: string; notApplicable: string; estimated: string }> = {
+  en: { notDisclosed: 'Not disclosed', notApplicable: 'Not applicable', estimated: '(estimated)' },
+  ko: { notDisclosed: '확인 필요', notApplicable: '해당없음', estimated: '(추정)' },
+};
+
+// 두 언어 마커를 모두 인식해야 하는 검증 로직(Quality Gate/Golden Set)용 — 어느 언어로
+// 생성됐든 "데이터 없음"으로 정확히 인식하려면 language 인자 없이도 항상 둘 다 체크한다.
+const NO_DATA_MARKERS: string[] = [
+  PLACEHOLDER_MARKERS.en.notDisclosed, PLACEHOLDER_MARKERS.en.notApplicable,
+  PLACEHOLDER_MARKERS.ko.notDisclosed, PLACEHOLDER_MARKERS.ko.notApplicable,
+];
+
 // ── Types (V2 schema) ─────────────────────────────────────────────────────────
 
 // L1: 공식 출처 (기업 공시, CFO/CEO 공식 발표, SEC, DART)
@@ -568,9 +594,14 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 
 // ── Section prompts ───────────────────────────────────────────────────────────
 
-const SECTION_SYSTEM = `You are an expert company analyst. Using the provided research data, analyze only the specified section.
-Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. Generate all content in English (keep company names, technology names, and tickers in their original form).
-
+function sectionSystem(language: Language): string {
+  const m = PLACEHOLDER_MARKERS[language];
+  const schemaExampleNote = language === 'ko'
+    ? `\n[Schema examples are structural, not literal]\nThe JSON schema below shows example string values for guidance (e.g. "item":"Revenue", "item":"Operating Income") — these illustrate what KIND of value that field expects, not a literal string to copy. Always write the actual value translated into Korean (e.g. "매출", "영업이익"), never echo the schema's English example text verbatim just because it appeared in the instructions.\n`
+    : '';
+  return `You are an expert company analyst. Using the provided research data, analyze only the specified section.
+Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. ${LANGUAGE_DIRECTIVE[language]}
+${schemaExampleNote}
 [Company naming]
 - Use the commonly known brand name. Never use the legal holding-company name. Example: Google (not Alphabet), Meta (not Facebook).
 - Never mix parent and subsidiary names — use one consistent name for the same company throughout the analysis.
@@ -585,13 +616,19 @@ Follow each section's own bullets guidance.
 
 [Data reliability principles]
 1. Only state numbers you can actually confirm — from a traceable source (10-K, IR materials, DART, etc.).
-2. Any estimated or inferred number must end with the label "(estimated)". Example: "15.2% (estimated)".
-3. If a data point isn't available, return "Not disclosed." Never make one up.
-   Exception: if the provided context explicitly marks a metric as "Not applicable" / "structurally not
+2. Any estimated or inferred number must end with the label "${m.estimated}". Example: "15.2% ${m.estimated}".
+3. If a data point isn't available, return "${m.notDisclosed}". Never make one up.
+   Exception: if the provided context explicitly marks a metric as not applicable / "structurally not
    reported" (e.g., a holding company or insurer whose SEC filings never tag operating income because of its
-   segment structure), return "Not applicable" for that metric instead of "Not disclosed" — "Not disclosed"
-   means "we looked but couldn't confirm it"; "Not applicable" means "this line item doesn't structurally
+   segment structure), return "${m.notApplicable}" for that metric instead of "${m.notDisclosed}" — "${m.notDisclosed}"
+   means "we looked but couldn't confirm it"; "${m.notApplicable}" means "this line item doesn't structurally
    exist for this company." Keep that distinction.
+   Important: the context you're given may itself contain a literal marker word for these two cases —
+   in either English ("Not disclosed"/"Not applicable") or Korean ("확인 필요"/"해당없음"), regardless of
+   which language you were asked to write this analysis in. That's just the context-builder's own internal
+   instructional wording, not a value to echo verbatim. No matter which literal word the context happens to
+   use, your OUTPUT marker must always be "${m.notDisclosed}" / "${m.notApplicable}" — translate the
+   context's marker into the marker above, never copy its literal wording into your output.
 4. Don't state specific figures like regional revenue mix or named customers unless they're grounded in
    disclosed data.
 5. Small or private companies can have real data gaps — say so plainly instead of filling the gap.
@@ -619,6 +656,7 @@ research report. Aim for Gong / HubSpot / Salesforce blog voice, not McKinsey de
 - No academic or overly formal tone. Skip hedges like "it can be argued that" or "it is worth noting that."
 - Keep sentences short and direct. Every sentence should connect to a business decision — cut anything that's
   just describing, not informing a decision.`;
+}
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `Output only a JSON object matching this schema:
@@ -727,7 +765,7 @@ const SECTION_CONTENT_SIGNALS: Record<string, { text?: string[]; arrays?: string
 };
 
 function isPlaceholderText(v: unknown): boolean {
-  return typeof v === 'string' && ['', '확인 필요', 'N/A', 'unknown'].includes(v.trim());
+  return typeof v === 'string' && ['', 'N/A', 'unknown', ...NO_DATA_MARKERS].includes(v.trim());
 }
 
 function getByPath(obj: any, path: string): unknown {
@@ -852,13 +890,15 @@ async function gatherResearch2(companyName: string): Promise<string> {
 
 // ── Section call (no web search, uses shared context) ─────────────────────────
 
-async function callSection<T>(context: string, sectionKey: string): Promise<T | null> {
+// model 파라미터: 섹션별 모델 티어링 도입 대비(2026-08-12) — 기본값은 기존 sonnet 그대로,
+// 프로덕션 분기 로직은 아직 연결 안 함(검토 후 결정 예정).
+export async function callSection<T>(context: string, sectionKey: string, language: Language, model = 'claude-sonnet-4-6'): Promise<T | null> {
   const t0 = Date.now();
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model,
       max_tokens: 4000,
-      system: [{ type: 'text', text: SECTION_SYSTEM, cache_control: { type: 'ephemeral' } }] as any,
+      system: [{ type: 'text', text: sectionSystem(language), cache_control: { type: 'ephemeral' } }] as any,
       messages: [{
         role: 'user',
         content: `${context}\n\n---\n\n${SECTION_SCHEMAS[sectionKey]}`,
@@ -918,11 +958,11 @@ async function callSection<T>(context: string, sectionKey: string): Promise<T | 
 
 // ── Founder section (own web-search pass) ─────────────────────────────────────
 
-async function callFounderSection(companyName: string): Promise<FounderV2 | null> {
+async function callFounderSection(companyName: string, language: Language): Promise<FounderV2 | null> {
   const t0 = Date.now();
   try {
     const systemPrompt = [{ type: 'text' as const, text: `You are an expert on company founders. Use web search to gather founder/CEO information, then return only the specified JSON schema.
-Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. Generate all content in English (keep names and company names in their original form).
+Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. ${FOUNDER_LANGUAGE_DIRECTIVE[language]}
 Mark any item you can't find as "-". For a private company, research this section more deeply than the financials.`, cache_control: { type: 'ephemeral' as const } }];
 
     const schema = `Output only a JSON object matching this schema:
@@ -973,7 +1013,7 @@ Cite the source for every figure. Mark anything you can't find "Not disclosed".`
   );
 }
 
-export async function refreshFinancials(companyName: string): Promise<FinancialsV2> {
+export async function refreshFinancials(companyName: string, language: Language = 'en'): Promise<FinancialsV2> {
   const [{ contextText }, researchText] = await Promise.all([
     fetchFinancialContext(companyName),
     gatherFinancialResearch(companyName),
@@ -985,7 +1025,7 @@ export async function refreshFinancials(companyName: string): Promise<Financials
     `\n[Web research]\n${researchText}`,
   ].filter(Boolean).join('\n');
 
-  const result = await callSection<FinancialsV2>(context, 'financials_v2');
+  const result = await callSection<FinancialsV2>(context, 'financials_v2', language);
   return result ?? DEFAULT_ANALYSIS_DATA.financials_v2;
 }
 
@@ -999,8 +1039,10 @@ export async function analyzeCompany(
     skipBatches?: Set<number>;
     initialData?: Partial<AnalysisData>;
     cachedFinancials?: FinancialsV2;
+    language?: Language;
   },
 ): Promise<AnalysisData> {
+  const language: Language = opts?.language ?? 'en';
   const skip = opts?.skipBatches ?? new Set<number>();
   const result: AnalysisData = { ...DEFAULT_ANALYSIS_DATA, ...(opts?.initialData ?? {}) };
   // industry_history_v2/tech_evolution_v2는 배치2/3에서 더 이상 생성하지 않음(온디맨드 전환) —
@@ -1047,7 +1089,7 @@ export async function analyzeCompany(
   const t1 = Date.now();
   const [, research2] = await Promise.all([
     runBatch(1,
-      () => [callSection<SummaryV2>(phase1Context, 'summary_v2')],
+      () => [callSection<SummaryV2>(phase1Context, 'summary_v2', language)],
       ([s]) => ({ summary_v2: s ?? { ...DEFAULT_ANALYSIS_DATA.summary_v2, company: companyName } }),
     ),
     gatherResearch2(companyName),
@@ -1073,9 +1115,9 @@ export async function analyzeCompany(
   await Promise.all([
     runBatch(2,
       () => [
-        callSection<BusinessModelV2>(sharedContext, 'business_model_v2'),
-        callSection<CompetitorsV2>(sharedContext, 'competitors_v2'),
-        callSection<CrossIndustryNudgeV1>(sharedContext, 'cross_industry_nudge_v1'),
+        callSection<BusinessModelV2>(sharedContext, 'business_model_v2', language),
+        callSection<CompetitorsV2>(sharedContext, 'competitors_v2', language),
+        callSection<CrossIndustryNudgeV1>(sharedContext, 'cross_industry_nudge_v1', language),
       ],
       ([bm, c, n]) => ({
         business_model_v2:       bm ?? DEFAULT_ANALYSIS_DATA.business_model_v2,
@@ -1085,9 +1127,9 @@ export async function analyzeCompany(
     ),
     runBatch(3,
       () => [
-        callSection<ValueChainV2>(sharedContext, 'value_chain_v2'),
-        callSection<StrategyV2>(sharedContext, 'strategy_v2'),
-        cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2'),
+        callSection<ValueChainV2>(sharedContext, 'value_chain_v2', language),
+        callSection<StrategyV2>(sharedContext, 'strategy_v2', language),
+        cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2', language),
       ],
       ([vc, s, f]) => {
         // Rule 4: 재무 수치 전년 대비 10배 이상 변동 → (추정) 뱃지 강제 적용
@@ -1096,12 +1138,12 @@ export async function analyzeCompany(
             const pct = row.yoy?.match(/[▲▼](\d+(?:\.\d+)?)%/);
             if (pct && parseFloat(pct[1]) >= 900) {
               const isNoData = (v: string | undefined) =>
-                !v || ['확인 필요', '해당없음', 'Not disclosed', 'Not applicable'].includes(v);
+                !v || NO_DATA_MARKERS.includes(v);
               const yr = (['fy2025', 'fy2024', 'fy2023', 'fy2022', 'fy2021'] as const)
                 .find(y => !isNoData(row[y]));
               if (yr && !row[yr]!.includes('추정') && !row[yr]!.includes('estimated')) {
-                row[yr] = row[yr] + ' (estimated)';
-                console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} (estimated) 강제 적용`);
+                row[yr] = row[yr] + ' ' + PLACEHOLDER_MARKERS[language].estimated;
+                console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} ${PLACEHOLDER_MARKERS[language].estimated} 강제 적용`);
               }
             }
           }
@@ -1115,8 +1157,8 @@ export async function analyzeCompany(
     ),
     runBatch(4,
       () => [
-        callFounderSection(companyName),
-        callSection<AnalysisSources>(sharedContext, 'sources'),
+        callFounderSection(companyName, language),
+        callSection<AnalysisSources>(sharedContext, 'sources', language),
       ],
       ([fo, src]) => ({
         founder_v2: fo  ?? DEFAULT_ANALYSIS_DATA.founder_v2,
@@ -1131,7 +1173,7 @@ export async function analyzeCompany(
   }
   const hasRealFinancials = result.financials_v2.income_statement.some(row =>
     (['fy2021', 'fy2022', 'fy2023', 'fy2024', 'fy2025'] as const).some(
-      y => row[y] && row[y] !== '확인 필요'
+      y => row[y] && !NO_DATA_MARKERS.includes(row[y]!)
     )
   );
   if (!hasRealFinancials) {
@@ -1167,9 +1209,10 @@ export async function reanalyzeSingleSection(
   companyName: string,
   sectionKey: string,
   financialContext?: string,
+  language: Language = 'en',
 ): Promise<any> {
   if (sectionKey === 'founder_v2') {
-    return callFounderSection(companyName);
+    return callFounderSection(companyName, language);
   }
   const [research1, research2] = await Promise.all([
     gatherResearch1(companyName),
@@ -1181,7 +1224,7 @@ export async function reanalyzeSingleSection(
     `\n[Web research — basic info]\n${research1}`,
     `\n[Web research — detailed info]\n${research2}`,
   ].filter(Boolean).join('\n');
-  return callSection(context, sectionKey);
+  return callSection(context, sectionKey, language);
 }
 
 // ── Growth scenario narrative (몬테카를로 시뮬레이션 결과 한줄 해석) ──────────
@@ -1193,8 +1236,10 @@ export interface GrowthScenarioForNarrative {
   sectorTag?: string;
 }
 
-const GROWTH_SCENARIO_NARRATIVE_SYSTEM = `You are a company analyst writing for BD, Sales, and Strategy practitioners.
+function growthScenarioNarrativeSystem(language: Language): string {
+  return `You are a company analyst writing for BD, Sales, and Strategy practitioners.
 Based on the Monte Carlo revenue growth simulation results below, write a 1-2 sentence core interpretation.
+${LANGUAGE_DIRECTIVE[language]}
 
 Rules:
 - No investor language — never say "valuation," "enterprise value," "investment return," "stock price."
@@ -1202,6 +1247,7 @@ Rules:
 - If confidence is low, the sentence must convey that this is "an estimate based on industry benchmarks" —
   don't hide the fact that it isn't this company's own official financial data.
 - Output pure text only, 1-2 sentences — no markdown, no quotes, no bullets.`;
+}
 
 function formatScenarioForPrompt(currency: 'KRW' | 'USD', simulation: GrowthScenarioForNarrative['simulation']): string {
   const fmt = (v: number) =>
@@ -1214,6 +1260,7 @@ function formatScenarioForPrompt(currency: 'KRW' | 'USD', simulation: GrowthScen
 export async function generateGrowthScenarioNarrative(
   companyName: string,
   scenario: GrowthScenarioForNarrative,
+  language: Language = 'en',
 ): Promise<string | null> {
   const { simulation, confidenceLevel, currency, sectorTag } = scenario;
 
@@ -1225,7 +1272,7 @@ ${formatScenarioForPrompt(currency, simulation)}`;
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 300,
-      system: GROWTH_SCENARIO_NARRATIVE_SYSTEM,
+      system: growthScenarioNarrativeSystem(language),
       messages: [{ role: 'user', content: userPrompt }],
     });
     const text = response.content
@@ -1245,21 +1292,25 @@ ${formatScenarioForPrompt(currency, simulation)}`;
 // industry_benchmark 테이블로 이미 서버에서 확정한 값 — 여기선 그 숫자를 절대 다시 계산하거나
 // 고쳐쓰지 않고, "왜 이 차이가 의미있는지" 한 줄만 요청한다(질문형 재무임팩트 규칙 동일 적용).
 
-const SEC_BENCHMARK_INTERPRETATION_SYSTEM = `You are a company analyst writing for BD, Sales, and Strategy practitioners.
+function secBenchmarkInterpretationSystem(language: Language): string {
+  return `You are a company analyst writing for BD, Sales, and Strategy practitioners.
 For each industry-benchmark comparison below, write ONE short sentence (max ~15 words) on why this gap might
 matter for someone evaluating this company — not a restatement of the numbers (they're already shown as a bar
 chart next to your sentence).
+${LANGUAGE_DIRECTIVE[language]}
 
 Rules:
 - Never repeat the exact percentages/multiples in your sentence — the reader already sees them.
 - If you imply a financial impact, phrase it as a question, never as a stated conclusion.
 - No investor language (no "valuation," "P/E," "ROE/ROIC," stock-price talk).
 - Output pure JSON only: an array of strings, one per input item, in the same order. No markdown, no commentary.`;
+}
 
 export async function generateSecBenchmarkInterpretations(
   companyName: string,
   sicCode: string,
   items: Array<{ label: string; unit: string; companyValue: number; median: number; n: number }>,
+  language: Language = 'en',
 ): Promise<string[]> {
   if (items.length === 0) return [];
   const lines = items.map((it, i) =>
@@ -1272,7 +1323,7 @@ export async function generateSecBenchmarkInterpretations(
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 500,
-      system: SEC_BENCHMARK_INTERPRETATION_SYSTEM,
+      system: secBenchmarkInterpretationSystem(language),
       messages: [{ role: 'user', content: userPrompt }],
     });
     const raw = response.content

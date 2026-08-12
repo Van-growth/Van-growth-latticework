@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import {
   analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, reanalyzeSingleSection,
   generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, SecBenchmarkComparison, withTimeout,
+  Language,
 } from '../lib/claude';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
 import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
@@ -81,12 +82,13 @@ async function computeGrowthScenario(
   rawDart: any,
   sectorTag?: string,
   manualBaseRevenue?: number,
+  language: Language = 'en',
 ): Promise<Record<string, any> | null> {
   const own = computeOwnGrowthScenario(rawEdgar, rawDart);
   const scenario = own ?? await computeSectorBenchmarkScenario(sectorTag, manualBaseRevenue);
   if (!scenario) return null;
 
-  const narrative = await generateGrowthScenarioNarrative(companyName, scenario as any);
+  const narrative = await generateGrowthScenarioNarrative(companyName, scenario as any, language);
   return { ...scenario, narrative };
 }
 
@@ -128,14 +130,14 @@ function fixAllEdgarSourceUrls(analysis: Partial<AnalysisData>, cik: string | un
 // 숫자(편차 계산)는 secIndustryBenchmark.ts가 순수 계산, interpretation 한 줄만 별도
 // Claude 호출(claude.ts). financials_v2.narrative에는 이 숫자를 넣지 않음(막대비교
 // 컴포넌트가 전담) — KPI 카드와의 숫자 중복 방지 원칙.
-async function buildSecBenchmarkComparison(companyName: string, rawEdgar: any): Promise<SecBenchmarkComparison | null> {
+async function buildSecBenchmarkComparison(companyName: string, rawEdgar: any, language: Language = 'en'): Promise<SecBenchmarkComparison | null> {
   const deviations = await computeSecBenchmarkDeviations(rawEdgar);
   if (!deviations) return null;
   if (deviations.status === 'insufficient_sample') {
     return { sicCode: deviations.sicCode, status: 'insufficient_sample', maxN: deviations.maxN };
   }
   const items = deviations.items ?? [];
-  const interpretations = await generateSecBenchmarkInterpretations(companyName, deviations.sicCode, items);
+  const interpretations = await generateSecBenchmarkInterpretations(companyName, deviations.sicCode, items, language);
   return {
     sicCode: deviations.sicCode,
     status: 'compared',
@@ -236,7 +238,10 @@ async function attachIndustryData(
 
 // ── financial_cache → FinancialsV2 변환 (배치 프리컴퓨트 raw 데이터 → 표시용 구조체) ──
 
-function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' | 'DART'): FinancialsV2 | null {
+function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' | 'DART', language: Language): FinancialsV2 | null {
+  // 표시 언어는 데이터 소스(DART/EDGAR)가 아니라 요청된 language를 따른다 — 미국 기업을
+  // KR 모드로 볼 수도, 한국 기업을 EN 모드로 볼 수도 있으므로 소스 국적과 무관하게 분기.
+  const t = (ko: string, en: string) => (language === 'ko' ? ko : en);
   const fmtUsd = (v: number | null): string => {
     if (v == null) return '—';
     const sign = v < 0 ? '-' : '';
@@ -293,7 +298,7 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
   const isKr   = source === 'DART';
   const name   = rawDart?.corp_name ?? rawEdgar?.ticker ?? '';
   const yr     = fyrs[0];
-  const srcLbl = isKr ? 'DART 공시' : 'SEC EDGAR';
+  const srcLbl = isKr ? t('DART 공시', 'DART filing') : 'SEC EDGAR';
 
   const hasVal = (row: any) => Object.keys(row).some(k => k.startsWith('fy') && row[k] && row[k] !== '—');
 
@@ -310,31 +315,33 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
 
   return {
     key_bullets: ([
-      `${srcLbl} 공식 데이터 (${yr}년 기준)`,
-      series.revenue?.[0]        != null ? `${yr}년 ${isKr ? '매출액' : 'Revenue'}: ${fmt(series.revenue[0])}` : null,
-      series.operatingIncome?.[0] != null ? `${yr}년 ${isKr ? '영업이익' : 'Operating Income'}: ${fmt(series.operatingIncome[0])}` : null,
+      t(`${srcLbl} 공식 데이터 (${yr}년 기준)`, `${srcLbl} official data (FY${yr})`),
+      series.revenue?.[0]        != null ? t(`${yr}년 매출액: ${fmt(series.revenue[0])}`, `FY${yr} Revenue: ${fmt(series.revenue[0])}`) : null,
+      series.operatingIncome?.[0] != null ? t(`${yr}년 영업이익: ${fmt(series.operatingIncome[0])}`, `FY${yr} Operating Income: ${fmt(series.operatingIncome[0])}`) : null,
     ] as (string | null)[]).filter((x): x is string => x !== null),
     income_statement: [
-      toIsRow(isKr ? '매출액'     : 'Revenue',           series.revenue),
-      toIsRow(isKr ? '영업이익'   : 'Operating Income',  series.operatingIncome),
-      toIsRow(isKr ? '당기순이익' : 'Net Income',        series.netIncome),
+      toIsRow(t('매출액', 'Revenue'),                     series.revenue),
+      toIsRow(t('영업이익', 'Operating Income'),           series.operatingIncome),
+      toIsRow(t('당기순이익', 'Net Income'),               series.netIncome),
     ].filter(hasVal),
     balance_sheet: [
-      toBsRow(isKr ? '총자산'   : 'Total Assets',          series.assets),
-      toBsRow(isKr ? '총부채'   : 'Total Liabilities',     series.liabilities),
-      toBsRow(isKr ? '자본총계' : "Shareholders' Equity",  series.equity),
+      toBsRow(t('총자산', 'Total Assets'),                 series.assets),
+      toBsRow(t('총부채', 'Total Liabilities'),            series.liabilities),
+      toBsRow(t('자본총계', "Shareholders' Equity"),       series.equity),
     ].filter(hasVal),
     cash_flow: hasCf
-      ? { ...cf, fcf: isKr ? '확인 필요' : 'Not disclosed', notes: '' }
+      ? { ...cf, fcf: t('확인 필요', 'Not disclosed'), notes: '' }
       : {
           operating: '—', investing: '—', financing: '—', fcf: '—',
-          notes: isKr ? 'DART 배치 데이터 — 현금흐름 미지원' : 'SEC EDGAR 현금흐름 태깅 없음',
+          notes: isKr
+            ? t('DART 배치 데이터 — 현금흐름 미지원', 'DART batch data — cash flow not supported')
+            : t('SEC EDGAR 현금흐름 태깅 없음', 'SEC EDGAR cash flow tagging unavailable'),
         },
     key_risks: [],
     outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
     sources: [{
       index: 1, level: 'L1' as const, organization: srcLbl, date: yr,
-      content: `${name} 연간 재무제표 (공식 공시)`, isEstimate: false,
+      content: t(`${name} 연간 재무제표 (공식 공시)`, `${name} annual financial statements (official filing)`), isEstimate: false,
       url: source === 'EDGAR' && rawEdgar?.cik
         ? `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${rawEdgar.cik}&type=10-K`
         : undefined,
@@ -375,7 +382,7 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
 function buildDonePayload(
   data: any,
   companyName: string,
-  meta: { cached: boolean; analysisId: string | null; createdAt: string; dataSource: string; growthScenario?: Record<string, any> | null; isPremium: boolean },
+  meta: { cached: boolean; analysisId: string | null; createdAt: string; dataSource: string; growthScenario?: Record<string, any> | null; isPremium: boolean; language: Language },
 ) {
   // 성장 시나리오는 계산/저장은 항상 수행하되, 응답 페이로드는 프리미엄 유저에게만 포함
   const growthScenarioOut = meta.isPremium ? (meta.growthScenario ?? data.growth_scenario_v2 ?? null) : null;
@@ -384,6 +391,7 @@ function buildDonePayload(
     companyName,
     createdAt:    meta.createdAt,
     cached:       meta.cached,
+    language:     meta.language,
     summary:              data.summary_v2?.key_bullets?.join(' | ') ?? '',
     industry_history:     '',
     tech_evolution:       '',
@@ -558,7 +566,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     return;
   }
 
-  const { companyName, companyId, forceRefresh, sectorTag, baseRevenue } = req.body as {
+  const { companyName, companyId, forceRefresh, sectorTag, baseRevenue, language: rawLanguage } = req.body as {
     companyName?: string;
     companyId?: string;
     forceRefresh?: boolean;
@@ -566,7 +574,10 @@ router.post('/stream', async (req: Request, res: Response) => {
     // 업종 선택 UI가 아직 없어 우선 요청 파라미터로 받는다 — 둘 다 있어야 사용됨.
     sectorTag?: string;
     baseRevenue?: number;
+    language?: string;
   };
+  // 기본값 EN(언어 정책 SSOT) — 클라이언트가 안 보내거나 알 수 없는 값이면 안전하게 폴백
+  const language: Language = rawLanguage === 'ko' ? 'ko' : 'en';
   const isPremium = await isPremiumUser({ clientId: null, authUserId: authUser.id });
   const usageUserId = authUser.id;
 
@@ -655,8 +666,9 @@ router.post('/stream', async (req: Request, res: Response) => {
     if (!forceRefresh) {
       const { data: cached } = await supabase
         .from('analyses')
-        .select('id, created_at, summary_v2, industry_history_v2, tech_evolution_v2, value_chain_v2, business_model_v2, competitors_v2, cross_industry_nudge_v1, strategy_v2, financials_v2, founder_v2, growth_scenario_v2, sources, data_source')
+        .select('id, created_at, language, summary_v2, industry_history_v2, tech_evolution_v2, value_chain_v2, business_model_v2, competitors_v2, cross_industry_nudge_v1, strategy_v2, financials_v2, founder_v2, growth_scenario_v2, sources, data_source')
         .eq('company_id', company.id)
+        .eq('language', language)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -690,7 +702,7 @@ router.post('/stream', async (req: Request, res: Response) => {
                     .from('financial_cache').select('source, raw_edgar, raw_dart')
                     .eq('company_name', corpRow.stock_code).gt('expires_at', now).maybeSingle();
                   if (fc) {
-                    const built = buildFinancialsV2FromRaw(fc.raw_edgar, fc.raw_dart, fc.source as 'EDGAR' | 'DART');
+                    const built = buildFinancialsV2FromRaw(fc.raw_edgar, fc.raw_dart, fc.source as 'EDGAR' | 'DART', language);
                     if (built) { effectiveFinancials = built; effectiveSource = fc.source.toLowerCase(); }
                   }
                 }
@@ -702,7 +714,7 @@ router.post('/stream', async (req: Request, res: Response) => {
                     .from('financial_cache').select('source, raw_edgar, raw_dart')
                     .eq('company_name', nameTicker).gt('expires_at', now).maybeSingle();
                   if (fc) {
-                    const built = buildFinancialsV2FromRaw(fc.raw_edgar, fc.raw_dart, fc.source as 'EDGAR' | 'DART');
+                    const built = buildFinancialsV2FromRaw(fc.raw_edgar, fc.raw_dart, fc.source as 'EDGAR' | 'DART', language);
                     if (built) { effectiveFinancials = built; effectiveSource = fc.source.toLowerCase(); }
                   }
                 }
@@ -722,7 +734,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           send('done', buildDonePayload(
             { ...cached, financials_v2: effectiveFinancials, competitors_v2: effectiveCompetitors },
             name,
-            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium },
+            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium, language },
           ));
           return res.end();
         }
@@ -765,7 +777,7 @@ router.post('/stream', async (req: Request, res: Response) => {
         // fin_preview: send financials immediately from raw cache if batch 3 hasn't loaded yet
         if (!skipBatches.has(3)) {
           const quickFin = (rawEdgar || rawDart)
-            ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR')
+            ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR', language)
             : (useCachedFin ?? null);
           if (quickFin) {
             const previewSource = rawDart ? 'dart' : (rawEdgar ? 'edgar' : dataSource);
@@ -777,7 +789,7 @@ router.post('/stream', async (req: Request, res: Response) => {
         // 병렬로 미리 시작해두고 batch3(financials_v2) 완료 시점에 await해서 붙인다. 계산
         // 자체는 rawEdgar만 있으면 되므로 다른 배치를 기다릴 필요가 없어 지연을 숨긴다.
         const secBenchmarkPromise = dataSource === 'edgar' && rawEdgar
-          ? buildSecBenchmarkComparison(name, rawEdgar).catch(() => null)
+          ? buildSecBenchmarkComparison(name, rawEdgar, language).catch(() => null)
           : Promise.resolve(null);
 
         const analysis = await analyzeCompany(
@@ -801,14 +813,14 @@ router.post('/stream', async (req: Request, res: Response) => {
               );
             }
           },
-          { skipBatches, initialData, cachedFinancials: useCachedFin },
+          { skipBatches, initialData, cachedFinancials: useCachedFin, language },
         );
 
         if (analysis.sources) await saveSources(cached.id, name, analysis.sources);
 
         // 3차: 2차(batch2-5) 완료 후 revenue_history 확보 시에만 몬테카를로 트리거
         // 계산/DB 저장은 항상 수행 — 프리미엄 여부와 무관하게 데이터는 준비해둔다.
-        const growthScenario = cached.growth_scenario_v2 ?? await computeGrowthScenario(name, rawEdgar, rawDart, sectorTag, baseRevenue);
+        const growthScenario = cached.growth_scenario_v2 ?? await computeGrowthScenario(name, rawEdgar, rawDart, sectorTag, baseRevenue, language);
         if (growthScenario && !cached.growth_scenario_v2) {
           await supabase.from('analyses').update({ growth_scenario_v2: growthScenario }).eq('id', cached.id);
         }
@@ -826,6 +838,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           dataSource: dataSource ?? cached.data_source ?? 'web_search',
           growthScenario,
           isPremium,
+          language,
         }));
         return res.end();
       }
@@ -840,7 +853,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     // fin_preview: show financials immediately from raw/cached data if available
     {
       const quickFin = (rawEdgar || rawDart)
-        ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR')
+        ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR', language)
         : (cachedFinancials ?? null);
       if (quickFin) {
         const previewSource = rawDart ? 'dart' : (rawEdgar ? 'edgar' : dataSource);
@@ -851,7 +864,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — analyzeCompany()와
     // 병렬로 미리 시작해두고 batch3(financials_v2) 완료 시점에 await해서 붙인다.
     const secBenchmarkPromise = dataSource === 'edgar' && rawEdgar
-      ? buildSecBenchmarkComparison(name, rawEdgar).catch(() => null)
+      ? buildSecBenchmarkComparison(name, rawEdgar, language).catch(() => null)
       : Promise.resolve(null);
 
     let savedId: string | null = null;
@@ -874,6 +887,7 @@ router.post('/stream', async (req: Request, res: Response) => {
             .insert({
               company_id: company.id,
               created_by: authUser.id,
+              language:   language,
               summary:    data.summary_v2?.key_bullets?.join(' | ') ?? '',
               industry_history: '', tech_evolution: '', value_chain_overview: '',
               business_model: '', financials: '',
@@ -913,14 +927,14 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
       },
-      { cachedFinancials },
+      { cachedFinancials, language },
     );
 
     if (savedId && analysis.sources) await saveSources(savedId, name, analysis.sources);
 
     // 3차: 2차(batch2-5) 완료 후 revenue_history 확보 시에만 몬테카를로 트리거
     // 계산/DB 저장은 항상 수행 — 프리미엄 여부와 무관하게 데이터는 준비해둔다.
-    const growthScenario = await computeGrowthScenario(name, rawEdgar, rawDart, sectorTag, baseRevenue);
+    const growthScenario = await computeGrowthScenario(name, rawEdgar, rawDart, sectorTag, baseRevenue, language);
     if (growthScenario && savedId) {
       await supabase.from('analyses').update({ growth_scenario_v2: growthScenario }).eq('id', savedId);
     }
@@ -938,6 +952,7 @@ router.post('/stream', async (req: Request, res: Response) => {
       dataSource,
       growthScenario,
       isPremium,
+      language,
     }));
     res.end();
 
@@ -1004,13 +1019,19 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
   console.log(`[reanalyze] START ${section} (${sectionKey}) for "${name}"`);
 
   try {
+    // 이 행이 어느 언어로 생성됐는지는 클라이언트 입력이 아니라 DB에서 직접 읽는다 —
+    // 한 리포트 안에서 섹션마다 언어가 갈리는 사고를 방지(언어 정책 SSOT 참고).
+    const { data: existing } = await supabase
+      .from('analyses').select('language').eq('id', analysisId.trim()).maybeSingle();
+    const language: Language = existing?.language === 'ko' ? 'ko' : 'en';
+
     let financialCtx: string | undefined;
     if (sectionKey === 'financials_v2') {
       const { contextText } = await fetchFinancialContext(name);
       financialCtx = contextText || undefined;
     }
 
-    const data = await reanalyzeSingleSection(name, sectionKey, financialCtx);
+    const data = await reanalyzeSingleSection(name, sectionKey, financialCtx, language);
 
     if (!data) {
       res.status(422).json({ error: '재분석 결과를 얻지 못했습니다. 잠시 후 다시 시도해주세요.' });
@@ -1061,19 +1082,22 @@ router.post('/:id/pain-diagnosis', async (req: Request, res: Response) => {
     // 이미 둘 다 생성돼 있으면 재생성 없이 즉시 반환 (불필요한 비용 발생 방지)
     const { data: existing } = await supabase
       .from('analyses')
-      .select('industry_history_v2, tech_evolution_v2')
+      .select('industry_history_v2, tech_evolution_v2, language')
       .eq('id', analysisId)
       .maybeSingle();
     if (existing?.industry_history_v2 && existing?.tech_evolution_v2) {
       res.json({ industry_history_v2: existing.industry_history_v2, tech_evolution_v2: existing.tech_evolution_v2 });
       return;
     }
+    // 이 행이 어느 언어로 생성됐는지는 DB에서 직접 읽는다 — 한 리포트 안에서 섹션마다
+    // 언어가 갈리는 사고 방지(언어 정책 SSOT 참고).
+    const language: Language = existing?.language === 'ko' ? 'ko' : 'en';
 
     console.log(`[pain-diagnosis] START for "${name}"`);
     const [industryHistory, techEvolution] = await withTimeout(
       Promise.all([
-        reanalyzeSingleSection(name, 'industry_history_v2'),
-        reanalyzeSingleSection(name, 'tech_evolution_v2'),
+        reanalyzeSingleSection(name, 'industry_history_v2', undefined, language),
+        reanalyzeSingleSection(name, 'tech_evolution_v2', undefined, language),
       ]),
       PAIN_DIAGNOSIS_TIMEOUT,
       'pain-diagnosis',

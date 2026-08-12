@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomBytes } from 'crypto';
 import { supabase } from '../lib/supabase';
-import { refreshFinancials } from '../lib/claude';
+import { refreshFinancials, Language } from '../lib/claude';
 import { isPremiumUser } from '../lib/premium';
 import { resolveAuthUser } from '../lib/authUser';
 
@@ -107,6 +107,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.json({
       id: row.id,
       companyName: (row.companies as unknown as CompanyRef)?.name ?? '',
+      language: row.language ?? 'en',
       // Legacy fields
       summary: row.summary,
       metrics: row.metrics ?? [],
@@ -236,7 +237,7 @@ router.post('/:id/refresh-financials', async (req: Request, res: Response) => {
   try {
     const { data: analysis, error } = await supabase
       .from('analyses')
-      .select('companies(name)')
+      .select('companies(name), language')
       .eq('id', id)
       .single();
 
@@ -250,8 +251,10 @@ router.post('/:id/refresh-financials', async (req: Request, res: Response) => {
       res.status(400).json({ error: '기업명을 찾을 수 없습니다.' });
       return;
     }
+    // 이 행이 어느 언어로 생성됐는지는 DB에서 직접 읽는다(언어 정책 SSOT 참고).
+    const language: Language = (analysis as any).language === 'ko' ? 'ko' : 'en';
 
-    const financials_v2 = await refreshFinancials(companyName);
+    const financials_v2 = await refreshFinancials(companyName, language);
 
     await supabase
       .from('analyses')

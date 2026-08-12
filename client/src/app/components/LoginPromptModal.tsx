@@ -2,6 +2,8 @@
 
 import { X } from 'lucide-react';
 import { GoogleIcon } from './Header';
+import { useLanguage } from '@/app/context/LanguageContext';
+import { getUiStrings } from '@/lib/i18n/uiStrings';
 
 interface LoginPromptModalProps {
   companyName: string;
@@ -14,6 +16,8 @@ interface LoginPromptModalProps {
 // signInWithGoogle 호출 자체는 부모(onContinue)가 맡는다 — 로그인 전에 선택했던
 // 회사를 sessionStorage에 저장해뒀다가 로그인 후 자동으로 이어가야 해서다.
 export default function LoginPromptModal({ companyName, onClose, onContinue }: LoginPromptModalProps) {
+  const { language } = useLanguage();
+  const t = getUiStrings(language).loginModal;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -21,18 +25,18 @@ export default function LoginPromptModal({ companyName, onClose, onContinue }: L
         <button
           type="button"
           onClick={onClose}
-          aria-label="닫기"
+          aria-label={t.closeAria}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
         >
           <X size={18} />
         </button>
 
-        <h2 className="text-lg font-semibold text-gray-900 mb-2 pr-6">시작하고 무료로 분석해보세요</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2 pr-6">{t.title}</h2>
         <p className="text-sm text-gray-500 mb-1">
-          {companyName ? `${companyName} 분석을 시작하려면 로그인이 필요해요.` : '기업 분석을 시작하려면 로그인이 필요해요.'}
+          {companyName ? t.bodyWithCompany(companyName) : t.bodyGeneric}
         </p>
         <p className="text-sm text-gray-500 mb-6">
-          로그인하면 무료로 2회 기업 분석을 이용할 수 있어요.
+          {t.bodySub}
         </p>
 
         <button
@@ -41,7 +45,7 @@ export default function LoginPromptModal({ companyName, onClose, onContinue }: L
           className="w-full flex items-center justify-center gap-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-4 py-2.5 shadow-sm hover:bg-gray-50 transition-colors"
         >
           <GoogleIcon />
-          구글로 계속하기
+          {t.continueWithGoogle}
         </button>
       </div>
     </div>

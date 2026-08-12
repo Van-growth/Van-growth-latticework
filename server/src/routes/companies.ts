@@ -128,11 +128,13 @@ router.post('/resolve', async (req: Request, res: Response) => {
     return;
   }
 
-  const { name, listings } = req.body as { name?: string; listings?: Listing[] };
+  const { name, listings, language: rawLanguage } = req.body as { name?: string; listings?: Listing[]; language?: string };
   if (!name?.trim()) {
     res.status(400).json({ error: '기업명이 필요합니다.' });
     return;
   }
+  // 기본값 EN(언어 정책 SSOT) — /api/analyze/stream과 동일한 폴백 규칙
+  const language: 'ko' | 'en' = rawLanguage === 'ko' ? 'ko' : 'en';
 
   // listings가 없으면 typeahead(DART/EDGAR) 매칭 없이 자유 입력한 회사(비상장사 등)라는
   // 뜻 — 정상 typeahead 결과는 항상 listing이 1개 이상 딸려온다. 이 경로는 회사명 중복
@@ -166,6 +168,7 @@ router.post('/resolve', async (req: Request, res: Response) => {
       .from('analyses')
       .select('id, created_at')
       .eq('company_id', company.id)
+      .eq('language', language)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();

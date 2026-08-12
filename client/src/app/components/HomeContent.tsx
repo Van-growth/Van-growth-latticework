@@ -8,6 +8,8 @@ import AeSkillsView from './AeSkillsView';
 import LoginPromptModal from './LoginPromptModal';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
+import { useLanguage } from '@/app/context/LanguageContext';
+import { getUiStrings } from '@/lib/i18n/uiStrings';
 import { AnalysisDetail, AnalyzeResponse, CompanySuggestion, CompanyListing, CompanyResolveResponse } from '@/types';
 import { getClientId } from '@/lib/clientId';
 import { buildAuthHeaders } from '@/lib/authHeaders';
@@ -30,10 +32,10 @@ const PENDING_SELECTION_KEY = 'pending_company_selection';
 // (기존 검색 실행 등 특정 액션에만 로그인 체크가 걸려있고, 페이지 진입 자체엔 게이트가
 // 없으므로 이 탭은 그 어떤 인증 로직도 거치지 않아 자연히 무인증 접근이 된다).
 type TopTabKey = 'company' | 'pain' | 'ae_skills';
-const TOP_TABS: { key: TopTabKey; label: string }[] = [
-  { key: 'company',   label: 'Company Intelligence' },
-  { key: 'pain',      label: 'Pain Diagnosis' },
-  { key: 'ae_skills', label: 'AE Skills' },
+const TOP_TABS: { key: TopTabKey }[] = [
+  { key: 'company' },
+  { key: 'pain' },
+  { key: 'ae_skills' },
 ];
 
 function daysAgo(iso: string | null): number {
@@ -72,21 +74,13 @@ function emptyBase(name: string): AnalysisDetail {
   };
 }
 
-const SCAN_MESSAGES = [
-  'SEC 공시 문서 분석 중...',
-  '10-K 497페이지 정독 중...',
-  '밸류체인 끝까지 추적 중...',
-  '경쟁사 포지셔닝 파악 중...',
-  '재무 데이터 교차 검증 중...',
-  '창업자 히스토리 조사 중...',
-  '산업 구조 매핑 중...',
-];
-
 function AnalysisLoadingScreen({ companyName, isFirstLookup }: { companyName: string; isFirstLookup: boolean }) {
+  const { language } = useLanguage();
+  const t = getUiStrings(language).home;
   const messages = useMemo(() => [
-    ...SCAN_MESSAGES,
-    `${companyName} 분석 마무리 중...`,
-  ], [companyName]);
+    ...t.scanMessages,
+    t.finishingUp(companyName),
+  ], [t, companyName]);
 
   const [idx, setIdx]   = useState(0);
   const [show, setShow] = useState(true);
@@ -125,7 +119,7 @@ function AnalysisLoadingScreen({ companyName, isFirstLookup }: { companyName: st
 
       {isFirstLookup && (
         <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-3 py-1 mt-3">
-          처음 조회하는 기업이라 조금 더 걸려요
+          {t.firstLookupHint}
         </p>
       )}
 
@@ -145,6 +139,8 @@ export default function HomeContent() {
   const urlId = searchParams.get('id');
   const { setAnalysisData, setCompletedBatches, completedBatches } = useAnalysis();
   const { session, signInWithGoogle } = useAuth();
+  const { language } = useLanguage();
+  const t = getUiStrings(language).home;
 
   // 새로고침 시 항상 Company Intelligence로 리셋(URL에 반영 안 함 — 2026-08 결정).
   const [topTab, setTopTab] = useState<TopTabKey>('company');
@@ -277,9 +273,9 @@ export default function HomeContent() {
       setIsShared(true);
       const url = `${window.location.origin}/share/${data.share_token}`;
       await navigator.clipboard.writeText(url);
-      showToast('링크 복사됨!');
+      showToast(t.linkCopied);
     } catch {
-      showToast('공유 링크 생성 실패');
+      showToast(t.shareCreateFailed);
     } finally {
       setSharing(false);
     }
@@ -289,7 +285,7 @@ export default function HomeContent() {
     if (!shareToken) return;
     const url = `${window.location.origin}/share/${shareToken}`;
     await navigator.clipboard.writeText(url);
-    showToast('링크 복사됨!');
+    showToast(t.linkCopied);
   }
 
   async function handleRevoke() {
@@ -302,9 +298,9 @@ export default function HomeContent() {
       });
       setIsShared(false);
       setShareToken(null);
-      showToast('공유가 해제되었습니다.');
+      showToast(t.shareRevoked);
     } catch {
-      showToast('공유 해제 실패');
+      showToast(t.shareRevokeFailed);
     }
   }
 
@@ -325,7 +321,7 @@ export default function HomeContent() {
         setCompletedBatches(new Set([1, 2, 3, 4, 6, 40]));
         loadedIdRef.current = urlId;
       })
-      .catch(() => setError('분석 결과를 불러오지 못했습니다.'))
+      .catch(() => setError(t.loadResultFailed))
       .finally(() => setFetchingId(false));
   }, [urlId, setAnalysisData, session]);
 
@@ -401,12 +397,12 @@ export default function HomeContent() {
     // 로컬 state는 이미 true로 바뀐 채라, 아무 안내 없이 리턴하면 "방금 실패했다"는 오해를
     // 주기 쉽다(2026-08-12 발견). 토스트로 명시적 피드백을 준다.
     if (!targetId || !targetName) {
-      showToast('분석 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+      showToast(t.painInfoMissing);
       return;
     }
     if (!session) { signInWithGoogle(); return; }
     setReanalyzingTabs(prev => new Set([...prev, 'industry', 'tech']));
-    showToast('pain 진단을 시작했어요 — 최대 10분 정도 걸릴 수 있어요.');
+    showToast(t.painStarted);
     try {
       const resp = await fetch(`${API_URL}/api/analyze/${targetId}/pain-diagnosis`, {
         method: 'POST',
@@ -431,11 +427,11 @@ export default function HomeContent() {
           setAnalysisData(updated);
         }
       } else {
-        showToast('pain 진단 생성에 실패했어요. 다시 시도해주세요.');
+        showToast(t.painFailed);
       }
     } catch (err) {
       console.error('[pain-diagnosis]', err);
-      showToast('pain 진단 생성에 실패했어요. 다시 시도해주세요.');
+      showToast(t.painFailed);
     } finally {
       setReanalyzingTabs(prev => { const s = new Set(prev); s.delete('industry'); s.delete('tech'); return s; });
     }
@@ -497,7 +493,7 @@ export default function HomeContent() {
       }
     }
     if (!analysisDoneRef.current) {
-      setError('연결이 불안정해 분석 완료를 확인하지 못했어요. 잠시 후 히스토리에서 다시 확인해주세요.');
+      setError(t.connectionUnstable);
     }
   }
 
@@ -526,12 +522,12 @@ export default function HomeContent() {
           'Content-Type': 'application/json',
           ...buildAuthHeaders(clientId, session?.access_token),
         },
-        body: JSON.stringify({ companyName: name, forceRefresh, companyId }),
+        body: JSON.stringify({ companyName: name, forceRefresh, companyId, language }),
       });
 
       if (!res.ok || !res.body) {
         const errData = await res.json().catch(() => ({}));
-        setError((errData as { error?: string }).error || '분석 중 오류가 발생했습니다.');
+        setError((errData as { error?: string }).error || t.analysisError);
         return;
       }
 
@@ -617,7 +613,7 @@ export default function HomeContent() {
               trackEvent('report_generated', { companyName: merged.companyName, cached: payload.cached === true });
 
             } else if (eventType === 'error') {
-              setError(payload.message || '분석 중 오류가 발생했습니다.');
+              setError(payload.message || t.analysisError);
             }
           } catch {
             // malformed SSE line, skip
@@ -633,7 +629,7 @@ export default function HomeContent() {
       if (!analysisDoneRef.current && analysisIdRef.current) {
         await pollUntilDone(analysisIdRef.current, name);
       } else if (!analysisDoneRef.current) {
-        setError('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
+        setError(t.serverUnreachable);
       }
     } finally {
       setLoading(false);
@@ -660,18 +656,18 @@ export default function HomeContent() {
   }
 
   function handleRequestFreeTrial() {
-    const userEmail = session?.user?.email ?? '(이메일 확인 불가)';
-    const requestedAt = new Date().toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' });
+    const userEmail = session?.user?.email ?? t.emailUnavailable;
+    const requestedAt = new Date().toLocaleString(language === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
     const limit = usage?.limit ?? 2;
     const usedCount = rateLimitInfo?.usedCount ?? limit;
     const lastCompany = companyName.trim();
 
-    const subject = `[1min] 무료 이용권 요청 - ${userEmail}`;
+    const subject = t.freeTrialSubject(userEmail);
     const body = [
-      `유저 이메일: ${userEmail}`,
-      `요청 일시: ${requestedAt}`,
-      `사용한 무료 분석 횟수: ${usedCount}/${limit}`,
-      ...(lastCompany ? [`마지막 검색 시도 기업: ${lastCompany}`] : []),
+      t.freeTrialUserLine(userEmail),
+      t.freeTrialRequestedAtLine(requestedAt),
+      t.freeTrialUsageLine(usedCount, limit),
+      ...(lastCompany ? [t.freeTrialLastCompanyLine(lastCompany)] : []),
     ].join('\n');
 
     window.location.href = `mailto:sg.van.p@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -737,7 +733,7 @@ export default function HomeContent() {
           'Content-Type': 'application/json',
           ...buildAuthHeaders(null, session.access_token),
         },
-        body: JSON.stringify({ name: s.name, listings: s.listings }),
+        body: JSON.stringify({ name: s.name, listings: s.listings, language }),
       });
       if (res.status === 401) { setPendingSuggestion(s); return; }
       if (!res.ok) throw new Error();
@@ -745,7 +741,7 @@ export default function HomeContent() {
       setSelectedCompany({ name: s.name, companyId: data.companyId, listings: s.listings });
       setResolveResult(data);
     } catch {
-      showToast('기업 정보를 확인하지 못했습니다. 다시 시도해주세요.');
+      showToast(t.companyInfoCheckFailed);
     } finally {
       setResolving(false);
     }
@@ -776,11 +772,11 @@ export default function HomeContent() {
   // Nudge banner: visible during streaming after batch 1 completes
   const isStreaming = completedBatches.has(-1);
   const nudgeItems = [
-    { label: '산업분석', done: completedBatches.has(2) },
-    { label: '재무',     done: completedBatches.has(40) || completedBatches.has(3) },
-    { label: '경쟁사',   done: completedBatches.has(2) },
-    { label: '전략',     done: completedBatches.has(3) },
-    { label: '창업자',   done: completedBatches.has(4) },
+    { label: t.nudgeIndustry,    done: completedBatches.has(2) },
+    { label: t.nudgeFinancials,  done: completedBatches.has(40) || completedBatches.has(3) },
+    { label: t.nudgeCompetitors, done: completedBatches.has(2) },
+    { label: t.nudgeStrategy,    done: completedBatches.has(3) },
+    { label: t.nudgeFounder,     done: completedBatches.has(4) },
   ];
   const allNudgeDone = nudgeItems.every(it => it.done);
   const showNudge = isStreaming && completedBatches.has(1) && !nudgeDismissed;
@@ -803,23 +799,24 @@ export default function HomeContent() {
           activeGroup prop 필터링 재사용, 새로 안 만듦). AE Skills는 검색/AnalysisCard를
           통째로 숨기고 완전히 다른 뷰(AeSkillsView)로 교체 — 로그인 게이트 없음. */}
       <div className="flex justify-center gap-1 mb-8">
-        {TOP_TABS.map(t => {
-          const active = topTab === t.key;
+        {TOP_TABS.map(tab => {
+          const active = topTab === tab.key;
+          const label = tab.key === 'company' ? t.topTabCompany : tab.key === 'pain' ? t.topTabPain : t.topTabAeSkills;
           return (
             <button
-              key={t.key}
+              key={tab.key}
               type="button"
-              onClick={() => setTopTab(t.key)}
+              onClick={() => setTopTab(tab.key)}
               className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
                 active ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-gray-700'
               }`}
             >
-              {t.label}
-              {t.key === 'ae_skills' && (
+              {label}
+              {tab.key === 'ae_skills' && (
                 <span className={`text-[9px] font-bold rounded px-1 py-[1px] leading-none ${
                   active ? 'bg-white/20 text-white' : 'text-emerald-600 bg-emerald-50 border border-emerald-200'
                 }`}>
-                  무료
+                  {t.aeSkillsFreeBadge}
                 </span>
               )}
             </button>
@@ -833,8 +830,8 @@ export default function HomeContent() {
       <>
       {/* Hero */}
       <div className="text-center mb-10">
-        <h1 className="text-4xl font-bold text-gray-900 mb-3">기업 심층 분석</h1>
-        <p className="text-gray-500">산업역사, 기술변화, 밸류체인, BM, 재무를 한번에</p>
+        <h1 className="text-4xl font-bold text-gray-900 mb-3">{t.heroTitle}</h1>
+        <p className="text-gray-500">{t.heroSubtitle}</p>
       </div>
 
       {/* Search form */}
@@ -847,7 +844,7 @@ export default function HomeContent() {
               onChange={e => { setCompanyName(e.target.value); setSelectedCompany(null); setResolveResult(null); }}
               onKeyDown={handleSearchKeyDown}
               onBlur={() => setShowDropdown(false)}
-              placeholder="기업명 입력 (예: 삼성전자, Apple, NVIDIA)"
+              placeholder={t.searchPlaceholder}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900 placeholder-gray-400"
               disabled={loading}
               autoComplete="off"
@@ -883,7 +880,7 @@ export default function HomeContent() {
                   onMouseDown={e => { e.preventDefault(); handleSelectSuggestion({ name: companyName.trim(), listings: [] }); }}
                   className="w-full text-left px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors"
                 >
-                  “{companyName.trim()}” 직접 입력해서 분석하기 (비상장 등, 관리자 전용)
+                  {t.adminFreeTextOption(companyName.trim())}
                 </button>
               </div>
             )}
@@ -894,16 +891,16 @@ export default function HomeContent() {
               disabled={loading}
               className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
             >
-              {loading ? '분석 중...' : '새 분석 시작'}
+              {loading ? t.analyzing : t.startNew}
             </button>
           ) : (
             <button
               type="submit"
               disabled
-              title="검색 목록에서 기업을 선택하세요"
+              title={t.selectFromListTitle}
               className="px-6 py-3 rounded-xl bg-gray-200 text-gray-400 font-medium shadow-sm cursor-not-allowed transition-colors whitespace-nowrap"
             >
-              {resolving ? '확인 중...' : '분석하기'}
+              {resolving ? t.checking : t.analyze}
             </button>
           )}
         </div>
@@ -913,7 +910,7 @@ export default function HomeContent() {
       {selectedCompany && resolveResult?.cached && !loading && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-4 mb-6 max-w-2xl mx-auto">
           <span className="text-sm text-blue-800">
-            {selectedCompany.name} — 최근 분석 {daysAgo(resolveResult.lastAnalyzedAt)}일 전
+            {t.lastAnalyzedLabel(selectedCompany.name, daysAgo(resolveResult.lastAnalyzedAt))}
           </span>
           <div className="flex gap-2 shrink-0">
             <button
@@ -921,7 +918,7 @@ export default function HomeContent() {
               onClick={() => resolveResult.analysisId && router.push(`/?id=${resolveResult.analysisId}`)}
               className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
             >
-              바로 보기
+              {t.viewNow}
             </button>
             <button
               type="button"
@@ -929,7 +926,7 @@ export default function HomeContent() {
               onClick={() => handleForceRefresh(selectedCompany.companyId, selectedCompany.name)}
               className="px-4 py-2 rounded-xl border border-blue-300 bg-white text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50 transition-colors whitespace-nowrap"
             >
-              재분석하기
+              {t.reanalyze}
             </button>
           </div>
         </div>
@@ -940,14 +937,14 @@ export default function HomeContent() {
         <div className="flex justify-center mb-6">
           <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-3 py-1">
             {usage.isPremium
-              ? '프리미엄 · 무제한 분석'
-              : `최근 7일 무료 분석 ${usage.usedCount}/${usage.limit}회 사용`}
+              ? t.premiumUnlimited
+              : t.freeUsageCount(usage.usedCount, usage.limit ?? 2)}
           </span>
         </div>
       ) : !session ? (
         <div className="flex justify-center mb-6">
           <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-3 py-1">
-            로그인 후 무료 2회 분석 가능
+            {t.loginForFreeAnalyses}
           </span>
         </div>
       ) : null}
@@ -956,7 +953,7 @@ export default function HomeContent() {
       {loading && progress && completedBatches.has(1) && (
         <div className="max-w-2xl mx-auto mb-6">
           <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-            <span>분석 중 배치 {progress.completed} / {progress.total} 완료</span>
+            <span>{t.batchProgress(progress.completed, progress.total)}</span>
             <span>{Math.round((progress.completed / progress.total) * 100)}%</span>
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -970,7 +967,7 @@ export default function HomeContent() {
 
       {/* Phase 1: full loading screen before summary arrives */}
       {phase1 && !error && (
-        <AnalysisLoadingScreen companyName={companyName.trim() || '기업'} isFirstLookup={isFirstLookup} />
+        <AnalysisLoadingScreen companyName={companyName.trim() || t.defaultCompanyName} isFirstLookup={isFirstLookup} />
       )}
 
       {/* Rate limit block — 무료 분석 횟수 소진 */}
@@ -983,14 +980,14 @@ export default function HomeContent() {
               className="px-4 py-2 rounded-xl border border-amber-300 bg-white text-amber-700 text-xs font-medium hover:bg-amber-50 transition-colors whitespace-nowrap"
               onClick={handleRequestFreeTrial}
             >
-              무료 이용권 요청하기
+              {t.requestFreeTrial}
             </button>
             <button
               type="button"
               className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors whitespace-nowrap"
-              onClick={() => showToast('프리미엄 플랜 준비 중입니다')}
+              onClick={() => showToast(t.premiumComingSoon)}
             >
-              프리미엄으로 무제한 이용하기
+              {t.upgradeUnlimited}
             </button>
           </div>
         </div>
@@ -998,7 +995,7 @@ export default function HomeContent() {
 
       {fetchingId && !loading && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-10 text-center text-gray-400 text-sm">
-          불러오는 중...
+          {t.loadingResult}
         </div>
       )}
 
@@ -1016,7 +1013,7 @@ export default function HomeContent() {
           {result && isCached && (
             <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 mb-3">
               <span className="text-xs text-amber-700">
-                이전 분석 결과입니다 ({new Date(result.createdAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })})
+                {t.previousResultBanner(new Date(result.createdAt).toLocaleString(language === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'short', timeStyle: 'short' }))}
               </span>
               <button
                 onClick={() => handleForceRefresh()}
@@ -1024,7 +1021,7 @@ export default function HomeContent() {
                 className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 font-medium disabled:opacity-50"
               >
                 <RefreshCw size={12} />
-                새로 분석하기
+                {t.reanalyzeNew}
               </button>
             </div>
           )}
@@ -1036,21 +1033,21 @@ export default function HomeContent() {
                 <>
                   <span className="text-xs text-green-600 font-medium flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-                    공유 중
+                    {t.sharingActive}
                   </span>
                   <button
                     onClick={handleCopyLink}
                     className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     <Link size={12} />
-                    링크 복사
+                    {t.copyLink}
                   </button>
                   <button
                     onClick={handleRevoke}
                     className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     <X size={12} />
-                    공유 해제
+                    {t.unshare}
                   </button>
                 </>
               ) : (
@@ -1060,7 +1057,7 @@ export default function HomeContent() {
                   className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors disabled:opacity-50"
                 >
                   <Share2 size={12} />
-                  {sharing ? '생성 중...' : '공유'}
+                  {sharing ? t.creatingShare : t.share}
                 </button>
               )}
             </div>
@@ -1088,11 +1085,11 @@ export default function HomeContent() {
             {allNudgeDone ? (
               <span className="font-medium text-emerald-700 flex items-center gap-1.5">
                 <span className="anim-fadein inline-block">✓</span>
-                분석 완료
+                {t.nudgeComplete}
               </span>
             ) : (
               <>
-                <span className="text-gray-400 shrink-0 font-medium">분석 중</span>
+                <span className="text-gray-400 shrink-0 font-medium">{t.nudgeAnalyzing}</span>
                 <span className="w-px h-3 bg-gray-200 shrink-0" />
                 <div className="flex items-center gap-2.5">
                   {nudgeItems.map(item => (

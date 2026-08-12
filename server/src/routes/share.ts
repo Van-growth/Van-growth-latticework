@@ -38,6 +38,7 @@ router.get('/:token', async (req: Request, res: Response) => {
     res.json({
       id: row.id,
       companyName: (row.companies as unknown as CompanyRef)?.name ?? '',
+      language: row.language ?? 'en',
       summary: row.summary,
       metrics: row.metrics ?? [],
       strengths: row.strengths ?? [],

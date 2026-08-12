@@ -20,15 +20,25 @@
 - Quality Gate 마커 매칭 버그 2건 수정: `isPlaceholderText`가 영문 "Not disclosed" 마커를 인식 못 하던 것, golden-set financials 체크가 한국어 마커만 검사하던 것 — `NO_DATA_MARKERS` 공용 상수로 통일
 - 프론트엔드: `LanguageContext`(localStorage, 기본 EN, 자동감지 없음) + `uiStrings.ts` 딕셔너리 신설, `/settings` 페이지에 토글 UI 추가. Header/History/LoginPromptModal/OnboardingModal/ProfileForm(`profileLabels.ts` en 사전 실번역 채움)/HomeContent/AnalysisCard(탭 라벨·툴팁·액션버튼·SecBenchmarkComparisonBlock 범례, `data.language` 우선·전역값 폴백) 전부 연결
 - PDF(`AnalysisPdf.tsx`) 전체 국영문 전환(~150개 하드코딩 라벨을 `t(ko,en)` 헬퍼로 변환) + `Font.register`에 누락돼 있던 NotoSansKR 700(볼드) weight 등록 버그 수정
-- **버그 발견+수정**: 컨텍스트 빌더(`financialContext.ts`)가 Claude에게 항상 영문 "Not disclosed"/"Not applicable"을 지시 문구로 박아넣는데, Claude가 이를 번역하지 않고 그대로 출력에 베끼는 문제를 KR 실측에서 발견 — `sectionSystem()` 프롬프트에 "컨텍스트의 마커 표기 언어와 무관하게 출력은 항상 지정된 언어 마커로 번역하라"는 규칙 추가로 수정. Rocket Lab EN 1회 + KR 3회(수정 전 1회 재현, 수정 후 2회 재확인) 실측으로 검증 완료
+- **버그 발견+수정 (1)**: 컨텍스트 빌더(`financialContext.ts`)가 Claude에게 항상 영문 "Not disclosed"/"Not applicable"을 지시 문구로 박아넣는데, Claude가 이를 번역하지 않고 그대로 출력에 베끼는 문제를 KR 실측에서 발견 — `sectionSystem()` 프롬프트에 "컨텍스트의 마커 표기 언어와 무관하게 출력은 항상 지정된 언어 마커로 번역하라"는 규칙 추가로 수정. Rocket Lab EN 1회 + KR 3회(수정 전 1회 재현, 수정 후 2회 재확인) 실측으로 검증 완료
 - 클라이언트/서버 `tsc --noEmit` 전부 통과 확인
+- **PDF 실물 렌더링 육안 검증 완료** — `@react-pdf/renderer`가 Node에서도 동작한다는 점을 활용해 `pdf().toBuffer()`로 Rocket Lab EN/KR 9탭 전체 리포트를 실제 PDF 파일로 생성(브라우저 자동화 없이 가능했음, 기존 "브라우저 없어 불가" 가정 갱신 필요), PyMuPDF로 페이지 이미지 렌더링해 육안 확인. 과정에서 실제 버그 3건 발견+수정:
+  1. `financials_v2.income_statement[].yoy`의 ▲/▼ 기호가 NotoSansKR woff 서브셋에 없는 글리프라 PDF에서 숫자와 겹쳐 깨짐 — 언어 무관 기존 버그(오늘 작업 전부터 존재, 최초 실물 검증에서 처음 발견)
+  2. `financials_v2.outlook.shortTerm/midLongTerm`의 ○/△ 접두 기호도 동일 문제
+  3. 재무제표 `item` 라벨("Revenue"/"Operating Income" 등)이 SECTION_SCHEMAS의 JSON 스키마 예시를 Claude가 리터럴로 베껴써서 KR 모드에서도 영어로 나옴 — `sectionSystem()`에 "스키마 예시는 구조 설명이지 베낄 값이 아니다" 규칙 추가로 수정
+  4. (1)(2) 수정 중 `→`(오른쪽 화살표)가 bull_case/oneLiner/founder 경력 등 자유서술 필드 전반에 자연발생적으로 등장하며 동일하게 깨지는 걸 발견 — 개별 필드마다 sp() 감싸는 대신 `AnalysisPdf.tsx` 최상단에서 `data` 전체를 재귀 정화하는 `sanitizeDeep()` 신설(→/←/✓/✗/⚠/●/■/★ 등 서브셋에 없는 기호 전부 ASCII로 일괄 치환)로 근본 해결
+  검증 파일(1차): EN `rocketlab-en.pdf`(113KB), KR `rocketlab-ko.pdf`(151KB) — 이후 아래 2차 라운드에서 재생성됨
+- **버그 발견+수정 (2) — 재무제표 과거 연도 공백**: Gross Profit 5개년 전부 "—", Operating Income도 FY2025 제외 전부 "—"로 나오는 문제를 사용자가 지적 — `isPlaceholder()`/`pdfVal()`/`DataValue`/`FinancialValue`/`MetricCard` 전부 재확인했으나 음수를 특별 취급하는 로직은 없음(사용자가 의심한 "음수라 —로 숨김" 가설은 기각, 전부 `-999` 리터럴 패턴이나 마커 문자열만 매칭). **진짜 원인은 `financial_cache` 테이블의 스테일 캐시** — Supabase에서 RKLB 캐시 행을 직접 조회해 확인: `raw_edgar`에 `grossProfit` 키 자체가 없고 `context_text`가 구버전(한국어 라벨, 다년도 블록 없음) 포맷이었음. 반면 현재 `edgarBatchPrecompute.ts` 코드는 이미 GrossProfit/Cash concept 조회 + 다년도 영문 컨텍스트 블록을 갖추고 있음(2026-08 MSFT 사고 이후 수정분, 주석에 기록됨) — 즉 캐시가 이 수정 이전 배치 실행분으로 스테일. `processCompany()`를 `export` + `require.main===module` 가드 추가(전체 8천개 배치 재실행 없이 특정 티커 하나만 재사용 가능하게, 향후 재사용 가능한 개선) 후 RKLB 캐시 1건만 재생성 → Gross Profit 5개년 전부 채워짐(FY2021 -$1.9M 음수 포함, 부호 정상 보존 확인) → "확인 필요 데이터" 25건→5건(전부 EBITDA, XBRL 비표준 concept이라 정상적으로 미확인)
+- **PDF "분석 일자: 1970년 1월 1일" 확인** — 실제 버그 아님. 이번 세션의 PDF 테스트 스크립트(`server/scripts/genPdfTestData.ts`, 검증용 임시 파일)가 `createdAt`에 `new Date(0)` placeholder를 썼던 것 — 프로덕션은 `analyses.created_at`(DB 값)을 그대로 씀(`analyses.ts`/`share.ts` 확인 완료). 스크립트만 실제 생성 시각 쓰도록 수정, 재검증 시 정상 표시 확인
+- **PDF 여백/타이포 밀도 개선** — `AnalysisPdf.tsx` StyleSheet 전체 재조정(mm/px 참고 기준 → react-pdf pt 환산 후 육안 반복 조정): 페이지 여백 62/68pt(≈22/24mm), 본문 fontSize 8→9.5, lineHeight 1.4~1.5→1.7~1.8, 섹션 헤더 marginTop 30pt 신설, 표 셀 padding 3~4→7~9pt·fontSize 7→8~8.5, 카드/callout(성장모멘텀·핵심리스크 등) padding 8→18pt·lineHeight→1.8, 핵심요약 검정 블록도 동일 비율로 확대. Rocket Lab EN/KR 재생성 후 PyMuPDF로 육안 확인 — 페이지 수 증가(KO 14→21p, EN 15→26p)는 여백 확대에 따른 예상된 결과
+- 클라이언트/서버 `tsc --noEmit` 재확인 통과
+  최종 검증 파일(2차, 전체 수정 반영): EN/KR `rocketlab-en.pdf`/`rocketlab-ko.pdf` — scratchpad에 보관, 사용자에게 전달 완료
 
 ### 남음
-- **커밋 + push + Render 배포 확인** — 오늘 작업 전체가 로컬에만 있음, 사용자 검토 후 커밋 필요 → 다음 세션 우선순위
+- **커밋 + push + Render 배포 확인** — 오늘 작업 전체가 로컬에만 있음(언어 정책 + PDF 버그 수정 5건 + `edgarBatchPrecompute.ts` 재사용성 개선 포함), 사용자가 최종 PDF 육안 확인 후 커밋 여부 결정 예정 → 다음 세션 우선순위
 - (이월) CLAUDE.md 문서화 3건(콘텐츠 포맷 원칙 신규 규칙/재현성 방어 원칙/핵심 포지셔닝+검증 테스트 설계) — 이번 세션 무관 주제라 손대지 않음, 여전히 미해결
 - (이월) dev/ops 서버 분리(Render) — 이번 세션에도 착수 못 함(사용자가 언어 정책 재도입을 우선 요청), 계속 이월 중
 - (이월) Reddit r/Sales_Professionals 반응 확인/답글, AE 인터뷰 추가 진행 — 별도 세션(GTM, 코드 작업 아님)
-- PDF 실제 렌더링(`pdf().toBlob()`) 육안 검증 — 이 환경에 브라우저 자동화 수단 없어 타입체크 + 텍스트 변환 정확성만 검증, 실제 볼드체/레이아웃 확인은 사용자가 직접 필요
 
 ### 발견 (미처리)
 - (이월) 회사명 캐시 키 분절 버그 — 재작업 금지 대상, 상세는 git log 참고
@@ -36,9 +46,12 @@
 - (이월) SEC 링크 유효성 자동 검증 — 스코프 밖 보류
 - `layout.tsx`의 `<html lang="en">`과 metadata title/description이 서버 컴포넌트라 localStorage 기반 언어 선호값을 SSR 시점에 반영 못 함 — 기능 영향 없는 a11y상 사소한 부정확, 쿠키 기반 전환 시 해결되지만 이번 요구사항 범위 밖이라 의도적으로 보류
 - AnalysisCard.tsx 탭 내부 콘텐츠(섹션 타이틀·배지·버튼 — 예: "동종업계 비교 (SEC)", "데이터 새로고침", "SEC EDGAR 공식" 등)는 이번 스코프에서 의도적으로 미번역 — 탭 라벨/액션버튼/차트 범례만 다국어 적용(계획 단계에서 스코프로 확정), AE Skills 탭도 스텁 콘텐츠라 계속 한국어 고정
+- PDF의 `pdftotext` 텍스트 추출이 한글 구간에서 깨짐(글리프 렌더링 자체는 정상 — fontkit으로 실측한 글리프 커버리지 11,596자 확인, PyMuPDF 렌더링 이미지도 정상) — react-pdf가 CJK 서브셋 폰트를 임베드할 때 ToUnicode CMap을 제대로 안 심는 것으로 추정, 한글 PDF에서 텍스트 선택/복사/OS 레벨 검색이 안 될 가능성 있음. 시각적 렌더링엔 영향 없어 이번엔 미수정 — 별도 확인 필요
+- react-pdf 테이블 행에 `wrap={false}`(또는 동등 처리) 없음 — 표 행이 페이지 경계에서 잘릴 가능성이 이론상 있음(사용자가 명시적으로 질문한 항목). 이번 실측(Rocket Lab EN/KR)에서는 재무/경쟁사 표 모두 한 페이지 안에 들어가 재현되지 않았음 — 행 수가 많거나 셀 텍스트가 훨씬 길어지는 케이스에서 재발 가능성 있어 표시만 해둠
+- **`financial_cache`의 EDGAR 배치 캐시 스테일 문제가 RKLB 외 다른 기업에도 광범위하게 있을 가능성** — `edgarBatchPrecompute.ts`가 2026-08 중 GrossProfit/Cash concept 추가 + 다년도 영문 컨텍스트 블록을 갖추도록 수정됐는데, 그 수정 이전에 캐시된 행(월 1회 크론이라 최대 한 달 스테일 가능)은 전부 구버전 데이터를 계속 서빙 중일 수 있음. 전체 재실행은 ~8천개 기업 대상 SEC API 레이트리밋 하에 상당한 시간이 걸리는 작업이라 이번엔 RKLB 1건만 수동 재생성(`processCompany()` 재사용, 코드 변경은 위 "완료" 참고) — 전체 재실행 여부는 사용자 판단 필요(다음 정기 크론이 자연 해결하긴 하나, 그 전까지 다른 기업들도 같은 증상 가능)
 
 ### 다음 세션 우선순위
-1. 오늘 작업(언어 정책 재도입) 커밋+push하고 Render 배포 확인
+1. 오늘 작업(언어 정책 재도입 + PDF 버그 수정 5건) 커밋+push하고 Render 배포 확인
 
 ## Vision & Mission
 

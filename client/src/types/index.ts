@@ -540,6 +540,7 @@ export type DataSource = 'dart' | 'edgar' | 'web_search';
 export interface AnalysisDetail {
   id: string;
   companyName: string;
+  language?: 'ko' | 'en';
   // Legacy fields
   summary: string;
   metrics?: Metric[];

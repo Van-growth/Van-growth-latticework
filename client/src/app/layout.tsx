@@ -3,6 +3,7 @@ import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AnalysisProvider } from "./context/AnalysisContext";
 import { AuthProvider } from "./context/AuthContext";
+import { LanguageProvider } from "./context/LanguageContext";
 import AppShell from "./components/AppShell";
 import Analytics from "./components/Analytics";
 
@@ -25,13 +26,15 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistMono.variable} antialiased`}>
         <Analytics />
-        <AuthProvider>
-          <AnalysisProvider>
-            <AppShell>
-              {children}
-            </AppShell>
-          </AnalysisProvider>
-        </AuthProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <AnalysisProvider>
+              <AppShell>
+                {children}
+              </AppShell>
+            </AnalysisProvider>
+          </AuthProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

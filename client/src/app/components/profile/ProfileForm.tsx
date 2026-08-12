@@ -6,9 +6,8 @@ import {
   getProfileLabels, ORG_SIZE_CODES, INDUSTRY_CODES, JOB_ROLE_CODES, JOB_LEVEL_CODES, PURPOSE_CODES, REGION_CODES,
   OrgSizeCode, IndustryCode, JobRoleCode, JobLevelCode, PurposeCode, RegionCode,
 } from '@/lib/i18n/profileLabels';
-
-// TODO(영문화): 앱에 실제 로케일 컨텍스트가 생기면 여기 'ko' 대신 그 값을 쓸 것.
-const labels = getProfileLabels('ko');
+import { useLanguage } from '@/app/context/LanguageContext';
+import { getUiStrings } from '@/lib/i18n/uiStrings';
 
 export interface ProfileFormValues {
   company_name: string;
@@ -68,6 +67,9 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
   submitting?: boolean;
 }) {
   const [values, setValues] = useState<ProfileFormValues>(() => toFormValues(initial));
+  const { language } = useLanguage();
+  const labels = getProfileLabels(language);
+  const t = getUiStrings(language).profileForm;
 
   function togglePurpose(p: PurposeCode) {
     setValues(v => ({
@@ -79,18 +81,18 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit(values); }} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">회사명</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">{t.companyName}</label>
         <input
           type="text"
           value={values.company_name}
           onChange={e => setValues(v => ({ ...v, company_name: e.target.value }))}
-          placeholder="예: Acme Inc."
+          placeholder={t.companyNamePlaceholder}
           className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">지역</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">{t.region}</label>
         <ChoiceGroup
           options={REGION_CODES}
           labelFor={labels.region}
@@ -101,7 +103,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">조직 규모</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">{t.orgSize}</label>
         <ChoiceGroup
           options={ORG_SIZE_CODES}
           labelFor={labels.orgSize}
@@ -112,7 +114,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">산업</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">{t.industry}</label>
         <ChoiceGroup
           options={INDUSTRY_CODES}
           labelFor={labels.industry}
@@ -123,7 +125,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">직무</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">{t.jobRole}</label>
         <ChoiceGroup
           options={JOB_ROLE_CODES}
           labelFor={labels.jobRole}
@@ -133,7 +135,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">직급</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">{t.jobLevel}</label>
         <ChoiceGroup
           options={JOB_LEVEL_CODES}
           labelFor={labels.jobLevel}
@@ -144,7 +146,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">사용 목적 (복수 선택 가능)</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">{t.purpose}</label>
         <div className="grid grid-cols-2 gap-2">
           {PURPOSE_CODES.map(p => (
             <button
@@ -166,7 +168,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
             type="text"
             value={values.purpose_other}
             onChange={e => setValues(v => ({ ...v, purpose_other: e.target.value }))}
-            placeholder="기타 목적을 입력해주세요"
+            placeholder={t.purposeOtherPlaceholder}
             className="mt-2 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         )}
@@ -177,7 +179,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
         disabled={submitting}
         className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
       >
-        {submitting ? '저장 중...' : submitLabel}
+        {submitting ? t.saving : submitLabel}
       </button>
     </form>
   );

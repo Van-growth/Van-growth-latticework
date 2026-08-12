@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
+import { useLanguage } from '@/app/context/LanguageContext';
+import { getUiStrings } from '@/lib/i18n/uiStrings';
 
 export function GoogleIcon() {
   return (
@@ -19,6 +21,8 @@ export function GoogleIcon() {
 export default function Header() {
   const pathname = usePathname();
   const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const { language } = useLanguage();
+  const t = getUiStrings(language).header;
 
   return (
     <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
@@ -26,8 +30,8 @@ export default function Header() {
         <div className="flex items-center gap-6">
           <span className="font-bold text-gray-900 text-lg">1min</span>
           <div className="flex gap-4 text-sm">
-            <Link href="/" className={pathname === '/' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-800'}>분석</Link>
-            <Link href="/history" className={pathname === '/history' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-800'}>히스토리</Link>
+            <Link href="/" className={pathname === '/' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-800'}>{t.analysis}</Link>
+            <Link href="/history" className={pathname === '/history' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-800'}>{t.history}</Link>
           </div>
         </div>
 
@@ -52,15 +56,15 @@ export default function Header() {
                 href="/settings"
                 className={`text-xs ${pathname === '/settings' ? 'text-blue-600 font-medium' : 'text-gray-400 hover:text-gray-700'} transition-colors`}
               >
-                설정
+                {t.settings}
               </Link>
               <button
                 onClick={() => signOut()}
                 className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors"
-                aria-label="로그아웃"
+                aria-label={t.logoutAria}
               >
                 <LogOut size={14} />
-                로그아웃
+                {t.logout}
               </button>
             </div>
           ) : (
@@ -69,7 +73,7 @@ export default function Header() {
               className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3.5 py-1.5 shadow-sm hover:bg-gray-50 transition-colors"
             >
               <GoogleIcon />
-              구글로 로그인
+              {t.loginWithGoogle}
             </button>
           )
         )}

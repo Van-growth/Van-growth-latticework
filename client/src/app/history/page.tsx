@@ -8,7 +8,9 @@ import LoginPromptModal from '@/app/components/LoginPromptModal';
 import { AnalysisSummary, AnalysisDetail } from '@/types';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
+import { useLanguage } from '@/app/context/LanguageContext';
 import { buildAuthHeaders } from '@/lib/authHeaders';
+import { getUiStrings } from '@/lib/i18n/uiStrings';
 
 const API_URL = (() => {
   const url = process.env.NEXT_PUBLIC_API_URL;
@@ -20,6 +22,8 @@ export default function HistoryPage() {
   const router = useRouter();
   const { setAnalysisData } = useAnalysis();
   const { session, loading: authLoading, signInWithGoogle } = useAuth();
+  const { language } = useLanguage();
+  const t = getUiStrings(language).history;
   const [list, setList] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +38,9 @@ export default function HistoryPage() {
     })
       .then(r => (r.ok ? r.json() : []))
       .then((data: AnalysisSummary[]) => setList(data))
-      .catch(() => setError('분석 목록을 불러오지 못했습니다.'))
+      .catch(() => setError(t.loadError))
       .finally(() => setLoading(false));
-  }, [session]);
+  }, [session, t.loadError]);
 
   async function handleSelect(id: string) {
     if (!session) return;
@@ -58,23 +62,23 @@ export default function HistoryPage() {
       <Header />
 
       <div className="max-w-4xl mx-auto px-4 py-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">분석 히스토리</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">{t.title}</h1>
 
         {authLoading ? (
-          <p className="text-gray-500">불러오는 중...</p>
+          <p className="text-gray-500">{t.loading}</p>
         ) : !session ? (
           <div className="text-center py-20 text-gray-400">
-            <p className="text-lg mb-2">로그인 후 이용할 수 있습니다.</p>
+            <p className="text-lg mb-2">{t.loginRequired}</p>
           </div>
         ) : (
           <>
-            {loading && <p className="text-gray-500">불러오는 중...</p>}
+            {loading && <p className="text-gray-500">{t.loading}</p>}
             {error && <p className="text-red-600 text-sm">{error}</p>}
 
             {!loading && list.length === 0 && (
               <div className="text-center py-20 text-gray-400">
-                <p className="text-lg mb-2">아직 분석 결과가 없습니다.</p>
-                <Link href="/" className="text-blue-600 text-sm hover:underline">첫 번째 기업을 분석해보세요 →</Link>
+                <p className="text-lg mb-2">{t.empty}</p>
+                <Link href="/" className="text-blue-600 text-sm hover:underline">{t.emptyCta}</Link>
               </div>
             )}
 
@@ -92,7 +96,7 @@ export default function HistoryPage() {
                     </div>
                     <div className="flex items-center gap-3 shrink-0 ml-4">
                       <span className="text-xs text-gray-400">
-                        {new Date(item.createdAt).toLocaleDateString('ko-KR')}
+                        {new Date(item.createdAt).toLocaleDateString(language === 'ko' ? 'ko-KR' : 'en-US')}
                       </span>
                       <span className="text-gray-400 text-sm">→</span>
                     </div>
