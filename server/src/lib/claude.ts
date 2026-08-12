@@ -764,17 +764,20 @@ function sanitizePlaceholderNumbers(value: any, sectionKey: string, path = ''): 
 // ── Research gathering (2-phase split) ───────────────────────────────────────
 
 // Phase 1: 기업 기본 정보 + 최신 현황 (2 rounds) → batch1(summary) 즉시 가능
-async function gatherResearch1(companyName: string): Promise<string> {
-  const systemPrompt = `You are a company research analyst. Use quick web searches to gather only basic company info and the latest status.
+//
+// 프롬프트 캐싱 실측(2026-08-12, cache-stats 로그): 이 함수는 기존에 회사명이 시스템
+// 프롬프트([Search order] 섹션) 안에 직접 박혀있어서 cache_control을 걸어도 회사마다
+// 매번 다른 문자열이 되어 캐시가 원천적으로 무효화됐고(실측: cache_read=0, cache_write=0,
+// 캐싱 자체가 아예 안 걸림), 검색 결과 자체가 매 요청 달라 캐시 가능한 상한도 낮다 —
+// 그래도 [Rules]/[What to collect] 같은 완전 정적 지시문 블록만이라도 캐시 대상으로
+// 분리하는 게 더 낫다. 회사명이 들어가는 실제 검색 쿼리는 user 메시지로 이동.
+const RESEARCH1_SYSTEM = `You are a company research analyst. Use quick web searches to gather only basic company info and the latest status.
 
 [Rules]
 - fetch_url at most once. Only IR press releases, Yahoo Finance, or StockAnalysis allowed.
 - If the snippet already has the number, use it without fetch_url.
 - Never fetch raw SEC Archives filings or large PDFs.
-
-[Search order — 2 searches max]
-1. web_search: "${companyName} overview products services revenue business model 2024 2025"
-2. web_search: "${companyName} news strategy funding investment partnership deal recent 2025"
+- Run at most 2 searches, in the order given in the user message.
 
 [What to collect]
 1. Company overview (business areas, key products/services, founding year, HQ, ticker)
@@ -786,12 +789,16 @@ async function gatherResearch1(companyName: string): Promise<string> {
 
 Label any estimated figure "(estimated)".`;
 
+async function gatherResearch1(companyName: string): Promise<string> {
+  const systemPrompt = [{ type: 'text' as const, text: RESEARCH1_SYSTEM, cache_control: { type: 'ephemeral' as const } }];
+  const userMessage = `Company: ${companyName}\n\nGather basic company info quickly with these 2 searches:\n1. web_search: "${companyName} overview products services revenue business model 2024 2025"\n2. web_search: "${companyName} news strategy funding investment partnership deal recent 2025"`;
+
   // analyzeCompany에서 runBatch 밖에서 직접 await하는 호출이라, 여기서 예외가 새면
   // 배치 격리 없이 전체 분석이 죽는다 (2026-07-06 삼성전기 사고) — 반드시 자체 방어.
   try {
     return await runWithWebSearch(
       systemPrompt,
-      `Company: ${companyName}\n\nGather basic company info quickly with 2 searches.`,
+      userMessage,
       'claude-sonnet-4-6',
       2,
       4000,
@@ -804,17 +811,15 @@ Label any estimated figure "(estimated)".`;
 }
 
 // Phase 2: 경쟁사·재무 상세·산업 심층 (2 rounds) → batch2-4에 사용
-async function gatherResearch2(companyName: string): Promise<string> {
-  const systemPrompt = `You are a company research analyst. Gather competitor, financial-detail, and industry-depth information.
+// gatherResearch1과 동일한 캐싱 원칙 — 정적 규칙만 시스템 프롬프트(cache_control),
+// 회사명이 들어가는 검색 쿼리는 user 메시지로 분리(2026-08-12).
+const RESEARCH2_SYSTEM = `You are a company research analyst. Gather competitor, financial-detail, and industry-depth information.
 
 [Rules]
 - fetch_url at most once. Only Yahoo Finance, Macrotrends, StockAnalysis, or IR press releases allowed.
 - If the snippet already has the number, use it without fetch_url.
 - Never fetch raw SEC Archives filings or large PDFs.
-
-[Search order — 2 searches max]
-1. web_search: "${companyName} competitors market share industry trends value chain 2024 2025"
-2. web_search: "${companyName} annual revenue net income financials technology 2023 2024 2025"
+- Run at most 2 searches, in the order given in the user message.
 
 [What to collect]
 1. Key competitors + estimated market share (cite the source)
@@ -825,11 +830,15 @@ async function gatherResearch2(companyName: string): Promise<string> {
 
 Label any estimated figure "(estimated)". Source citation is required.`;
 
+async function gatherResearch2(companyName: string): Promise<string> {
+  const systemPrompt = [{ type: 'text' as const, text: RESEARCH2_SYSTEM, cache_control: { type: 'ephemeral' as const } }];
+  const userMessage = `Company: ${companyName}\n\nGather detailed competitor/financial/industry info with these 2 searches:\n1. web_search: "${companyName} competitors market share industry trends value chain 2024 2025"\n2. web_search: "${companyName} annual revenue net income financials technology 2023 2024 2025"`;
+
   // gatherResearch1과 동일한 이유로 자체 방어 필요 (runBatch 밖에서 직접 await됨).
   try {
     return await runWithWebSearch(
       systemPrompt,
-      `Company: ${companyName}\n\nGather detailed competitor/financial/industry info with 2 searches.`,
+      userMessage,
       'claude-sonnet-4-6',
       2,
       4000,
