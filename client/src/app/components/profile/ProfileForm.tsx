@@ -190,30 +190,36 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
           <p className="text-xs text-gray-400 mb-3">{t.icpHelperText}</p>
 
           <div className="space-y-3">
-            <input
-              type="text"
-              value={values.icp_product}
-              onChange={e => setValues(v => ({ ...v, icp_product: e.target.value }))}
-              placeholder={t.icpProductPlaceholder}
-              aria-label={t.icpProduct}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-            <input
-              type="text"
-              value={values.icp_target_industry}
-              onChange={e => setValues(v => ({ ...v, icp_target_industry: e.target.value }))}
-              placeholder={t.icpTargetIndustryPlaceholder}
-              aria-label={t.icpTargetIndustry}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-            <input
-              type="text"
-              value={values.icp_target_role}
-              onChange={e => setValues(v => ({ ...v, icp_target_role: e.target.value }))}
-              placeholder={t.icpTargetRolePlaceholder}
-              aria-label={t.icpTargetRole}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpProduct}</label>
+              <input
+                type="text"
+                value={values.icp_product}
+                onChange={e => setValues(v => ({ ...v, icp_product: e.target.value }))}
+                placeholder={t.icpProductPlaceholder}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpTargetIndustry}</label>
+              <input
+                type="text"
+                value={values.icp_target_industry}
+                onChange={e => setValues(v => ({ ...v, icp_target_industry: e.target.value }))}
+                placeholder={t.icpTargetIndustryPlaceholder}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpTargetRole}</label>
+              <input
+                type="text"
+                value={values.icp_target_role}
+                onChange={e => setValues(v => ({ ...v, icp_target_role: e.target.value }))}
+                placeholder={t.icpTargetRolePlaceholder}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
           </div>
         </div>
       )}

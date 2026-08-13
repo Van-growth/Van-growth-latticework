@@ -360,7 +360,7 @@ const ko: UiStringDict = {
     icpProductPlaceholder: '예: 영업 인력용 AI 콜 코칭 SaaS',
     icpTargetIndustry: '타겟 산업',
     icpTargetIndustryPlaceholder: '예: 핀테크, 헬스케어',
-    icpTargetRole: '타겟 직무/직급',
+    icpTargetRole: '타겟 직무/역할',
     icpTargetRolePlaceholder: '예: VP Sales, RevOps 리더',
     saving: '저장 중...',
   },
