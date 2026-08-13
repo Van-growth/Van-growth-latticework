@@ -508,6 +508,7 @@ async function runWithWebSearch(
       tools: WEB_SEARCH_TOOL,
       messages,
     });
+    logCacheUsage(label, response.usage);
 
     const texts = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -590,6 +591,13 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
       setTimeout(() => reject(new Error(`[timeout] ${label} exceeded ${ms}ms`)), ms)
     ),
   ]);
+}
+
+// 프롬프트 캐싱 실측용(2026-08-13 감사 계기) — 호출 지점마다 cache_read/cache_write가
+// 실제로 찍히는지, 정적 프리픽스가 모델 최소 캐시 크기를 넘는지 grep 가능한 로그로 남긴다.
+// `grep "\[cache-stats\]"`로 전 호출 지점을 한 번에 확인 가능.
+function logCacheUsage(label: string, usage: { input_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) {
+  console.log(`[cache-stats][${label}] input=${usage.input_tokens} cache_read=${usage.cache_read_input_tokens ?? 0} cache_write=${usage.cache_creation_input_tokens ?? 0}`);
 }
 
 // ── Section prompts ───────────────────────────────────────────────────────────
@@ -904,6 +912,7 @@ export async function callSection<T>(context: string, sectionKey: string, langua
         content: `${context}\n\n---\n\n${SECTION_SCHEMAS[sectionKey]}`,
       }],
     });
+    logCacheUsage(sectionKey, response.usage);
     const raw = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map(b => b.text)
@@ -988,24 +997,29 @@ career_trajectory: sort most recent first. Empty array [] if founding_history.pr
 
 // ── Financial refresh (own web-search pass) ───────────────────────────────────
 
-async function gatherFinancialResearch(companyName: string): Promise<string> {
-  const systemPrompt = `You are a company financial analyst. Gather only the latest financial data for the company below.
+// gatherResearch1/2와 동일한 캐싱 원칙(2026-08-12) — 이 함수만 그 수정에서 누락돼
+// 회사명이 시스템 프롬프트에 직접 박혀있었고 cache_control도 없었다(2026-08-13 감사로 발견,
+// 실측: cache_read=0, cache_write=0). 정적 규칙만 시스템 프롬프트(cache_control)로 분리하고,
+// 회사명이 들어가는 검색 쿼리는 user 메시지로 이동.
+const GATHER_FINANCIAL_SYSTEM = `You are a company financial analyst. Gather only the latest financial data for the company below.
 
 [Source reliability]
 Tier 1 — official disclosure: SEC 10-K/10-Q, DART, company IR
 Tier 2 — Bloomberg, Reuters, Yahoo Finance, Macrotrends
 Anything below tier 2 must be labeled "(estimated)".
 
-[Search order]
-1. web_search: "${companyName} annual report revenue operating income net income 2023 2024 2025"
-2. web_search: "${companyName} SEC 10-K OR DART financial statements 2024 2025"
-3. For any SEC EDGAR / DART / IR URL in the results → fetch_url to read it in full
+[Rules]
+- Run the 2 searches given in the user message, in order.
+- For any SEC EDGAR / DART / IR URL in the results, fetch_url to read it in full.
+- Cite the source for every figure. Mark anything you can't find "Not disclosed".`;
 
-Cite the source for every figure. Mark anything you can't find "Not disclosed".`;
+async function gatherFinancialResearch(companyName: string): Promise<string> {
+  const systemPrompt = [{ type: 'text' as const, text: GATHER_FINANCIAL_SYSTEM, cache_control: { type: 'ephemeral' as const } }];
+  const userMessage = `Company: ${companyName}\n\nGather the latest financial data with these 2 searches:\n1. web_search: "${companyName} annual report revenue operating income net income 2023 2024 2025"\n2. web_search: "${companyName} SEC 10-K OR DART financial statements 2024 2025"`;
 
   return runWithWebSearch(
     systemPrompt,
-    `Company: ${companyName}\n\nGather the latest financial data.`,
+    userMessage,
     'claude-sonnet-4-6',
     6,
     4000,
@@ -1275,6 +1289,7 @@ ${formatScenarioForPrompt(currency, simulation)}`;
       system: growthScenarioNarrativeSystem(language),
       messages: [{ role: 'user', content: userPrompt }],
     });
+    logCacheUsage('growth_scenario_narrative', response.usage);
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
@@ -1326,6 +1341,7 @@ export async function generateSecBenchmarkInterpretations(
       system: secBenchmarkInterpretationSystem(language),
       messages: [{ role: 'user', content: userPrompt }],
     });
+    logCacheUsage('sec_benchmark_interpretation', response.usage);
     const raw = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
