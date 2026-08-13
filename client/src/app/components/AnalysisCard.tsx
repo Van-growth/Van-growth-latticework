@@ -6,6 +6,8 @@ import { useAuth } from '@/app/context/AuthContext';
 import { buildAuthHeaders } from '@/lib/authHeaders';
 import { trackEvent } from '@/lib/analytics';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import type { Session } from '@supabase/supabase-js';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
@@ -40,6 +42,9 @@ import {
   FounderV2,
   GrowthScenarioV2,
   SecBenchmarkComparison,
+  UserProfile,
+  IcpInsightCategory,
+  IcpInsightResponse,
 } from '@/types';
 import { isPlaceholder, countFinancialsReliability } from '@/lib/financialsReliability';
 import { useLanguage } from '@/app/context/LanguageContext';
@@ -1511,6 +1516,201 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
   );
 });
 
+// ── ICP 맞춤형 인사이트 (2026-08-13) ───────────────────────────────────────────
+// 다른 온디맨드 탭(산업역사/기술역사)과 달리 analyses 행이 아니라 별도 icp_insights
+// 테이블 + 유저 세션에 묶인 결과라, data(AnalysisDetail)에 결과를 실어보내지 않고
+// 이 컴포넌트가 완전히 자기 상태로 API를 직접 호출한다 — 부모(AnalysisCardInner)에
+// prop을 새로 뚫지 않음.
+
+const ICP_CATEGORY_ORDER: IcpInsightCategory[] = ['financial', 'investment', 'technology', 'competitive', 'market'];
+
+function IcpRatingWidget({ insightId, uiT, onError }: {
+  insightId: string;
+  uiT: ReturnType<typeof getUiStrings>;
+  // 실패를 조용히 삼키면 유저가 "제출됐다"고 착각한 채 넘어간다(CLAUDE.md "비동기 액션은
+  // 침묵 리턴 금지" 원칙 — pain 진단 버튼과 동일한 논리). 성공은 조용히(체크 표시로 대체)
+  // 두되, 실패했을 때만 부모(IcpInsightTab)의 토스트로 알린다.
+  onError: () => void;
+}) {
+  const [rating, setRating] = useState<number | null>(null);
+  const [comment, setComment] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async () => {
+    if (rating == null && !comment.trim()) return;
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+      const res = await fetch(`${apiUrl}/api/icp-insights/${insightId}/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating, rating_comment: comment.trim() || null }),
+      });
+      if (!res.ok) { onError(); return; }
+      setSubmitted(true);
+    } catch {
+      onError();
+    }
+  };
+
+  if (submitted) {
+    return <p className="text-[11px] text-gray-400 mt-3 pt-3 border-t border-gray-100">{uiT.icpInsight.ratingSubmitted}</p>;
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[11px] text-gray-400">{uiT.icpInsight.ratingPrompt}</span>
+        <div className="flex gap-0.5">
+          {[1, 2, 3, 4, 5].map(n => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setRating(n)}
+              aria-label={`${n}`}
+              className={`text-sm leading-none ${rating != null && n <= rating ? 'text-amber-400' : 'text-gray-200 hover:text-amber-200'}`}
+            >
+              ★
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          placeholder={uiT.icpInsight.ratingCommentPlaceholder}
+          className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={rating == null && !comment.trim()}
+          className="text-xs font-medium text-blue-500 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed px-2"
+        >
+          {uiT.icpInsight.ratingSubmit}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT }: {
+  analysisId: string;
+  companyName: string;
+  session: Session | null;
+  signInWithGoogle: () => Promise<void>;
+  uiT: ReturnType<typeof getUiStrings>;
+}) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [result, setResult] = useState<IcpInsightResponse | null>(null);
+  // 설정에 ICP가 전부 비어있으면 생성 버튼 위에 안내만 띄운다(진행은 막지 않음) — 탭을
+  // 열 때만 조회, 다른 탭 보는 동안엔 불필요한 /api/profile 호출을 하지 않는다.
+  const [icpAllEmpty, setIcpAllEmpty] = useState(false);
+  // 별점/코멘트 제출 실패 토스트 — HomeContent.tsx의 showToast와 동일한 패턴(로컬
+  // useState + setTimeout). 성공은 조용히 두고(위젯이 "감사합니다"로 대체), 실패했을
+  // 때만 띄워서 "제출됐다"는 착각을 막는다(CLAUDE.md 비동기 액션 침묵 리턴 금지 원칙).
+  const [ratingToast, setRatingToast] = useState('');
+  const showRatingErrorToast = useCallback(() => {
+    setRatingToast(uiT.icpInsight.ratingFailed);
+    setTimeout(() => setRatingToast(''), 2500);
+  }, [uiT]);
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+    let cancelled = false;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+    fetch(`${apiUrl}/api/profile`, { headers: buildAuthHeaders(null, session.access_token) })
+      .then(r => (r.ok ? r.json() : null))
+      .then((p: UserProfile | null) => {
+        if (cancelled) return;
+        setIcpAllEmpty(!p?.icp_product && !p?.icp_target_industry && !p?.icp_target_role);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [session]);
+
+  const handleGenerate = useCallback(async () => {
+    if (!session) { signInWithGoogle(); return; }
+    setStatus('loading');
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+      const res = await fetch(`${apiUrl}/api/analyze/${analysisId}/icp-insight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(null, session.access_token) },
+        body: JSON.stringify({ companyName }),
+      });
+      if (!res.ok) { setStatus('error'); return; }
+      const data: IcpInsightResponse = await res.json();
+      setResult(data);
+      setStatus('idle');
+    } catch {
+      setStatus('error');
+    }
+  }, [analysisId, companyName, session, signInWithGoogle]);
+
+  if (status === 'loading') return <CardsSkeleton count={3} />;
+
+  if (!result) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        {icpAllEmpty && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 max-w-xs leading-relaxed">
+            {uiT.icpInsight.hintEmptyIcp}{' '}
+            <Link href="/settings" className="underline font-medium">{uiT.icpInsight.goToSettings}</Link>
+          </p>
+        )}
+        {status === 'error' && <p className="text-xs text-red-500">{uiT.icpInsight.failed}</p>}
+        <Lightbulb size={20} className="text-amber-400" />
+        <button
+          onClick={handleGenerate}
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+        >
+          {uiT.icpInsight.generateButton}
+        </button>
+      </div>
+    );
+  }
+
+  const entries = ICP_CATEGORY_ORDER
+    .filter(cat => result.content[cat])
+    .map(cat => [cat, result.content[cat]!] as const);
+  const daysAgo = Math.max(0, Math.floor((Date.now() - new Date(result.created_at).getTime()) / (1000 * 60 * 60 * 24)));
+
+  if (entries.length === 0) {
+    return <p className="text-sm text-gray-500 py-16 text-center">{uiT.icpInsight.noSignals}</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between text-xs text-gray-400">
+        <span>{uiT.icpInsight.generatedAgo(daysAgo)}</span>
+        <button onClick={handleGenerate} className="text-blue-500 hover:text-blue-700 font-medium">
+          {uiT.icpInsight.regenerateButton}
+        </button>
+      </div>
+
+      {entries.map(([category, item]) => (
+        <SectionCard key={category} title={uiT.icpInsight.categoryLabel[category]} dotColor="bg-amber-400">
+          <p className="text-sm text-gray-800 leading-relaxed mb-2">{item.insight}</p>
+          <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-800 leading-relaxed mb-2">
+            {item.consequence_for_icp}
+          </div>
+          <Tag label={uiT.icpInsight.confidenceLabel[item.confidence]} color={item.confidence === 'high' ? 'emerald' : 'gray'} />
+          <SourcesList sources={item.sources} />
+          <IcpRatingWidget insightId={result.id} uiT={uiT} onError={showRatingErrorToast} />
+        </SectionCard>
+      ))}
+
+      {ratingToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
+          {ratingToast}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── V2 Tab: 전략 ──────────────────────────────────────────────────────────────
 
 const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | undefined }) {
@@ -2823,6 +3023,7 @@ const TABS = [
   { key: 'cross_industry_nudge', group: 'pain',    label: '넛지',         icon: Lightbulb,  tooltip: '이 업종의 공통 pain과 타산업 해결 사례를 확인할 수 있어요' },
   { key: 'industry_history',     group: 'pain',    label: '산업역사',     icon: Clock,      tooltip: '이 산업이 어떻게 발전해왔는지 확인할 수 있어요' },
   { key: 'tech_evolution',       group: 'pain',    label: '기술변화',     icon: Zap,        tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
+  { key: 'icp_insight',          group: 'pain',    label: 'ICP 인사이트', icon: Lightbulb,  tooltip: '내 ICP 기준으로 이 회사와 관련해 무엇이 중요한지 확인할 수 있어요' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -2847,6 +3048,7 @@ const TAB_BATCH: Record<TabKey, number> = {
   growth_scenario:      6,
   industry_history:     0,
   tech_evolution:       0,
+  icp_insight:          0,
 };
 
 // 최상위 3단 탭(Company Intelligence/Pain Diagnosis/AE Skills, 2026-08)에서 활성 그룹이
@@ -2873,6 +3075,9 @@ function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV
     case 'financials':           return !!financialsV2;
     case 'founder':              return !!data.founder_v2;
     case 'growth_scenario':      return !!data.growth_scenario_v2;
+    // ICP 인사이트는 analyses 행이 아니라 별도 icp_insights 테이블/유저별 결과라
+    // 탭 체크마크의 "배치 완료" 개념이 애초에 적용되지 않는다 — 항상 미체크.
+    case 'icp_insight':          return false;
     default:                     return false;
   }
 }
@@ -3136,6 +3341,18 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
                 : painDiagnosisStarted
                   ? <>{reanalyzeBtn('tech')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
                   : <PainDiagnosisStart onStart={handlePainDiagnosisClick} intro={uiT.actions.painDiagnosisIntro} startLabel={uiT.actions.startPainDiagnosis} />
+        )}
+        {/* ICP 인사이트: 다른 온디맨드 탭과 달리 analyses 행에 결과를 저장하지 않고
+            컴포넌트 자체 상태 + 별도 icp_insights 테이블로 관리 — batchDone/painDiagnosisStarted
+            게이트를 거치지 않고 IcpInsightTab이 클릭→로딩→결과를 전부 자체적으로 처리한다. */}
+        {tab === 'icp_insight' && (
+          <IcpInsightTab
+            analysisId={data.id}
+            companyName={data.companyName}
+            session={session}
+            signInWithGoogle={signInWithGoogle}
+            uiT={uiT}
+          />
         )}
         {tab === 'value_chain' && (
           (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :

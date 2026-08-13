@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
 import { fetchFinancialContext } from './financialContext';
 import type { IndustryBenchmarkResult, CompetitorRevenueRanking } from '../services/industryBenchmarkService';
+import type { IcpSignal, IcpSignalCategory } from './icpSignals';
 
 dotenv.config();
 
@@ -1355,5 +1356,114 @@ export async function generateSecBenchmarkInterpretations(
   } catch (err) {
     console.error('[claude] sec_benchmark_interpretations FAIL', err);
     return items.map(() => '');
+  }
+}
+
+// ── ICP 맞춤형 인사이트 (2026-08-13) ────────────────────────────────────────────
+// 카테고리별 함의(무슨 뜻인지)를 수동 템플릿 라이브러리로 미리 만들어두는 대신, 이미
+// 생성된 신호(icpSignals.ts)를 그대로 주입하고 "사실이 아니라 결과(consequence)"를
+// 그때그때 합성하도록 지시하는 방식으로 확정(ponytail 원칙). 신규 web_search 없음 —
+// 순수 텍스트 합성 호출이라 runWithWebSearch()를 쓰지 않고 callSection()과 동일하게
+// 단발 messages.create() 호출.
+//
+// sources[]는 이 함수의 책임이 아니다 — 각 신호(rawData)에 이미 있는 출처를 그대로
+// 재인용하는 기계적 합집합 연산이라 Claude에게 시키지 않는다. 호출부(라우트)가
+// financials_v2/summary_v2/tech_evolution_v2/competitors_v2/cross_industry_nudge_v1의
+// 기존 sources 배열에서 카테고리별로 직접 뽑아 병합할 것.
+
+function icpInsightSystem(language: Language): string {
+  return `You are a B2B sales/BD strategist writing ICP(Ideal Customer Profile)-tailored insights for someone about to research or meet this company.
+Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. ${LANGUAGE_DIRECTIVE[language]}
+
+[The core quality bar — state the consequence, not just the fact]
+A flat restatement of a fact ("revenue grew 20%") is not an insight — it's a data point the reader can already see elsewhere in this report. State what it implies specifically for a reader with this ICP: what changes for them, what risk or opening it creates, what conversation it sets up. If you can't articulate why a signal matters to this specific reader, don't force an insight out of it.
+
+[Honesty about certainty]
+You are synthesizing plausible hypotheses from public signals, not confirmed facts a rep would get from a live call or CRM history — be upfront about that limit. Never state a specific number, percentage, or dollar impact as a settled conclusion in consequence_for_icp; phrase impact as a plausible implication ("this could mean...", "worth asking whether...") rather than an assertion. This mirrors how this product already treats financial-impact language elsewhere — a question or hypothesis, never a stated conclusion.
+
+[ICP-aware framing]
+You're given up to 3 ICP fields: product, target_industry, target_role. Any field marked "(not provided)" must NOT be used to narrow your interpretation — fall back to a more general framing for that dimension instead of guessing. Example: no target_role given → write for "the relevant decision-maker," not a specific invented title. Never invent ICP details the reader didn't give you.
+
+[Confidence]
+Set confidence to "high" only when the underlying signal is concrete and specific (a named, dated event; a clear disclosed figure). Set it to "medium" whenever the signal is thin, indirect, or requires bridging more than one inferential step to reach the consequence. When unsure, use "medium" — never overstate certainty to sound more useful.
+
+[Category discipline]
+You'll be given data for only the categories that actually have a signal worth writing about — categories with nothing to say were already filtered out before reaching you. Return exactly one insight object per category given, using its "category" key verbatim (never translate, reformat, or invent a category key) — same count, same keys, no extras, no omissions.
+For the "market" category, if cross_industry_example is present, use it as reasoning material for how similar pain was resolved elsewhere — don't just restate it, use it to sharpen the consequence for this ICP.`;
+}
+
+export interface IcpInsightItem {
+  category: IcpSignalCategory;
+  insight: string;
+  consequence_for_icp: string;
+  confidence: 'high' | 'medium';
+}
+
+export async function generateIcpInsights(
+  companyName: string,
+  signals: IcpSignal[], // 호출부가 이미 hasSignal===true인 것만 걸러서 넘긴다고 가정
+  icp: { product: string | null; targetIndustry: string | null; targetRole: string | null },
+  language: Language = 'en',
+): Promise<IcpInsightItem[] | null> {
+  if (signals.length === 0) return [];
+  const t0 = Date.now();
+
+  const icpLines = [
+    `product: ${icp.product || '(not provided)'}`,
+    `target_industry: ${icp.targetIndustry || '(not provided)'}`,
+    `target_role: ${icp.targetRole || '(not provided)'}`,
+  ].join('\n');
+
+  const signalsJson = JSON.stringify(signals.map(s => ({ category: s.category, data: s.rawData })), null, 2);
+
+  const schema = `Output only a JSON object matching this schema:
+{"insights":[{"category":"<one of the category keys from [Signal data] below, copied verbatim>","insight":"The observation itself, 1-2 sentences","consequence_for_icp":"What it means specifically for this reader given their ICP, 1-2 sentences — a plausible implication, never a settled financial figure","confidence":"high|medium"}]}
+Return exactly one insight object per category present in [Signal data] — same count, same category keys, no extras, no omissions.`;
+
+  const userMessage = `Company: ${companyName}
+
+[Reader's ICP]
+${icpLines}
+
+[Signal data — only categories with an actual signal are included]
+${signalsJson}
+
+---
+
+${schema}`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      system: [{ type: 'text', text: icpInsightSystem(language), cache_control: { type: 'ephemeral' } }] as any,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+    logCacheUsage('icp_insight', response.usage);
+    const raw = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+    const parsed = extractJson<{ insights: Array<{ category: string; insight: string; consequence_for_icp: string; confidence: string }> }>(raw, 'icp_insight');
+    if (!parsed?.insights || !Array.isArray(parsed.insights)) {
+      console.error(`[claude] icp_insight FAIL ${Date.now() - t0}ms — no insights array in response`);
+      return null;
+    }
+
+    const validCategories = new Set(signals.map(s => s.category));
+    const result: IcpInsightItem[] = parsed.insights
+      .filter(item => validCategories.has(item.category as IcpSignalCategory))
+      .map(item => ({
+        category: item.category as IcpSignalCategory,
+        insight: item.insight,
+        consequence_for_icp: item.consequence_for_icp,
+        confidence: item.confidence === 'high' ? 'high' as const : 'medium' as const,
+      }));
+
+    console.log(`[claude] icp_insight OK ${Date.now() - t0}ms (${result.length}/${signals.length} categories)`);
+    return result;
+  } catch (err) {
+    console.error(`[claude] icp_insight FAIL ${Date.now() - t0}ms`, err);
+    return null;
   }
 }

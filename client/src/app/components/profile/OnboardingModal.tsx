@@ -121,7 +121,7 @@ export default function OnboardingModal() {
             {error}
           </p>
         )}
-        <ProfileForm initial={profile} submitting={submitting} submitLabel={t.submitLabel} onSubmit={submit} />
+        <ProfileForm initial={profile} submitting={submitting} submitLabel={t.submitLabel} onSubmit={submit} showIcp={false} />
         <button
           onClick={skip}
           disabled={submitting}

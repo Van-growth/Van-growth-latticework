@@ -21,7 +21,7 @@ const JOB_LEVELS = ['junior', 'mid', 'senior', 'team_lead', 'executive'];
 const PURPOSES = ['meeting_prep', 'partner_research', 'competitor_analysis', 'other'];
 const REGIONS = ['kr', 'us', 'other'];
 
-const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, onboarding_completed_at';
+const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, onboarding_completed_at, icp_product, icp_target_industry, icp_target_role';
 
 router.get('/', async (req: Request, res: Response) => {
   const authUser = await resolveAuthUser(req);
@@ -51,7 +51,10 @@ router.patch('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const { company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, completeOnboarding } = req.body as {
+  const {
+    company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, completeOnboarding,
+    icp_product, icp_target_industry, icp_target_role,
+  } = req.body as {
     company_name?: string | null;
     org_size?: string | null;
     industry?: string | null;
@@ -61,6 +64,9 @@ router.patch('/', async (req: Request, res: Response) => {
     purpose_other?: string | null;
     region?: string | null;
     completeOnboarding?: boolean;
+    icp_product?: string | null;
+    icp_target_industry?: string | null;
+    icp_target_role?: string | null;
   };
 
   if (org_size != null && !ORG_SIZES.includes(org_size)) {
@@ -97,6 +103,10 @@ router.patch('/', async (req: Request, res: Response) => {
   if (purpose !== undefined) fields.purpose = purpose;
   if (purpose_other !== undefined) fields.purpose_other = purpose_other;
   if (region !== undefined) fields.region = region;
+  // ICP 3필드는 자유 텍스트라 코드 검증 없음(선택사항 — 빈 값 저장 허용)
+  if (icp_product !== undefined) fields.icp_product = icp_product;
+  if (icp_target_industry !== undefined) fields.icp_target_industry = icp_target_industry;
+  if (icp_target_role !== undefined) fields.icp_target_role = icp_target_role;
   if (completeOnboarding) fields.onboarding_completed_at = new Date().toISOString();
 
   if (Object.keys(fields).length === 0) {

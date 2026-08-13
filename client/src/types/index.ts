@@ -514,6 +514,26 @@ export interface UserProfile {
   purpose_other: string | null;
   region: RegionCode | null;
   onboarding_completed_at: string | null;
+  icp_product: string | null;
+  icp_target_industry: string | null;
+  icp_target_role: string | null;
+}
+
+// ICP 맞춤형 인사이트 탭 — POST /api/analyze/:id/icp-insight 응답.
+export type IcpInsightCategory = 'financial' | 'investment' | 'technology' | 'competitive' | 'market';
+
+export interface IcpInsightCategoryContent {
+  insight: string;
+  consequence_for_icp: string;
+  confidence: 'high' | 'medium';
+  sources: Source[];
+}
+
+export interface IcpInsightResponse {
+  id: string;
+  content: Partial<Record<IcpInsightCategory, IcpInsightCategoryContent>>;
+  created_at: string;
+  cached: boolean;
 }
 
 export interface CompanyListing {

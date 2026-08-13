@@ -18,6 +18,9 @@ export interface ProfileFormValues {
   purpose: PurposeCode[];
   purpose_other: string;
   region: RegionCode | '';
+  icp_product: string;
+  icp_target_industry: string;
+  icp_target_role: string;
 }
 
 function toFormValues(p?: Partial<UserProfile> | null): ProfileFormValues {
@@ -30,6 +33,9 @@ function toFormValues(p?: Partial<UserProfile> | null): ProfileFormValues {
     purpose: p?.purpose ?? [],
     purpose_other: p?.purpose_other ?? '',
     region: (p?.region ?? '') as RegionCode | '',
+    icp_product: p?.icp_product ?? '',
+    icp_target_industry: p?.icp_target_industry ?? '',
+    icp_target_role: p?.icp_target_role ?? '',
   };
 }
 
@@ -60,11 +66,15 @@ function ChoiceGroup<T extends string>({ options, labelFor, value, onChange, col
   );
 }
 
-export default function ProfileForm({ initial, onSubmit, submitLabel, submitting }: {
+export default function ProfileForm({ initial, onSubmit, submitLabel, submitting, showIcp = true }: {
   initial?: Partial<UserProfile> | null;
   onSubmit: (values: ProfileFormValues) => void;
   submitLabel: string;
   submitting?: boolean;
+  // 온보딩 모달은 짧은 고정 질문 세트를 유지하려고 ICP 섹션을 숨긴다(스펙상 설정 페이지
+  // 전용 기능) — OnboardingModal.tsx의 submit()이 icp_* 필드를 PATCH body로 안 보내므로,
+  // 숨기지 않으면 온보딩 중 입력한 값이 조용히 유실된다.
+  showIcp?: boolean;
 }) {
   const [values, setValues] = useState<ProfileFormValues>(() => toFormValues(initial));
   const { language } = useLanguage();
@@ -173,6 +183,40 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
           />
         )}
       </div>
+
+      {showIcp && (
+        <div className="pt-2 border-t border-gray-100">
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpSectionTitle}</label>
+          <p className="text-xs text-gray-400 mb-3">{t.icpHelperText}</p>
+
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={values.icp_product}
+              onChange={e => setValues(v => ({ ...v, icp_product: e.target.value }))}
+              placeholder={t.icpProductPlaceholder}
+              aria-label={t.icpProduct}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <input
+              type="text"
+              value={values.icp_target_industry}
+              onChange={e => setValues(v => ({ ...v, icp_target_industry: e.target.value }))}
+              placeholder={t.icpTargetIndustryPlaceholder}
+              aria-label={t.icpTargetIndustry}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <input
+              type="text"
+              value={values.icp_target_role}
+              onChange={e => setValues(v => ({ ...v, icp_target_role: e.target.value }))}
+              placeholder={t.icpTargetRolePlaceholder}
+              aria-label={t.icpTargetRole}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+        </div>
+      )}
 
       <button
         type="submit"

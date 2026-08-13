@@ -50,6 +50,9 @@ export default function SettingsPage() {
           purpose: values.purpose,
           purpose_other: values.purpose_other || null,
           region: values.region || null,
+          icp_product: values.icp_product || null,
+          icp_target_industry: values.icp_target_industry || null,
+          icp_target_role: values.icp_target_role || null,
         }),
       });
       if (res.ok) {

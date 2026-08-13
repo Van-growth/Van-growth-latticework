@@ -123,6 +123,7 @@ interface UiStringDict {
     cross_industry_nudge: { label: string; tooltip: string };
     industry_history: { label: string; tooltip: string };
     tech_evolution: { label: string; tooltip: string };
+    icp_insight: { label: string; tooltip: string };
   };
   tabGroups: { company: string; pain: string };
   actions: {
@@ -139,6 +140,23 @@ interface UiStringDict {
     thisCompany: string;
     industryMedian: string;
   };
+  icpInsight: {
+    hintEmptyIcp: string;
+    goToSettings: string;
+    generateButton: string;
+    regenerateButton: string;
+    generatedAgo: (days: number) => string;
+    loading: string;
+    failed: string;
+    noSignals: string;
+    categoryLabel: Record<'financial' | 'investment' | 'technology' | 'competitive' | 'market', string>;
+    confidenceLabel: Record<'high' | 'medium', string>;
+    ratingPrompt: string;
+    ratingCommentPlaceholder: string;
+    ratingSubmit: string;
+    ratingSubmitted: string;
+    ratingFailed: string;
+  };
   profileForm: {
     companyName: string;
     companyNamePlaceholder: string;
@@ -149,6 +167,14 @@ interface UiStringDict {
     jobLevel: string;
     purpose: string;
     purposeOtherPlaceholder: string;
+    icpSectionTitle: string;
+    icpHelperText: string;
+    icpProduct: string;
+    icpProductPlaceholder: string;
+    icpTargetIndustry: string;
+    icpTargetIndustryPlaceholder: string;
+    icpTargetRole: string;
+    icpTargetRolePlaceholder: string;
     saving: string;
   };
 }
@@ -278,6 +304,7 @@ const ko: UiStringDict = {
     cross_industry_nudge: { label: '넛지',         tooltip: '이 업종의 공통 pain과 타산업 해결 사례를 확인할 수 있어요' },
     industry_history:     { label: '산업역사',     tooltip: '이 산업이 어떻게 발전해왔는지 확인할 수 있어요' },
     tech_evolution:       { label: '기술변화',     tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
+    icp_insight:          { label: 'ICP 인사이트', tooltip: '내 ICP 기준으로 이 회사와 관련해 무엇이 중요한지 확인할 수 있어요' },
   },
   tabGroups: { company: '기업분석', pain: 'pain 진단' },
   actions: {
@@ -294,6 +321,29 @@ const ko: UiStringDict = {
     thisCompany: '이 회사',
     industryMedian: '업종 중앙값',
   },
+  icpInsight: {
+    hintEmptyIcp: '설정에서 ICP를 입력하면 더 정확한 인사이트를 받을 수 있어요',
+    goToSettings: '설정으로 이동',
+    generateButton: 'ICP 인사이트 생성하기',
+    regenerateButton: '↻ 다시 생성',
+    generatedAgo: (days: number) => (days === 0 ? '이 ICP로 오늘 생성됨' : `이 ICP로 ${days}일 전 생성됨`),
+    loading: 'ICP 인사이트를 생성하고 있어요...',
+    failed: '인사이트 생성에 실패했어요. 잠시 후 다시 시도해주세요.',
+    noSignals: '지금은 참고할 만한 신호가 부족해요. 분석이 더 진행되면 다시 시도해보세요.',
+    categoryLabel: {
+      financial: '재무상태변화',
+      investment: '투자변화',
+      technology: '기술변화',
+      competitive: '경쟁변화',
+      market: '시장변화',
+    },
+    confidenceLabel: { high: '확신도 높음', medium: '확신도 보통' },
+    ratingPrompt: '이 인사이트, 도움이 됐나요?',
+    ratingCommentPlaceholder: '왜 별로였나요? (선택)',
+    ratingSubmit: '제출',
+    ratingSubmitted: '평가해주셔서 감사합니다',
+    ratingFailed: '평가 저장에 실패했어요. 다시 시도해주세요.',
+  },
   profileForm: {
     companyName: '회사명',
     companyNamePlaceholder: '예: Acme Inc.',
@@ -304,6 +354,14 @@ const ko: UiStringDict = {
     jobLevel: '직급',
     purpose: '사용 목적 (복수 선택 가능)',
     purposeOtherPlaceholder: '기타 목적을 입력해주세요',
+    icpSectionTitle: 'ICP (이상적 고객 프로필)',
+    icpHelperText: '구체적으로 작성할수록 더 정확한 인사이트를 받을 수 있어요',
+    icpProduct: '제품/서비스',
+    icpProductPlaceholder: '예: 영업 인력용 AI 콜 코칭 SaaS',
+    icpTargetIndustry: '타겟 산업',
+    icpTargetIndustryPlaceholder: '예: 핀테크, 헬스케어',
+    icpTargetRole: '타겟 직무/직급',
+    icpTargetRolePlaceholder: '예: VP Sales, RevOps 리더',
     saving: '저장 중...',
   },
 };
@@ -433,6 +491,7 @@ const en: UiStringDict = {
     cross_industry_nudge:  { label: 'Nudge',           tooltip: 'See a common pain point in this industry and how another industry solved it' },
     industry_history:      { label: 'Industry History', tooltip: 'See how this industry has evolved over time' },
     tech_evolution:        { label: 'Tech Evolution',  tooltip: 'See current tech trends and where they’re headed' },
+    icp_insight:           { label: 'ICP Insight',     tooltip: "See what matters about this company for your ICP" },
   },
   tabGroups: { company: 'Company Intel', pain: 'Pain Diagnosis' },
   actions: {
@@ -449,6 +508,29 @@ const en: UiStringDict = {
     thisCompany: 'This company',
     industryMedian: 'Industry median',
   },
+  icpInsight: {
+    hintEmptyIcp: 'Set your ICP in Settings for more accurate insights',
+    goToSettings: 'Go to Settings',
+    generateButton: 'Generate ICP insight',
+    regenerateButton: '↻ Regenerate',
+    generatedAgo: (days: number) => (days === 0 ? 'Generated today for this ICP' : `Generated ${days} day${days === 1 ? '' : 's'} ago for this ICP`),
+    loading: 'Generating your ICP insight...',
+    failed: 'Failed to generate insight. Please try again shortly.',
+    noSignals: "There isn't enough signal to work with yet. Try again once the analysis has progressed further.",
+    categoryLabel: {
+      financial: 'Financial change',
+      investment: 'Investment activity',
+      technology: 'Technology shift',
+      competitive: 'Competitive change',
+      market: 'Market pain',
+    },
+    confidenceLabel: { high: 'High confidence', medium: 'Medium confidence' },
+    ratingPrompt: 'Was this insight helpful?',
+    ratingCommentPlaceholder: "What didn't work? (optional)",
+    ratingSubmit: 'Submit',
+    ratingSubmitted: 'Thanks for the feedback',
+    ratingFailed: 'Failed to save your feedback. Please try again.',
+  },
   profileForm: {
     companyName: 'Company name',
     companyNamePlaceholder: 'e.g. Acme Inc.',
@@ -459,6 +541,14 @@ const en: UiStringDict = {
     jobLevel: 'Level',
     purpose: 'Purpose (select all that apply)',
     purposeOtherPlaceholder: 'Tell us your purpose',
+    icpSectionTitle: 'ICP (Ideal Customer Profile)',
+    icpHelperText: 'The more specific you are, the more accurate your insights will be',
+    icpProduct: 'Product/service',
+    icpProductPlaceholder: 'e.g. AI call coaching SaaS for sales teams',
+    icpTargetIndustry: 'Target industry',
+    icpTargetIndustryPlaceholder: 'e.g. Fintech, Healthcare',
+    icpTargetRole: 'Target role',
+    icpTargetRolePlaceholder: 'e.g. VP Sales, RevOps lead',
     saving: 'Saving...',
   },
 };

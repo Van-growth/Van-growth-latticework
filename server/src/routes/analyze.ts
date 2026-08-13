@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { createHash } from 'crypto';
 import { supabase } from '../lib/supabase';
 import {
-  analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, reanalyzeSingleSection,
-  generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, SecBenchmarkComparison, withTimeout,
-  Language,
+  analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, Source, reanalyzeSingleSection,
+  generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, generateIcpInsights, SecBenchmarkComparison,
+  withTimeout, Language,
 } from '../lib/claude';
+import { collectIcpSignals, IcpSignalCategory } from '../lib/icpSignals';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
 import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
 import {
@@ -1119,6 +1121,153 @@ router.post('/:id/pain-diagnosis', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[pain-diagnosis] FAIL', err);
     res.status(500).json({ error: 'pain 진단 중 오류가 발생했습니다.' });
+  }
+});
+
+// ── POST /api/analyze/:id/icp-insight — "ICP 인사이트" 탭 ──────────────────────
+// 이미 생성된 신호(icpSignals.ts)만 재사용 — 신규 web_search 없는 단일 Claude 호출이라
+// pain-diagnosis(10분)보다 훨씬 짧게 잡음(60초, 실측 후 조정). /reanalyze·/pain-diagnosis와
+// 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시 협업 UX).
+const ICP_INSIGHT_TIMEOUT = 60 * 1000;
+
+function normalizeIcpField(v: string | null | undefined): string | null {
+  const trimmed = v?.trim();
+  return trimmed ? trimmed : null;
+}
+
+// analysis_id + icp_fingerprint가 icp_insights 조회 키 — 3필드를 정규화(trim+소문자) 후
+// md5 해시. 같은 ICP를 다르게 표기해도(공백/대소문자) 같은 fingerprint로 수렴.
+function computeIcpFingerprint(icp: { product: string | null; targetIndustry: string | null; targetRole: string | null }): string {
+  const key = [icp.product, icp.targetIndustry, icp.targetRole].map(v => (v ?? '').toLowerCase()).join('|');
+  return createHash('md5').update(key).digest('hex');
+}
+
+// sources.financials(Source[], date/isEstimate 포함)를 섹션 임베디드 sources(SectionSource[])
+// 형태로 맞춰준다 — 프론트 렌더링이 SectionSource 하나의 형태만 다루면 되게.
+function toSectionSource(s: Source): SectionSource {
+  return { index: s.index, level: s.level, organization: s.organization, content: s.content, url: s.url };
+}
+
+// 카테고리별 출처는 Claude에게 시키지 않고(신규 검색 없으니 신규 출처도 없음) 이미 신호
+// 원본에 있던 sources를 그대로 재인용 — 기계적 합집합이라 코드에서 직접 뽑는다.
+function sourcesForCategory(category: IcpSignalCategory, analysis: {
+  sources?: AnalysisSources | null;
+  summary_v2?: AnalysisData['summary_v2'] | null;
+  tech_evolution_v2?: AnalysisData['tech_evolution_v2'];
+  competitors_v2?: AnalysisData['competitors_v2'] | null;
+  cross_industry_nudge_v1?: AnalysisData['cross_industry_nudge_v1'] | null;
+}): SectionSource[] {
+  switch (category) {
+    case 'financial':      return (analysis.sources?.financials ?? []).map(toSectionSource);
+    case 'investment':     return analysis.summary_v2?.sources ?? [];
+    case 'technology':     return analysis.tech_evolution_v2?.sources ?? [];
+    case 'competitive':    return analysis.competitors_v2?.sources ?? [];
+    case 'market':         return analysis.cross_industry_nudge_v1?.sources ?? [];
+  }
+}
+
+router.post('/:id/icp-insight', async (req: Request, res: Response) => {
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
+  const analysisId = String(req.params.id ?? '').trim();
+  const { companyName, icp: icpOverride } = req.body as {
+    companyName?: string;
+    icp?: { product?: string | null; targetIndustry?: string | null; targetRole?: string | null };
+  };
+  if (!analysisId || !companyName?.trim()) {
+    res.status(400).json({ error: 'companyName이 필요합니다.' });
+    return;
+  }
+  const name = companyName.trim();
+
+  try {
+    // ICP는 설정 페이지에 저장된 값이 기본, body override는 "설정 저장 전 미리보기" 용도.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('icp_product, icp_target_industry, icp_target_role')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    const icp = {
+      product: normalizeIcpField(icpOverride?.product ?? profile?.icp_product),
+      targetIndustry: normalizeIcpField(icpOverride?.targetIndustry ?? profile?.icp_target_industry),
+      targetRole: normalizeIcpField(icpOverride?.targetRole ?? profile?.icp_target_role),
+    };
+    const fingerprint = computeIcpFingerprint(icp);
+
+    // 동일 기업 + 동일 ICP 조합이면 재생성 없이 즉시 반환.
+    const { data: existing } = await supabase
+      .from('icp_insights')
+      .select('id, content, created_at')
+      .eq('analysis_id', analysisId)
+      .eq('icp_fingerprint', fingerprint)
+      .maybeSingle();
+    if (existing) {
+      res.json({ id: existing.id, content: existing.content, created_at: existing.created_at, cached: true });
+      return;
+    }
+
+    const { data: analysis, error: fetchErr } = await supabase
+      .from('analyses')
+      .select('language, summary_v2, financials_v2, tech_evolution_v2, competitors_v2, cross_industry_nudge_v1, sources')
+      .eq('id', analysisId)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!analysis) {
+      res.status(404).json({ error: '분석을 찾을 수 없습니다.' });
+      return;
+    }
+    const language: Language = (analysis as any).language === 'ko' ? 'ko' : 'en';
+
+    const signals = collectIcpSignals(analysis as any).filter(s => s.hasSignal);
+
+    console.log(`[icp-insight] START for "${name}" (${signals.length}/5 signals)`);
+    const insights = await withTimeout(
+      generateIcpInsights(name, signals, icp, language),
+      ICP_INSIGHT_TIMEOUT,
+      'icp-insight',
+    );
+
+    if (!insights) {
+      res.status(422).json({ error: 'ICP 인사이트 생성에 실패했습니다. 잠시 후 다시 시도해주세요.' });
+      return;
+    }
+
+    const content: Record<string, { insight: string; consequence_for_icp: string; confidence: string; sources: SectionSource[] }> = {};
+    for (const item of insights) {
+      content[item.category] = {
+        insight: item.insight,
+        consequence_for_icp: item.consequence_for_icp,
+        confidence: item.confidence,
+        sources: sourcesForCategory(item.category, analysis as any),
+      };
+    }
+    const signalsUsed = Object.fromEntries(signals.map(s => [s.category, s.rawData]));
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from('icp_insights')
+      .insert({
+        analysis_id: analysisId,
+        icp_product: icp.product,
+        icp_target_industry: icp.targetIndustry,
+        icp_target_role: icp.targetRole,
+        icp_fingerprint: fingerprint,
+        content,
+        signals_used: signalsUsed,
+      })
+      .select('id, content, created_at')
+      .single();
+    if (insertErr) throw insertErr;
+
+    console.log(`[icp-insight] OK for "${name}"`);
+    res.json({ id: inserted.id, content: inserted.content, created_at: inserted.created_at, cached: false });
+  } catch (err) {
+    console.error('[icp-insight] FAIL', err);
+    res.status(500).json({ error: 'ICP 인사이트 생성 중 오류가 발생했습니다.' });
   }
 });
 
