@@ -312,10 +312,15 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
 // ── Data Source Badge ─────────────────────────────────────────────────────────
 
 // label은 출처 종류별 텍스트 구분용, level은 색상 결정용(EDGAR/DART 둘 다 공식 데이터라 L1로 동일)
+// web_search 라벨은 2026-08-16(작업 D)에 "웹 검색 기반" → "SEC/DART 데이터 없음"으로 변경 —
+// EDGAR/DART 둘 다 미공시 기업은 이제 재무 탭에 웹서치 자유서술을 아예 안 보여주므로(financials
+// 전용 EmptySectionState), "웹 검색 기반"이라는 기존 문구는 "그래도 웹서치로 채워진 데이터가
+// 있다"는 오해를 줄 수 있었다. (참고: 이 컴포넌트는 dart/edgar 라벨도 원래부터 하드코딩
+// 한국어라 언어 토글 미적용 상태 — 이번 변경으로 새로 생긴 격차 아님, 기존 패턴 유지.)
 const DATA_SOURCE_CONFIG: Record<DataSource, { label: string; level: SourceLevel }> = {
-  dart:       { label: 'DART 연동됨',      level: 'L1' },
-  edgar:      { label: 'SEC EDGAR 연동됨', level: 'L1' },
-  web_search: { label: '웹 검색 기반',      level: 'L3' },
+  dart:       { label: 'DART 연동됨',        level: 'L1' },
+  edgar:      { label: 'SEC EDGAR 연동됨',   level: 'L1' },
+  web_search: { label: 'SEC/DART 데이터 없음', level: 'L3' },
 };
 
 function DataSourceBadge({ source }: { source: DataSource }) {
@@ -1631,6 +1636,11 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
 
   const handleGenerate = useCallback(async () => {
     if (!session) { signInWithGoogle(); return; }
+    // analysisId는 스트리밍 도중 emptyBase(name)의 id:''로 남아있다가 'done' 이벤트가 와야
+    // 실제 id로 채워진다 — 그 전에 시도하면 POST /api/analyze//icp-insight로 나가 서버가
+    // analyses 행을 못 찾아 404를 반환한다(2026-08-16, Northwell Health 배치 2/4 실측). 버튼
+    // 자체를 숨기지만(아래 !analysisId 분기), 방어적으로 한 번 더 막는다.
+    if (!analysisId) { setStatus('error'); return; }
     setStatus('loading');
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -1653,6 +1663,19 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
   const handleRated = useCallback((rating: number | null, comment: string | null) => {
     setResult(prev => (prev ? { ...prev, rating, rating_comment: comment } : prev));
   }, [setResult]);
+
+  // 분석이 아직 스트리밍 중이면 analysisId가 빈 문자열이라 생성 자체가 불가능하다 — "생성"
+  // 버튼 대신 명확한 안내만 보여준다(위 handleGenerate 주석 참고). result가 이미 있으면
+  // (드물게 이전 ICP fingerprint로 캐시된 결과) 그대로 보여주는 게 나으므로 이 분기는
+  // !result일 때만 적용.
+  if (!analysisId && !result) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <Lightbulb size={20} className="text-amber-400" />
+        <p className="text-sm text-gray-500 max-w-xs leading-relaxed">{uiT.icpInsight.notYetAvailable}</p>
+      </div>
+    );
+  }
 
   if (status === 'loading') return <SectionGenerating label={uiT.tabs.icp_insight.label} suffix={uiT.actions.sectionGeneratingSuffixShort} />;
 
@@ -3499,15 +3522,21 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
         {tab === 'financials' && (
           (isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <SectionGenerating label={uiT.tabs.financials.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           financialsV2Local
-            ? (hasTabData('financials', data, financialsV2Local)
-                ? <FinancialsV2Tab
-                    f={financialsV2Local}
-                    sources={financialsV2Local.sources ?? data.sources?.financials}
-                    onRefresh={handleRefreshFinancials}
-                    isRefreshing={refreshingFinancials}
-                    dataSource={data.dataSource}
-                  />
-                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('financials') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+            ? (data.dataSource !== 'edgar' && data.dataSource !== 'dart'
+                // EDGAR/DART 둘 다 미공시(비상장·비영리 등) — 재분석해도 달라지지 않으므로
+                // CTA 없는 전용 문구(작업 D, 2026-08-16). 서버가 이제 이 경우 financials_v2를
+                // 항상 빈 상태로 반환하므로 hasTabData()로도 걸러지지만, 그 실패 문구
+                // ("재분석을 시도해보세요")는 이 케이스엔 안 맞아서 먼저 분기한다.
+                ? <EmptySectionState message={uiT.actions.financialsNoOfficialData} />
+                : hasTabData('financials', data, financialsV2Local)
+                  ? <FinancialsV2Tab
+                      f={financialsV2Local}
+                      sources={financialsV2Local.sources ?? data.sources?.financials}
+                      onRefresh={handleRefreshFinancials}
+                      isRefreshing={refreshingFinancials}
+                      dataSource={data.dataSource}
+                    />
+                  : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('financials') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>
         )}
         {tab === 'founder' && (

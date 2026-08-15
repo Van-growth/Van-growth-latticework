@@ -137,6 +137,9 @@ interface UiStringDict {
     sectionGeneratingSuffixShort: string;
     painDiagnosisIntro: string;
     sectionFailedEmpty: string;
+    // 재무제표 자체가 없는 기업(EDGAR/DART 둘 다 미공시, 예: 비상장/비영리) 전용 — 재분석해도
+    // 달라지지 않으므로 sectionFailedEmpty와 별개 문구(재분석 CTA 없음, 2026-08-16 작업 D).
+    financialsNoOfficialData: string;
   };
   benchmarkChart: {
     thisCompany: string;
@@ -162,6 +165,9 @@ interface UiStringDict {
     ownerLabelNamed: (name: string) => string;
     ownerLabelGeneric: string;
     sharedEmpty: string;
+    // 분석이 아직 스트리밍 중(analysisId가 빈 문자열)이라 생성 자체를 시도할 수 없을 때 —
+    // 생성 버튼 대신 이 안내만 표시(2026-08-16, Northwell Health 404 조사 계기).
+    notYetAvailable: string;
   };
   profileForm: {
     companyName: string;
@@ -327,6 +333,7 @@ const ko: UiStringDict = {
     sectionGeneratingSuffixShort: ' 생성 중... (최대 1~2분 정도 소요될 수 있어요)',
     painDiagnosisIntro: '산업 역사와 기술 변화를 함께 진단해요.\n약 7~10분 소요될 수 있어요.',
     sectionFailedEmpty: '이 섹션은 생성에 실패했습니다. 재분석을 시도해보세요.',
+    financialsNoOfficialData: '이 기업은 SEC(EDGAR)나 DART에 공식 재무제표를 공시하지 않아 재무 데이터를 제공할 수 없어요.',
   },
   benchmarkChart: {
     thisCompany: '이 회사',
@@ -362,6 +369,7 @@ const ko: UiStringDict = {
     ownerLabelNamed: (name: string) => `이 분석은 ${name}님의 ICP 기준으로 생성됨`,
     ownerLabelGeneric: '이 분석은 작성자의 ICP 기준으로 생성됨',
     sharedEmpty: '이 공유 링크에는 아직 생성된 디스커버리 질문이 없어요.',
+    notYetAvailable: '분석이 완료되면 이용할 수 있어요. 다른 탭이 채워지는 걸 지켜봐 주세요.',
   },
   profileForm: {
     companyName: '회사명',
@@ -527,6 +535,7 @@ const en: UiStringDict = {
     sectionGeneratingSuffixShort: ' generating... (can take up to 1-2 minutes)',
     painDiagnosisIntro: 'We diagnose industry history and tech evolution together.\nThis can take about 7-10 minutes.',
     sectionFailedEmpty: 'This section failed to generate. Try re-analyzing it.',
+    financialsNoOfficialData: "This company doesn't file official financials with SEC (EDGAR) or DART, so financial data isn't available.",
   },
   benchmarkChart: {
     thisCompany: 'This company',
@@ -562,6 +571,7 @@ const en: UiStringDict = {
     ownerLabelNamed: (name: string) => `This analysis was generated based on ${name}'s ICP`,
     ownerLabelGeneric: "This analysis was generated based on the author's ICP",
     sharedEmpty: 'No discovery questions have been generated for this shared report yet.',
+    notYetAvailable: "This will be available once the analysis finishes. Watch the other tabs fill in.",
   },
   profileForm: {
     companyName: 'Company name',
