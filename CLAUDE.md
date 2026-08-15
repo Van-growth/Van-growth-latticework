@@ -9,99 +9,98 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-14
-**커밋**: ICP 인사이트 탭 관련 2건만 기존 커밋(`8a50e5b` 신규 구현, `d7e8cf5` 설정 페이지 라벨
-버그 수정) — 오늘 세션의 나머지 작업(전략탭 문단분할 UI 반영, Ford/EDGAR 재무 파이프라인
-크래시 수정, PDF 매출비중 0% 표시 수정 등)은 전부 로컬 미커밋
-**Render 배포**: 미확인 — 이번 세션 push 없음
+**날짜**: 2026-08-15
+**커밋**: `4a2f184`(8/13~8/15 세션 누적분 — discovery_questions 통합/sonnet-5 전환/max_tokens+
+로깅 수정) — push 완료. 그 이후 오늘 진행한 재무 파생 지표 원칙(EBITDA 제거) + 공유링크/PDF
+ICP 노출 범위 재확정(Task A) + `/done` KR/EN 체크리스트 추가(Task B)는 전부 로컬 미커밋
+**Render 배포**: 미확인 — `4a2f184` push 이후 배포 트리거 여부 확인할 수단(Render API 토큰/
+MCP)이 이 세션에 없음, Render 대시보드에서 직접 확인 필요
 
 ### 완료
 
-**1. ICP 맞춤형 인사이트 탭 (Step 1~6 완료, 커밋 `8a50e5b`/`d7e8cf5`) + 버그 수정 요청 6건**
-- ✅ **전략탭 문단분할**: `strategy_coherence`를 `<p>`에 `whitespace-pre-line` 추가해 렌더링
-  (`AnalysisCard.tsx`의 `StrategyV2Tab`) — 백엔드가 이미 `\n\n`으로 2~3문단 분할해 보내고
-  있었는데 프론트가 기본 `white-space:normal`이라 줄바꿈이 뭉개지던 것. 완료, 로컬 미커밋.
-- ✅ **Ford 재무조사**: 아래 "3. Ford 재무 파이프라인 전체 히스토리" 참고 — 원인 규명부터
-  최종 크래시 수정+검증까지 완료(NVIDIA/J&J 교차검증만 API 사용량 한도로 보류 중).
-- ⬜ **창업자탭 legacy 기업**: 요청만 접수, 코드 변경 없음 — 착수 전.
-- ⬜ **탭이동시 취소버그**: 요청만 접수, 코드 변경 없음 — 착수 전.
-- ⬜ **로딩 UI 스피너 통일**: 요청만 접수, 코드 변경 없음 — 착수 전.
-- ⬜ **재방문시 결과 유지**: 요청만 접수, 코드 변경 없음 — 착수 전.
-  (4건 미착수는 `git diff` 직접 확인으로 검증됨 — `AnalysisCard.tsx` 전체 diff가 위 전략탭
-  1건뿐이라 나머지 4건에 해당하는 코드 변경이 아예 없음)
+**1. discovery_questions 2단계 통합 + sonnet-5 전환 + 로깅/max_tokens 수정 (커밋 `4a2f184`, push 완료)**
+9개 섹션 스키마에 `discovery_questions` 필드 신규 + ICP 탭 큐레이션 로직, `claude-sonnet-4-6`→
+`claude-sonnet-5` 전체 전환, `callSection()` max_tokens 8000 상향 + JSON 파싱 실패 시 "OK"로
+잘못 찍히던 로깅 결함 수정 + `extractJson()` 파싱 실패 시 원문 덤프 로직 추가. 상세는 커밋
+메시지 및 CLAUDE.md Architecture 섹션 "ICP 인사이트 discovery_questions 2단계 통합" 참고.
+- **이전 Handoff의 "최우선" 항목 해소 확인**: "Anthropic API 사용량 한도가 프로덕션과 같은
+  키인지" — Render 프로덕션 로그 직접 조회로 **같은 키였고 실제 유저 트래픽도 이 에러로
+  실패하고 있었음을 확정**(Amprius 사고 재조사). 다만 "빈 탭" 증상 전체가 이 한도 하나로
+  설명되진 않음(NVIDIA strategy_v2가 `stop_reason=end_turn`인데도 JSON이 깨지는 별개
+  미해결 메커니즘 발견) — 상세는 CLAUDE.md Quality Gate 원칙 섹션 참고.
 
-**2. 공유링크+PDF에 ICP 인사이트 반영 — 결정만 됨, 구현 착수 전**
-방향 결정: "공유링크는 원 분석자 본인의 ICP 그대로 보임(뷰어 본인 ICP로 재계산 안 함)",
-"PDF는 별도 섹션으로 분리하고 'OOO의 ICP 기준' 명시". 코드베이스 전체 확인 결과
-`AnalysisPdf.tsx`/공유 라우트(`share.ts`) 어디에도 ICP 관련 코드가 없음 — 결정은 됐지만
-구현은 0%.
+**2. 재무 파생 지표 처리 원칙 — EBITDA 완전 제거 + Gross Profit 원본 태그 검증 (로컬 미커밋)**
+- 확인 결과 Gross Profit은 이미 EDGAR/DART 원본 태그값만 쓰고 있었음(역산 로직 코드베이스
+  어디에도 없었음). 라이브 SEC API로 20개 기업 직접 대조 — 태그 없는 9개(Ford/Berkshire/
+  Walmart/GOOGL/3M/P&G/ExxonMobil/JPMorgan/Disney) 전부 "회사가 애초에 그 라인을 안 씀"
+  (case a, 진짜 미보고)이었고 유사 대체 태그도 전무 — 태그 매핑 버그(case b)는 0건 확인.
+- EBITDA는 계산 로직이 실제로 있었음(Operating Income + Depreciation) — `financialsTableBuilder.ts`/
+  `edgar.ts`/`edgarBatchPrecompute.ts`/`financialContext.ts`/`fmp.ts`/`claude.ts` 스키마
+  전부에서 제거, `depreciation` 필드 자체도 EBITDA 전용이라 함께 제거. NVIDIA/Ford 골든셋
+  재확인 — EBITDA 행 완전히 사라짐, Gross Profit은 라이브 조회 시 원본값 정상 표시 확인.
+- CLAUDE.md "재무 파생 지표 처리 원칙" 섹션 신설(콘텐츠 원칙 하단).
 
-**3. Ford 재무 파이프라인 전체 히스토리** (이전 세션 + 오늘 세션 종합)
-- 최초 의심: XBRL concept 태그 오매칭 → 실측 검증 결과 빗나간 가설로 판명
-- 다음 의심: 연도키(`fy`) 오용 → 이것도 빗나간 가설
-- **진짜 원인**: Claude가 다년도 재무표를 매 실행마다 텍스트로 재서술하며 발생하는 실행별
-  비결정성(완전히 동일한 컨텍스트를 줘도 어떤 실행은 값을 다 옮기고 어떤 실행은 일부 연도를
-  놓침) — `financialsTableBuilder.ts` 신설로 **서버가 EDGAR/DART raw series에서 직접
-  income_statement/balance_sheet를 조립**해 Claude 응답을 덮어쓰는 구조로 근본 해결
-  (이전 세션에서 완료, 상세는 위 Architecture 섹션 "재무 파이프라인 서버 조립 리팩터링" 참고)
-- **오늘 세션**: 이 리팩터링을 검증할 `server/scripts/testEdgarReanalysisConsistency.ts`
-  신설(Ford/NVIDIA/Johnson & Johnson 각 3회 재실행, 5개년 재무 5개 항목이 실행마다 완전
-  동일한지 확인) → **EBITDA 서버조립 코드가 매 실행 100% 크래시하는 걸 발견**
-  (`s.depreciation[i]`가 옛 `financial_cache` 캐시 blob에서 `undefined`인 채로 배열
-  인덱싱 시도) → 처음엔 `depreciation` 필드만 패치했다가, NVIDIA에서 이번엔 `grossProfit`
-  필드도 동일하게 undefined인 걸 재확인 → Ford만의 문제가 아니라 "필드 추가 시점 이후로
-  캐시가 안 갱신된 회사는 그 필드가 뭐든 undefined"라는 일반 패턴이었음 →
-  `toSeriesInput()`을 8개 필드(revenue/grossProfit/operatingIncome/netIncome/
-  depreciation/assets/liabilities/equity) 전부 공용 `fallback()` 헬퍼로 일반화해 근본
-  수정(`financialsTableBuilder.ts`) — 앞으로 두 타입에 필드가 추가돼도 이 크래시 재발 안 함
-- **최종 검증 상태**: Ford Motor 3회 재실행 income_statement 완전 동일 확인(진짜 PASS —
-  실제 5개년 수치를 직접 diff까지 해서 바이트 단위 동일 확인함, Gross Profit/EBITDA는
-  "Not applicable"로 정상 폴백). **NVIDIA/Johnson & Johnson은 검증 도중 Anthropic API
-  사용량 한도 도달로 중단**(`"You have reached your specified API usage limits. You
-  will regain access on 2026-09-01 at 00:00 UTC."`) — 코드 문제 아님, 재검증 필요.
+**3. 공유 링크/PDF ICP 노출 범위 재확정 — Task A (로컬 미커밋, DB 마이그레이션 미적용)**
+8/13 결정("ICP 원문 그대로 노출") 착수 여부 확인 → 코드 0%였음 확인, 아래 새 방침으로 바로
+구현. 상세는 CLAUDE.md Architecture 섹션 "공유 링크/PDF ICP 노출 범위 확정" 참고.
+- **정정**: 공유 링크/PDF는 discovery_questions 결과만 노출, ICP 원문(제품/타겟산업/
+  타겟직무)은 노출 안 함 — 소유자 영업 정보 보호 목적, 8/13 결정 번복.
+- 구현 중 `icp_insights`에 소유자 특정 컬럼이 없다는 구조적 문제 발견 → `created_by` 추가로
+  해결(사용자 확인 완료). 소유자 라벨은 이메일 마스킹 대신 `profiles.nickname`(선택 입력,
+  미입력 시 일반 문구로 대체)으로 설계 변경 — 사용자가 이메일 기반 PII 노출 우려 제기해서
+  전환(사용자 확인 완료).
+- `share.ts`(공유 응답에 `icpDiscoveryQuestions`/`icpOwnerLabel`만 추가, ICP 원문 select
+  자체를 안 함) / `AnalysisCard.tsx`(`isShareView` prop, 읽기 전용 `SharedIcpQuestionsTab`
+  신설, 별점 위젯 없음) / `AnalysisPdf.tsx`(표지에 문구 한 줄만, 목록/ICP 세부 없음) /
+  `ProfileForm.tsx`+`settings/page.tsx`(닉네임 입력 필드, 온보딩은 기존 `showIcp` 플래그
+  재사용해 계속 숨김) 전부 구현 완료, `tsc --noEmit` 클라이언트/서버 통과.
+- **마이그레이션 2건 작성만 완료, 적용 안 됨**: `20260815_icp_insights_created_by.sql`,
+  `20260815_profiles_nickname.sql` — Supabase MCP 세션이 재인증 필요 상태였고, 사용자에게
+  OAuth URL 전달했으나 이번 세션 안에 완료 확인을 못 받음. **prod+dev 둘 다 미적용** —
+  이 상태로는 골든셋 기업으로 공유 링크를 열어도 새 컬럼/테이블이 없어 5번(실제 동작 확인)을
+  못 함, 다음 세션 최우선.
 
-**4. financial_cache 스테일 이슈**
-`depreciation` 필드가 2026-08-13 `EdgarRawSeries`에 신규 추가됐는데 배치 크론이 월
-1회(매월 1일 02:00 UTC)라 그 이후 재실행된 적이 없음 → Supabase 직접 조회로 확인한 결과
-**`financial_cache` EDGAR 소스 6,819건 전부(100%) depreciation 필드 없음**(RKLB 때처럼
-일부가 아니라 전체 — 상세는 위 Architecture 섹션 "재무 파이프라인 서버 조립 리팩터링"의
-"남은 한계" 참고). **결정: 배치 수동 전체 재실행 안 하고 9/1 정기 크론까지 대기** — 그동안
-EDGAR 소스 기업 전부 EBITDA만 "확인 필요"로 정상 표시(크래시 없음, 다른 4개 지표는 영향
-없음). 급하게 특정 기업을 보여줘야 하면 RKLB 때처럼 `processCompany()` 개별 수동 재생성으로
-대응.
+**4. `/done` 커맨드에 KR/EN 체크리스트 추가 — Task B (로컬 파일, 버전관리 밖)**
+`.claude/commands/done.md`에 새 5번 단계(KR/EN 다국어 체크리스트 확인) 삽입, 이후 단계 전부
+재번호. 이번 `/done` 실행으로 실제로 그 단계가 동작해 이 Handoff에 반영됨을 확인(아래 5번
+참고) — 단, `.claude/commands/*.md`가 `.gitignore`의 `.claude/*`에 걸려 있어(예외는
+`settings.json`뿐) 이 변경 자체는 git으로 추적되지 않음 — 아래 "발견 (미처리)" 참고.
 
-**5. 클라이언트/서버 `tsc --noEmit` 통과 확인** (오늘 세션 변경분 포함)
+**5. KR/EN 다국어 체크리스트 확인 결과 (신규 절차 첫 실행)**
+- Claude 프롬프트 언어 분기: 이번 세션 신규 Claude 프롬프트 콘텐츠 없음(EBITDA 제거는 스키마
+  구조 지시 변경일 뿐 언어 분기와 무관, Task A는 Claude 호출 자체가 없음) — 해당 없음.
+- UI 고정 텍스트: `uiStrings.ts`의 `icpInsight`(`ownerLabelNamed`/`ownerLabelGeneric`/
+  `sharedEmpty`) + `profileForm`(`nickname`/`nicknameHelperText`/`nicknamePlaceholder`)
+  전부 ko/en 양쪽 채움 확인. `AnalysisPdf.tsx`의 신규 문구는 파일 자체 `t(ko,en)` 헬퍼 사용
+  (기존 PDF 전체가 이 패턴이라 uiStrings.ts 대상 아님) — 누락 없음.
 
 ### 남음
-- **⚠️ 최우선 — Anthropic API 사용량 한도가 프로덕션과 같은 키인지 미확인**: 아래 "발견
-  (미처리)" 참고
-- **NVIDIA/Johnson & Johnson 재무 일관성 재검증** — API 사용량 한도로 중단, 9/1 재개 예정
-  (또는 사용자가 콘솔에서 한도 조정 시 그전에도 가능). `server/scripts/
-  testEdgarReanalysisConsistency.ts`(3사×3회 재실행, 재사용 가능하게 남겨둠) 재실행하면 됨.
-  `server/scripts/checkFinancialCacheDepreciationCoverage.ts`(스테일 규모 확인용, 1회성)도
-  남아있음 — 다 쓰면 삭제 대상.
-- **오늘 세션 전체 커밋+push** — CLAUDE.md/AnalysisCard.tsx/AnalysisPdf.tsx/서버 5개 파일
-  (`claude.ts`/`edgar.ts`/`financialContext.ts`/`analyze.ts`/`edgarBatchPrecompute.ts`)/
-  신규 파일(`financialsTableBuilder.ts`, 스크립트 2개)/마이그레이션 1건
-  (`20260813_concept_miss_log.sql`) 전부 로컬 미커밋
+- **마이그레이션 2건 적용 + Task A 실제 동작 확인** — Supabase MCP OAuth 완료 후
+  `20260815_icp_insights_created_by.sql`/`20260815_profiles_nickname.sql` prod+dev 적용,
+  골든셋 기업 공유 링크 열어서 ICP 원문 안 보이고 질문 리스트만 보이는지 육안 확인(다음 세션)
+- 오늘 세션 전체(재무 파생 지표 원칙 + Task A) 커밋+push, `4a2f184` Render 배포 확인
+- **NVIDIA/Johnson & Johnson 재무 일관성 재검증** — 이전 Handoff부터 이월, 이번 세션도
+  미착수. 단 EBITDA가 오늘부로 완전히 제거돼 원래 이 검증을 촉발했던 "EBITDA 크래시" 우려는
+  해소됨 — 남은 의미는 매출/매출총이익/영업이익/순이익 4개 항목의 실행별 결정론성 재확인뿐
+  (`server/scripts/testEdgarReanalysisConsistency.ts` 재사용)
 - 창업자탭 legacy 기업 / 탭이동시 취소버그 / 로딩 UI 스피너 통일 / 재방문시 결과 유지 —
-  4건 전부 착수 전(위 "1." 참고)
-- 공유링크+PDF ICP 인사이트 구현 — 방향 결정만 되고 코드 0%(위 "2." 참고)
-- **언어 토글 마스터 계정 전환** — 요청은 들어갔으나 진행 여부 미확인 상태
-- **비상장 기업 검색 실제 동작 테스트** — 요청했으나 아직 결과 못 받음
+  4건 전부 착수 전(이전 Handoff부터 이월)
+- **언어 토글 마스터 계정 전환** / **비상장 기업 검색 실제 동작 테스트** — 이전 Handoff부터
+  이월, 진행 상황 미확인
 - (이월) CLAUDE.md 문서화 3건(콘텐츠 포맷 원칙 신규 규칙/재현성 방어 원칙/핵심 포지셔닝+검증
   테스트 설계) — 계속 미해결
 - (이월) dev/ops 서버 분리(Render) — 계속 이월 중
 - (이월) Reddit r/Sales_Professionals 반응 확인/답글, AE 인터뷰 추가 진행 — 별도 세션(GTM)
 
 ### 발견 (미처리)
-- **⚠️ Anthropic API 사용량 한도가 프로덕션 키와 공유되는지 확인 필요** — 오늘 세션 재테스트
-  중 "9/1까지 사용량 한도 도달"(400 BadRequestError, "You have reached your specified
-  API usage limits") 에러를 만남. "9/1 00:00 UTC부터 재개"라는 문구가 월간 리셋 한도
-  패턴과 일치 — 콘솔에서 설정한 워크스페이스/키 단위 지출 한도로 추정. 이게 프로덕션
-  서비스가 쓰는 것과 같은 `ANTHROPIC_API_KEY`라면, 지금 이 순간도 실제 유저 분석 요청이
-  이 에러로 실패하고 있을 가능성 있음 — 세션 중 사용자에게 직접 확인 요청했으나 아직 답
-  못 받음. **다음 세션 최우선 확인 사항**.
+- **⚠️ `.claude/commands/*.md`가 통째로 `.gitignore` 대상**(`.claude/*`, 예외는
+  `settings.json`뿐) — 오늘 추가한 `/done`의 KR/EN 체크리스트를 포함해 모든 커스텀 슬래시
+  커맨드 정의가 이 컴퓨터에만 존재하고 git으로 추적되지 않음. 의도적 제외인지(개인 워크플로우)
+  실수인지 확인 필요 — `settings.local.json`(개인용)과 `commands/*.md`(프로젝트 워크플로우
+  정의, 팀 공유 성격에 가까움)는 성격이 달라 보임.
+- (이월) NVIDIA strategy_v2가 `stop_reason=end_turn`(정상 종료)인데도 JSON이 깨지는 원인
+  미특정 — 재발 시 `callSection()` FAIL 로그의 stop_reason/output_tokens + `extractJson()`의
+  `server/debug-logs/parse-failures/` 원문 덤프로 확인할 것(2026-08-15 도입된 디버깅 장치)
 - (이월) 회사명 캐시 키 분절 버그 — 재작업 금지 대상, 상세는 git log 참고
 - (이월) Quality Gate 재현성 체크 설계 미정으로 구현 보류
 - (이월) SEC 링크 유효성 자동 검증 — 스코프 밖 보류
@@ -115,10 +114,7 @@ EDGAR 소스 기업 전부 EBITDA만 "확인 필요"로 정상 표시(크래시 
   있음, 실측에선 미재현이나 표시만 해둠
 
 ### 다음 세션 우선순위
-1. **Anthropic API 사용량 한도가 프로덕션에 영향 주는지부터 확인** (가장 급함)
-2. NVIDIA/Johnson & Johnson 재무 일관성 재검증 (한도 해제/조정 후)
-3. 오늘 세션 전체 커밋+push, Render 배포 확인
-4. 나머지 4개 버그(창업자탭 legacy/탭이동취소/스피너통일/재방문유지) 착수 여부 우선순위 결정
+1. Supabase MCP OAuth 완료 확인 → 마이그레이션 2건 prod+dev 적용 → Task A 골든셋 실제 동작 확인
 
 ## Vision & Mission
 
@@ -559,6 +555,22 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   아래 백로그 완료 목록 참고)
 - Bull/Bear 금지 → 성장 모멘텀/핵심 리스크
 - "확인 필요" 남발 금지 → 추정값이라도 출처와 함께 제공
+
+### 재무 파생 지표 처리 원칙 (2026-08-15)
+
+- **EBITDA는 표시하지 않는다.** GAAP 표준 계정과목이 아니고, 계산하려면
+  감가상각비(D&A)가 필요한데 회사마다 현금흐름표 내 위치·태그가 달라
+  안정적으로 자동 추출이 안 됨. 직접 계산해서 보여주는 것 자체가
+  신뢰성 리스크 — "확인 필요 남발 금지, 추정값도 출처와 함께" 원칙을
+  지킬 수 없는 항목이므로 아예 노출하지 않는다.
+- **매출총이익(Gross Profit)은 EDGAR/DART가 직접 제공하는 태그값만
+  표시하고, 매출-매출원가로 역산하지 않는다.** 태그가 없으면(예: Ford
+  Motor처럼 제조+금융 결합 구조라 이 라인 자체가 공시에 없는 경우)
+  "해당없음"으로 그대로 노출.
+- **원칙 요약**: 손익계산서 항목은 공시된 그대로(as-reported)만 보여준다.
+  1min이 임의로 계산해서 채워넣는 파생 지표는 만들지 않는다 — 정확성이
+  담보 안 되는 계산값보다 "없으면 없다고 보여주는" 쪽이 신뢰성 원칙에
+  부합.
 
 ### 콘텐츠 포맷 원칙 (2026-08-12 신설)
 필드 성격별로 서술 방식을 고정한다 — 전부 문단으로 몰아쓰지 않는다:
@@ -1969,6 +1981,49 @@ competitors_v2/value_chain_v2/strategy_v2/industry_history_v2/tech_evolution_v2/
 string[]`)로 두고, 후보 수집 시 `?? []`로 방어해 크래시 없이 자연히 후보 수가 적게(또는 0개)
 잡히는 데 그친다. 별도 백필 없음 — 재분석/배치 재실행으로 자연 해소(depreciation/grossProfit
 필드 스테일 이슈와 동일 원칙).
+
+### 공유 링크/PDF ICP 노출 범위 확정 (2026-08-15)
+
+**정정**: 2026-08-13에 결정됐던 "공유 링크는 원 분석자 본인의 ICP 그대로 보임" 방침을 아래로
+번복한다 — **공유 링크/PDF에는 discovery_questions 결과만 노출하고 ICP 원문(제품/타겟산업/
+타겟직무)은 노출하지 않는다 — 소유자 영업 정보 보호 목적, 2026-08-15 수정 (기존 8/13 "그대로
+노출" 결정 번복)**. 착수 전 확인 결과 8/13 방침은 애초에 구현된 적이 없었음(`share.ts`/
+`AnalysisPdf.tsx` 어디에도 ICP 관련 코드 없었음) — 구버전을 걷어낼 필요 없이 새 방침으로 바로
+구현.
+
+**발견한 구조적 문제 + 해결**: `icp_insights`(2026-08-15 discovery_questions 개편으로 신설)는
+캐시 키가 `(analysis_id, icp_fingerprint)`뿐이라 소유자를 특정할 컬럼이 없었음 — ICP는 "그
+analysis를 만든 사람"이 아니라 "그 순간 로그인해서 탭을 연 사람" 본인의 `profiles.icp_*`를
+매번 읽어 생성하는 구조라, 인기 있는 analysis 하나에 여러 유저가 각자 자기 ICP로 만든 행이
+여러 개 있을 수 있음. 이 상태로 공유 링크에 "아무 icp_insights 행"을 노출하면 소유자가 아닌
+**다른 로그인 유저의 결과가 소유자 이름으로 잘못 노출**되는 사고로 이어질 수 있어(그 사람도
+동의한 적 없음), `icp_insights.created_by`(uuid, `20260815_icp_insights_created_by.sql`,
+prod+dev 적용) 신규 — `POST /api/analyze/:id/icp-insight`가 생성 시 `authUser.id`로 채운다.
+`GET /api/share/:token`는 `icp_insights` 중 `created_by = analyses.created_by`인 행만(가장
+최근 것) 조회 — 소유자가 ICP 탭을 직접 연 적이 없으면 이 섹션 자체를 노출하지 않는다(다른
+유저의 결과로 대체하지 않음). `created_by`가 없는 옛 analysis(2026-07-16 이전 생성분)도
+동일하게 미노출.
+
+**소유자 표시 라벨 — 이메일 대신 닉네임**: 애초 요청은 "이메일 앞부분 마스킹(sg.van.p***)"
+이었으나, 마스킹해도 실제 이메일에서 유도된 PII라는 지적을 받아 설계를 바꿨다 — 대신
+`profiles.nickname`(text, 선택 입력, `20260815_profiles_nickname.sql`) 신규, 설정 페이지에
+입력 필드 추가(`ProfileForm.tsx`, `showIcp`와 동일 플래그로 온보딩 모달에서는 숨김 — ICP와
+같은 "설정 페이지 전용, 온보딩엔 안 넣는" 이유). 닉네임 미입력이면 공유 화면/PDF는 이름 없이
+일반 문구("이 분석은 작성자의 ICP 기준으로 생성됨")로 대체 — 이메일은 어떤 형태로도 절대
+노출하지 않는다.
+
+**구현 요약**:
+- `share.ts`: `GET /:token` 응답에 `icpDiscoveryQuestions`(질문 리스트, ICP 원문 필드는
+  애초에 select하지 않아 응답에 존재할 방법 자체가 없음)와 `icpOwnerLabel`(닉네임 또는 null)
+  추가 — 별도 공개 엔드포인트를 만들지 않고 기존 공유 라우트 응답에만 실어, "공유 토큰으로
+  조회되는 analysis_id에 한해서만 노출"이 라우트 경계로 자연히 보장된다.
+- `AnalysisCard.tsx`: 새 `isShareView` prop(`ShareContent.tsx`가 `<AnalysisCard isShareView
+  ...>`로 전달) — true면 ICP 탭이 인터랙티브 `IcpInsightTab`(생성/재생성/별점 위젯) 대신 읽기
+  전용 `SharedIcpQuestionsTab`(서버가 이미 골라준 목록만 렌더, API 호출 없음, 별점 위젯 없음)을
+  쓴다. 히스토리/자기 리포트 뷰(`isShareView` 미지정)는 기존 인터랙티브 동작 그대로.
+- `AnalysisPdf.tsx`: 공유 링크와 달리 PDF는 질문 리스트까지는 안 넣고 **표지 페이지에 문구
+  한 줄만**("이 분석은 OOO님의 ICP 기준으로 생성됨") — `data.icpDiscoveryQuestions`가 있을
+  때만(소유자가 생성한 적 있을 때만) 조건부 렌더링, ICP 세부 필드/질문 목록은 렌더링 안 함.
 
 ---
 
