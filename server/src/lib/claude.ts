@@ -1632,35 +1632,49 @@ ${candidatesJson}
 
 ${schema}`;
 
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
-      max_tokens: 1500,
-      system: [{ type: 'text', text: discoveryQuestionCurationSystem(language), cache_control: { type: 'ephemeral' } }] as any,
-      messages: [{ role: 'user', content: userMessage }],
-    });
-    logCacheUsage('discovery_question_curation', response.usage);
-    const raw = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map(b => b.text)
-      .join('');
-    const parsed = extractJson<{ selected: Array<{ id: number; question: string }> }>(raw, 'discovery_question_curation');
-    if (!parsed?.selected || !Array.isArray(parsed.selected)) {
-      console.error(`[claude] discovery_question_curation FAIL ${Date.now() - t0}ms — no selected array in response`);
+  // 1회 재시도(2026-08-15) — Ford value_chain_v2와 같은 계열의 간헐적·비결정적 Claude
+  // Sonnet 5 JSON 파싱 실패(재현 시도 8/8 성공 확인, 매 실행이 완전히 독립적)라는 게
+  // 밝혀져서, 같은 프롬프트를 한 번 더 시도하면 통과할 가능성이 높다고 판단했다. 이 함수
+  // 하나에만 우선 적용 — 8개 배치 섹션 전체(callSection())로 확대할지는 이 케이스의
+  // 효과를 지켜본 뒤 별도 결정(CLAUDE.md "모델 티어링"/Quality Gate 원칙 섹션 참고).
+  // withTimeout(analyze.ts, DISCOVERY_QUESTION_TIMEOUT)이 재시도 포함 전체를 감싸므로
+  // 여기서 별도 타임아웃을 두지 않는다 — 대신 그 상수를 60s→90s로 올려 2회 시도分 여유를
+  // 확보했다(실측 24개 후보 기준 회당 11~17s, 최악의 경우를 감안해도 90s면 충분).
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-5',
+        max_tokens: 1500,
+        system: [{ type: 'text', text: discoveryQuestionCurationSystem(language), cache_control: { type: 'ephemeral' } }] as any,
+        messages: [{ role: 'user', content: userMessage }],
+      });
+      logCacheUsage('discovery_question_curation', response.usage);
+      const raw = response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map(b => b.text)
+        .join('');
+      const parsed = extractJson<{ selected: Array<{ id: number; question: string }> }>(raw, 'discovery_question_curation');
+      if (!parsed?.selected || !Array.isArray(parsed.selected)) {
+        console.error(`[claude] discovery_question_curation FAIL (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms — no selected array in response`);
+        if (attempt < MAX_ATTEMPTS) continue;
+        return null;
+      }
+
+      // 근거 검증: 실제로 넘긴 candidate id만 통과 — 지어낸 id나 근거 없는 항목은 버린다.
+      const validIds = new Set(candidates.map(c => c.id));
+      const result: CuratedDiscoveryQuestion[] = parsed.selected
+        .filter(item => typeof item.id === 'number' && validIds.has(item.id) && typeof item.question === 'string' && item.question.trim())
+        .slice(0, 5)
+        .map(item => ({ id: item.id, question: item.question.trim() }));
+
+      console.log(`[claude] discovery_question_curation OK (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms (${result.length}/${candidates.length} candidates selected)`);
+      return result;
+    } catch (err) {
+      console.error(`[claude] discovery_question_curation FAIL (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms`, err);
+      if (attempt < MAX_ATTEMPTS) continue;
       return null;
     }
-
-    // 근거 검증: 실제로 넘긴 candidate id만 통과 — 지어낸 id나 근거 없는 항목은 버린다.
-    const validIds = new Set(candidates.map(c => c.id));
-    const result: CuratedDiscoveryQuestion[] = parsed.selected
-      .filter(item => typeof item.id === 'number' && validIds.has(item.id) && typeof item.question === 'string' && item.question.trim())
-      .slice(0, 5)
-      .map(item => ({ id: item.id, question: item.question.trim() }));
-
-    console.log(`[claude] discovery_question_curation OK ${Date.now() - t0}ms (${result.length}/${candidates.length} candidates selected)`);
-    return result;
-  } catch (err) {
-    console.error(`[claude] discovery_question_curation FAIL ${Date.now() - t0}ms`, err);
-    return null;
   }
+  return null;
 }

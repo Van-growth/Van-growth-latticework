@@ -1128,11 +1128,16 @@ router.post('/:id/pain-diagnosis', async (req: Request, res: Response) => {
 // financial_impact_question)이 이미 생성해둔 discovery_questions 후보 풀에서, 이 유저의
 // ICP와 관련도 높은 3-5개를 선별한다. ICP가 전부 비어있으면 Claude 호출 없이 결정론적으로
 // 선택(pickDefaultDiscoveryQuestions), 하나라도 있으면 Claude 큐레이션(curateDiscoveryQuestions)
-// 호출 — 신규 web_search 없는 단일 호출이라 pain-diagnosis(10분)보다 훨씬 짧게 잡음(60초).
+// 호출 — 신규 web_search 없는 단일 호출이라 pain-diagnosis(10분)보다 훨씬 짧게 잡음(90초).
 // /reanalyze·/pain-diagnosis와 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시
 // 협업 UX). analysis_id + icp_fingerprint 캐시(icp_insights 테이블)는 기존 그대로 재사용 —
 // 별도 캐시 테이블 신규 생성 없음.
-const DISCOVERY_QUESTION_TIMEOUT = 60 * 1000;
+// 60s→90s(2026-08-15): curateDiscoveryQuestions()가 JSON 파싱 실패 시 1회 재시도하도록
+// 바뀌면서, 이 상수가 재시도까지 포함한 전체 호출을 감싼다 — 기존 60s는 1회 호출
+// 기준으로 여유를 잡은 값이라 재시도가 추가되면 정상적인 2회차 시도가 이 타임아웃에
+// 먼저 걸려 커스텀 재시도 로직이 무의미해질 위험이 있었다. 실측(Ford 24개 후보 기준
+// 회당 11~17s)으로는 2회 합쳐도 90s에 크게 못 미치지만, 네트워크 변동을 감안해 여유를 뒀다.
+const DISCOVERY_QUESTION_TIMEOUT = 90 * 1000;
 
 function normalizeIcpField(v: string | null | undefined): string | null {
   const trimmed = v?.trim();
