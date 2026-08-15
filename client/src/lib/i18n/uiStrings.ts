@@ -156,6 +156,10 @@ interface UiStringDict {
     ratingSubmit: string;
     ratingSubmitted: string;
     ratingFailed: string;
+    // 공유 뷰(읽기 전용) 전용 — 소유자 표시 라벨/빈 상태. 별점 위젯은 공유 뷰에서 아예 숨김.
+    ownerLabelNamed: (name: string) => string;
+    ownerLabelGeneric: string;
+    sharedEmpty: string;
   };
   profileForm: {
     companyName: string;
@@ -348,6 +352,9 @@ const ko: UiStringDict = {
     ratingSubmit: '제출',
     ratingSubmitted: '평가해주셔서 감사합니다',
     ratingFailed: '평가 저장에 실패했어요. 다시 시도해주세요.',
+    ownerLabelNamed: (name: string) => `이 분석은 ${name}님의 ICP 기준으로 생성됨`,
+    ownerLabelGeneric: '이 분석은 작성자의 ICP 기준으로 생성됨',
+    sharedEmpty: '이 공유 링크에는 아직 생성된 디스커버리 질문이 없어요.',
   },
   profileForm: {
     companyName: '회사명',
@@ -540,6 +547,9 @@ const en: UiStringDict = {
     ratingSubmit: 'Submit',
     ratingSubmitted: 'Thanks for the feedback',
     ratingFailed: 'Failed to save your feedback. Please try again.',
+    ownerLabelNamed: (name: string) => `This analysis was generated based on ${name}'s ICP`,
+    ownerLabelGeneric: "This analysis was generated based on the author's ICP",
+    sharedEmpty: 'No discovery questions have been generated for this shared report yet.',
   },
   profileForm: {
     companyName: 'Company name',
