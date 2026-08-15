@@ -9,98 +9,154 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-15
-**커밋**: `4a2f184`(8/13~8/15 세션 누적분 — discovery_questions 통합/sonnet-5 전환/max_tokens+
-로깅 수정) — push 완료. 그 이후 오늘 진행한 재무 파생 지표 원칙(EBITDA 제거) + 공유링크/PDF
-ICP 노출 범위 재확정(Task A) + `/done` KR/EN 체크리스트 추가(Task B)는 전부 로컬 미커밋
-**Render 배포**: 미확인 — `4a2f184` push 이후 배포 트리거 여부 확인할 수단(Render API 토큰/
-MCP)이 이 세션에 없음, Render 대시보드에서 직접 확인 필요
+**날짜**: 2026-08-16 (2026-08-15 세션에서 이어짐, 자정 넘겨 계속)
+**커밋**: 오늘 세션 전체 push 완료 — `21714f4`(gitignore 커스텀 커맨드) → `ed5432a`/`0994ddc`
+(재무 5원칙+revenue_lines) → `aa86686`/`a33dafe`/`08f79bd`(ICP i18n/상태끌어올리기/공유링크
+ICP 노출) → `c0273cf`/`f3c9364`/`0b96c1a`(체크마크 실콘텐츠 판정+ICP 재시도) →
+`75788d4`/`12a6a29`(로딩 UI 통일) → `cbf7977`/`3f75c64`/`b30a911`(작업 D+ICP 스트리밍 게이트).
+**Render 배포**: 미확인 — push는 전부 완료됐으나 배포 트리거 여부 확인할 수단(Render API
+토큰/MCP)이 이 세션에 없음, Render 대시보드에서 직접 확인 필요
 
 ### 완료
 
-**1. discovery_questions 2단계 통합 + sonnet-5 전환 + 로깅/max_tokens 수정 (커밋 `4a2f184`, push 완료)**
-9개 섹션 스키마에 `discovery_questions` 필드 신규 + ICP 탭 큐레이션 로직, `claude-sonnet-4-6`→
-`claude-sonnet-5` 전체 전환, `callSection()` max_tokens 8000 상향 + JSON 파싱 실패 시 "OK"로
-잘못 찍히던 로깅 결함 수정 + `extractJson()` 파싱 실패 시 원문 덤프 로직 추가. 상세는 커밋
-메시지 및 CLAUDE.md Architecture 섹션 "ICP 인사이트 discovery_questions 2단계 통합" 참고.
-- **이전 Handoff의 "최우선" 항목 해소 확인**: "Anthropic API 사용량 한도가 프로덕션과 같은
-  키인지" — Render 프로덕션 로그 직접 조회로 **같은 키였고 실제 유저 트래픽도 이 에러로
-  실패하고 있었음을 확정**(Amprius 사고 재조사). 다만 "빈 탭" 증상 전체가 이 한도 하나로
-  설명되진 않음(NVIDIA strategy_v2가 `stop_reason=end_turn`인데도 JSON이 깨지는 별개
-  미해결 메커니즘 발견) — 상세는 CLAUDE.md Quality Gate 원칙 섹션 참고.
+**1. 재무 데이터 신뢰성 5원칙 확정 + 구현 (Ford Motor Co 세그먼트 매출 비중 오류에서 촉발)**
+Ford PDF에서 세그먼트 매출 비중이 두 섹션(summary_v2 12% vs business_model_v2 7%)에서
+다르게 나옴 → 10-K 원문 대조로 7.09%가 정답 확인 → 두 섹션 모두 raw 세그먼트 데이터 없이
+Claude가 웹서치 스니펫으로 자유서술 추정하고 있었던 게 원인. **상위 원칙**: 1min의 모든
+재무 수치는 공식 F/S(EDGAR 원본 공시)에 실제로 존재하는 값만 표시 — 계산·추정·재구성 없이,
+F/S에 없는 값은 항목 자체를 안 보여준다. 하위 5원칙 전부 구현 완료:
+1. EBITDA 미표시 — D&A 소스 불안정, 계산값 신뢰 불가
+2. 매출총이익은 F/S 원본 태그만 — 역산 안 함, 없으면 "해당없음"
+3. 매출 세그먼트 라인은 F/S에 실제 나뉜 대로만 — R.htm 파싱 신규 구현(FilingSummary.xml →
+   R.htm, XBRL axis/member 기반). Ford/Apple/NVIDIA/TSM/Toyota 5개사 실측 검증(Ford
+   92.9%/7.1%가 원문과 정확히 일치). 단위 배율 자동보정, ShortName 매칭 실패 시 안전
+   폴백(null) 확인. `revenue_share`(구 웹서치 추정) 완전 제거.
+4. 10-K/20-F만 사용 — 라이브 경로는 이미 만족, 배치 경로(edgarBatchPrecompute.ts) 20-F
+   누락 발견해 통일
+5. FY 라벨은 회사 표기 그대로 + 연도 컬럼 동적화 — 고정 5칸(fy2021~fy2025) 하드코딩 제거,
+   `s.fiscalYears` 기반 동적 처리. **이 작업 중 NVIDIA FY2026이 고정 5칸에 걸려 실제로
+   드롭되고 있던 버그를 발견해 해소**(막연한 예방이 아니라 실제 진행 중이던 문제였음)
+상세는 CLAUDE.md "재무 파생 지표 처리 원칙" 섹션 참고.
+- **참고— FCF는 아직 미착수**: 같은 원칙(CapEx 소스 불안정성)이 FCF에도 적용될 수 있다는
+  논의가 있었으나, 이 세션 코드베이스에는 반영되지 않음 — `cash_flow.fcf`/
+  `unit_economics.fcf_margin` 둘 다 여전히 활성 표시 중, 관련 커밋도 없음. EBITDA와
+  동일하게 제거할지는 다음 세션에서 별도 판단 필요(자동으로 "완료"된 게 아님, 확인 필요).
 
-**2. 재무 파생 지표 처리 원칙 — EBITDA 완전 제거 + Gross Profit 원본 태그 검증 (로컬 미커밋)**
-- 확인 결과 Gross Profit은 이미 EDGAR/DART 원본 태그값만 쓰고 있었음(역산 로직 코드베이스
-  어디에도 없었음). 라이브 SEC API로 20개 기업 직접 대조 — 태그 없는 9개(Ford/Berkshire/
-  Walmart/GOOGL/3M/P&G/ExxonMobil/JPMorgan/Disney) 전부 "회사가 애초에 그 라인을 안 씀"
-  (case a, 진짜 미보고)이었고 유사 대체 태그도 전무 — 태그 매핑 버그(case b)는 0건 확인.
-- EBITDA는 계산 로직이 실제로 있었음(Operating Income + Depreciation) — `financialsTableBuilder.ts`/
-  `edgar.ts`/`edgarBatchPrecompute.ts`/`financialContext.ts`/`fmp.ts`/`claude.ts` 스키마
-  전부에서 제거, `depreciation` 필드 자체도 EBITDA 전용이라 함께 제거. NVIDIA/Ford 골든셋
-  재확인 — EBITDA 행 완전히 사라짐, Gross Profit은 라이브 조회 시 원본값 정상 표시 확인.
-- CLAUDE.md "재무 파생 지표 처리 원칙" 섹션 신설(콘텐츠 원칙 하단).
+**2. "완료 플래그 vs 실제 콘텐츠 존재" 버그 클래스 발견 및 수정 (Ford value_chain_v2에서 촉발)**
+Ford 밸류체인 탭에 체크마크(완료 표시)는 떴는데 본문이 비어있다는 신고 → `hasTabData()`가
+`!!data.X`(null 여부)만 체크하는데, `callSection()`이 간헐적으로 JSON 파싱에 실패해도
+서버 병합 로직이 `DEFAULT_ANALYSIS_DATA`의 빈 placeholder로 항상 채워 non-null을
+만들어버림 — 배치 생성 8개 섹션(summary/value_chain/business_model/competitors/
+cross_industry_nudge/strategy/financials/founder) 전부에 구조적으로 잠재해 있던 버그.
+- `hasTabData()`를 섹션별 실제 콘텐츠 신호(배열 길이 등) 기반으로 전환, 콘텐츠 없으면
+  공용 `EmptySectionState`(재분석 유도 버튼)로 렌더 게이트 — Ford value_chain_v2 재분석으로
+  정상화 확인(layers 0→5).
+- **연관 조사**: 같은 세션에서 "ICP 인사이트 생성 시 422" 신고도 조사 — value_chain_v2가
+  비어서 discovery_questions 후보가 부족해 422가 난다는 인과관계는 **반증됨**(Ford는
+  value_chain 0개 후보여도 나머지 8개 소스에서 총 24개 확보, `curateDiscoveryQuestions()`는
+  후보 0개여도 애초에 `null`이 아니라 빈 배열 반환). 두 버그는 인과관계가 아니라 같은
+  계열의 독립된 두 증상(Sonnet 5의 간헐적 JSON 파싱 실패 — NVIDIA strategy_v2, J&J
+  strategy_v2/nudge에 이은 세 번째 확인 사례)으로 확정.
+- `curateDiscoveryQuestions()` 1회 재시도 추가(같은 실패 클래스 완화), 타임아웃 60→90초
+  (실측 11~17초/call 기준 여유 확보). `callSection()` 8개 섹션 전체로 재시도 확대는 이번
+  단일 케이스 효과를 지켜본 뒤 별도 판단하기로 보류(비용 2배 우려).
+상세는 CLAUDE.md Quality Gate 원칙 섹션 "Ford Motor value_chain_v2 빈 콘텐츠 + ICP
+인사이트 422 조사" 및 "프론트 진행 상태 표시 원칙" 참고.
 
-**3. 공유 링크/PDF ICP 노출 범위 재확정 — Task A (로컬 미커밋, DB 마이그레이션 미적용)**
-8/13 결정("ICP 원문 그대로 노출") 착수 여부 확인 → 코드 0%였음 확인, 아래 새 방침으로 바로
-구현. 상세는 CLAUDE.md Architecture 섹션 "공유 링크/PDF ICP 노출 범위 확정" 참고.
-- **정정**: 공유 링크/PDF는 discovery_questions 결과만 노출, ICP 원문(제품/타겟산업/
-  타겟직무)은 노출 안 함 — 소유자 영업 정보 보호 목적, 8/13 결정 번복.
-- 구현 중 `icp_insights`에 소유자 특정 컬럼이 없다는 구조적 문제 발견 → `created_by` 추가로
-  해결(사용자 확인 완료). 소유자 라벨은 이메일 마스킹 대신 `profiles.nickname`(선택 입력,
-  미입력 시 일반 문구로 대체)으로 설계 변경 — 사용자가 이메일 기반 PII 노출 우려 제기해서
-  전환(사용자 확인 완료).
-- `share.ts`(공유 응답에 `icpDiscoveryQuestions`/`icpOwnerLabel`만 추가, ICP 원문 select
-  자체를 안 함) / `AnalysisCard.tsx`(`isShareView` prop, 읽기 전용 `SharedIcpQuestionsTab`
-  신설, 별점 위젯 없음) / `AnalysisPdf.tsx`(표지에 문구 한 줄만, 목록/ICP 세부 없음) /
-  `ProfileForm.tsx`+`settings/page.tsx`(닉네임 입력 필드, 온보딩은 기존 `showIcp` 플래그
-  재사용해 계속 숨김) 전부 구현 완료, `tsc --noEmit` 클라이언트/서버 통과.
-- **마이그레이션 2건 작성만 완료, 적용 안 됨**: `20260815_icp_insights_created_by.sql`,
-  `20260815_profiles_nickname.sql` — Supabase MCP 세션이 재인증 필요 상태였고, 사용자에게
-  OAuth URL 전달했으나 이번 세션 안에 완료 확인을 못 받음. **prod+dev 둘 다 미적용** —
-  이 상태로는 골든셋 기업으로 공유 링크를 열어도 새 컬럼/테이블이 없어 5번(실제 동작 확인)을
-  못 함, 다음 세션 최우선.
+**3. 섹션 로딩 UI 스켈레톤 → 스피너+예상 소요시간 텍스트로 통일**
+산업역사/기술역사 탭만 `SectionGenerating`(스피너+ETA)을 쓰고 나머지 8개 배치 섹션+성장
+시나리오+ICP 인사이트는 `SummarySkeleton`/`CardsSkeleton`/`TableSkeleton`/`FounderSkeleton`
+4종 shimmer를 제각각 쓰던 불일치 해소. 4개 스켈레톤 컴포넌트+공용 `Sk` 헬퍼+`.skeleton`/
+`@keyframes shimmer` CSS 전부 삭제, 전 섹션이 `SectionGenerating` 하나로 통일. ETA 문구는
+트리거별 실제 서버 타임아웃 기준 2종 유지(짧은 배치/재분석/ICP용 "최대 1~2분", 긴 pain
+진단용 "최대 10분"). 상세는 위 "완료" 백로그 참고.
 
-**4. `/done` 커맨드에 KR/EN 체크리스트 추가 — Task B (로컬 파일, 버전관리 밖)**
-`.claude/commands/done.md`에 새 5번 단계(KR/EN 다국어 체크리스트 확인) 삽입, 이후 단계 전부
-재번호. 이번 `/done` 실행으로 실제로 그 단계가 동작해 이 Handoff에 반영됨을 확인(아래 5번
-참고) — 단, `.claude/commands/*.md`가 `.gitignore`의 `.claude/*`에 걸려 있어(예외는
-`settings.json`뿐) 이 변경 자체는 git으로 추적되지 않음 — 아래 "발견 (미처리)" 참고.
+**4. "작업 D" — EDGAR/DART 둘 다 없는 기업의 financials_v2 웹서치 자유서술 폴백 제거
+(Northwell Health 실측에서 촉발)**
+`overrideFinancialsTable()`은 raw 데이터가 없으면 Claude 결과를 "그대로 두는" 방어 로직만
+있었고, 애초에 Claude가 웹서치만으로 재무제표를 자유서술하는 것 자체는 막지 못하고 있었음
+— Northwell Health(비상장 비영리 헬스시스템) 실측: `data_source='web_search'`인데도
+손익계산서/재무상태표 각 4행이 채워져 있었고, 현금흐름 `notes`엔 "[3]"/"[4]" 각주까지 붙은
+그럴듯한 서사가 있었음(전부 웹검색 추정, 공식 F/S 아님).
+- `fetchFinancialContext()`가 `source==='web_search'`(EDGAR/DART 둘 다 없음)를 반환하면
+  financials_v2를 만드는 3개 경로(배치3/`refreshFinancials()`/
+  `reanalyzeSingleSection('financials_v2')`) 전부 Claude 호출 자체를 건너뛰고 완전히 빈
+  `FinancialsV2`(`emptyFinancialsV2()`)를 반환하도록 변경 — 생성 후 필터링이 아니라 생성
+  자체를 막아 API 비용도 절약.
+- 프론트: `dataSource!=='edgar'&&!=='dart'`면 재무 탭에 전용 빈 상태(재분석 CTA 없음 —
+  재시도해도 달라지지 않으므로) 표시. 상단 데이터소스 배지도 "웹 검색 기반" →
+  "SEC/DART 데이터 없음"으로 변경.
+- **검증 완료**: Northwell Health 직접 재분석 — 스킵 로직 1ms 완료(Claude 미호출) 확인,
+  실제 DB 레코드도 4/4행(가짜 데이터) → 0/0행(정직한 빈 상태)로 복구 확인.
+상세는 CLAUDE.md "재무 파생 지표 처리 원칙" 6번 및 Quality Gate 원칙 섹션 참고.
 
-**5. KR/EN 다국어 체크리스트 확인 결과 (신규 절차 첫 실행)**
-- Claude 프롬프트 언어 분기: 이번 세션 신규 Claude 프롬프트 콘텐츠 없음(EBITDA 제거는 스키마
-  구조 지시 변경일 뿐 언어 분기와 무관, Task A는 Claude 호출 자체가 없음) — 해당 없음.
-- UI 고정 텍스트: `uiStrings.ts`의 `icpInsight`(`ownerLabelNamed`/`ownerLabelGeneric`/
-  `sharedEmpty`) + `profileForm`(`nickname`/`nicknameHelperText`/`nicknamePlaceholder`)
-  전부 ko/en 양쪽 채움 확인. `AnalysisPdf.tsx`의 신규 문구는 파일 자체 `t(ko,en)` 헬퍼 사용
-  (기존 PDF 전체가 이 패턴이라 uiStrings.ts 대상 아님) — 누락 없음.
+**5. ICP 인사이트 스트리밍 중 404 조사 + 게이트 추가 (Northwell Health 배치 진행 중 실측)**
+분석이 아직 스트리밍 중일 때 "ICP 인사이트 생성"을 누르면 항상 404 — 422와는 무관한 별개의
+순수 클라이언트 버그였음. `analyses` 행 자체는 batch1(요약) 완료 시점에 이미 INSERT돼
+있는데, `HomeContent.tsx`의 `emptyBase(name)`가 `id:''`로 초기화한 뒤 스트리밍 도중 각
+배치가 보내는 실제 id는 `analysisIdRef`라는 별도 ref에만 저장되고 화면에 렌더링되는
+`data.id`(=`IcpInsightTab`이 받는 `analysisId`)에는 반영되지 않아, 스트리밍 구간 전체에서
+100% 재현되는 구조였음("배치 2/4에서만"이 아니었음).
+- **판단**: id 플러밍만 고쳐 스트리밍 중에도 "일단 되게" 만들지는 않기로 함 — 배치가 덜
+  끝난 시점엔 discovery_questions 후보 풀이 적어 품질 낮은 결과가 나올 수 있고,
+  industry_history_v2/tech_evolution_v2도 이미 "명시적 트리거 전까지 생성 차단" 원칙을
+  쓰고 있어 일관성 있는 선택. 넛지/산업역사/기술역사 탭까지 포함해 그룹 전체를 막을
+  필요는 없음 — ICP 탭만으로 충분(사용자 확인).
+- `IcpInsightTab`이 `!analysisId`면 "생성" 버튼 대신 "분석이 완료되면 이용할 수 있어요"
+  안내로 교체, `handleGenerate()`에도 방어적 가드 추가.
+- **검증 완료**: 완료된 Northwell Health 레코드(27개 후보)로 `curateDiscoveryQuestions()`
+  직접 호출 — 5개 정상 선별 확인.
+상세는 CLAUDE.md Quality Gate 원칙 섹션 "ICP 인사이트 스트리밍 중 404 조사" 참고.
+
+**6. 공유 링크/PDF ICP 노출 범위 확정 — Task A (마이그레이션 적용 완료, 커밋 `08f79bd`)**
+공유 링크/PDF는 discovery_questions 결과만 노출, ICP 원문(제품/타겟산업/타겟직무)은 노출
+안 함(소유자 영업 정보 보호). `icp_insights.created_by`/`profiles.nickname` 마이그레이션
+2건 Supabase CLI로 prod 적용 완료(MCP OAuth 막혀 CLI 경로로 우회, 상세는 "Supabase MCP
+마이그레이션 워크플로우" 섹션 참고). `share.ts`/`AnalysisCard.tsx`(`isShareView`,
+`SharedIcpQuestionsTab`)/`AnalysisPdf.tsx`/`ProfileForm.tsx` 전부 구현+배포 완료.
 
 ### 남음
-- **마이그레이션 2건 적용 + Task A 실제 동작 확인** — Supabase MCP OAuth 완료 후
-  `20260815_icp_insights_created_by.sql`/`20260815_profiles_nickname.sql` prod+dev 적용,
-  골든셋 기업 공유 링크 열어서 ICP 원문 안 보이고 질문 리스트만 보이는지 육안 확인(다음 세션)
-- 오늘 세션 전체(재무 파생 지표 원칙 + Task A) 커밋+push, `4a2f184` Render 배포 확인
-- **NVIDIA/Johnson & Johnson 재무 일관성 재검증** — 이전 Handoff부터 이월, 이번 세션도
-  미착수. 단 EBITDA가 오늘부로 완전히 제거돼 원래 이 검증을 촉발했던 "EBITDA 크래시" 우려는
-  해소됨 — 남은 의미는 매출/매출총이익/영업이익/순이익 4개 항목의 실행별 결정론성 재확인뿐
-  (`server/scripts/testEdgarReanalysisConsistency.ts` 재사용)
-- 창업자탭 legacy 기업 / 탭이동시 취소버그 / 로딩 UI 스피너 통일 / 재방문시 결과 유지 —
-  4건 전부 착수 전(이전 Handoff부터 이월)
+- **구글 로그인 + 온보딩 설문 실사용 검증이 이 세션의 최대 병목** — Task A(공유 링크 ICP
+  노출)는 코드/마이그레이션 다 완료됐지만, 실제 구글 로그인이 안 돼 있어 서로 다른 두 유저로
+  ICP 소유자 라벨이 정확히 갈리는지 등 실사용 검증을 못 함. 관리자 대시보드(유저 관리)도
+  설계만 완료, 착수 전 — 로그인 도입이 선행돼야 이어짐.
+- **FCF도 EBITDA와 동일 원칙으로 제거할지 판단 필요** — 위 1번 참고, 이번 세션엔 반영 안 됨.
+- **공유 링크 로딩 이슈**(`/share/C2ud9AuX`, Northwell Health) — 다른 세션에서 발견, 이
+  세션에서는 재현/조사 못 함(web_fetch로 "불러오는 중..."에서 멈춘다는 보고만 있음). 실제
+  브라우저로 재확인 필요, 클라이언트 사이드 렌더링 특성 때문인지 진짜 버그인지 미판별.
+- **discovery_questions 노출 방식 재검토** — 다른 세션에서 나온 제안, 이 세션에서는 다루지
+  않음. 현재 2단계 구조(섹션당 3~5개 후보 → ICP 기준 3~5개로 최종 큐레이션)에서, 2단계
+  필터링을 없애고 1단계 후보 풀 전체(9개 섹션分, 약 20~40개)를 화면/PDF에 그대로 노출하는
+  방향 검토 중이라고 함 — "질문 많으면 숙제검사 느낌"이라는 기존 VOC 원칙이 "미팅에서
+  실제 던지는 질문 수"에 대한 것이었지 "참고용 목록 개수"와는 다른 맥락일 수 있어 재검토
+  필요하다는 취지. 다음 세션에서 정식으로 착수 여부 판단.
+- `latticework-daily-cron`(Render 대시보드) 삭제 — 코드 참조 없음 확인됨, 대시보드에서
+  직접 삭제하기로 했으나 처리 여부 미확인.
+- **NVIDIA/Johnson & Johnson 재무 일관성 재검증** — 이전 Handoff부터 이월. EBITDA는
+  완전히 제거돼 원래 이 검증을 촉발했던 우려는 해소됨 — 남은 의미는 매출/매출총이익/
+  영업이익/순이익 4개 항목의 실행별 결정론성 재확인뿐(`server/scripts/
+  testEdgarReanalysisConsistency.ts` 재사용)
+- 창업자탭 legacy 기업 / 탭이동시 취소버그 / 재방문시 결과 유지 — 3건 전부 착수 전
+  (이전 Handoff부터 이월, "로딩 UI 스피너 통일"은 이번 세션에서 완료돼 목록에서 제외)
 - **언어 토글 마스터 계정 전환** / **비상장 기업 검색 실제 동작 테스트** — 이전 Handoff부터
   이월, 진행 상황 미확인
-- (이월) CLAUDE.md 문서화 3건(콘텐츠 포맷 원칙 신규 규칙/재현성 방어 원칙/핵심 포지셔닝+검증
-  테스트 설계) — 계속 미해결
+- (이월) CLAUDE.md 문서화 3건(재현성 방어 원칙/핵심 포지셔닝+검증 테스트 설계) — 계속
+  미해결(콘텐츠 포맷 원칙 신규 규칙은 이번 세션들에서 실질적으로 계속 갱신 중이라 제외)
 - (이월) dev/ops 서버 분리(Render) — 계속 이월 중
 - (이월) Reddit r/Sales_Professionals 반응 확인/답글, AE 인터뷰 추가 진행 — 별도 세션(GTM)
+- Job posting/채용 트렌드 기능은 완전 보류 확정(Greenhouse/Lever 13.3%, 회사 자체 크롤링
+  6.7% 모두 목표 50% 미달) — 재검토 조건은 백로그에 명시돼 있으니 별도 액션 불필요.
 
 ### 발견 (미처리)
-- **⚠️ `.claude/commands/*.md`가 통째로 `.gitignore` 대상**(`.claude/*`, 예외는
-  `settings.json`뿐) — 오늘 추가한 `/done`의 KR/EN 체크리스트를 포함해 모든 커스텀 슬래시
-  커맨드 정의가 이 컴퓨터에만 존재하고 git으로 추적되지 않음. 의도적 제외인지(개인 워크플로우)
-  실수인지 확인 필요 — `settings.local.json`(개인용)과 `commands/*.md`(프로젝트 워크플로우
-  정의, 팀 공유 성격에 가까움)는 성격이 달라 보임.
+- **⚠️ Render 대시보드에 `render.yaml` 밖에서 만들어진 인프라가 있을 수 있음** — 이전
+  세션에 `latticework-daily-cron`이 이미 삭제된 라우트를 계속 호출하고 있던 사고 사례
+  참고(Security Principles 실전 발견 이력 17번). 라우트를 "안 쓰인다"고 판단해 제거할
+  때는 항상 대시보드도 같이 확인할 것.
 - (이월) NVIDIA strategy_v2가 `stop_reason=end_turn`(정상 종료)인데도 JSON이 깨지는 원인
-  미특정 — 재발 시 `callSection()` FAIL 로그의 stop_reason/output_tokens + `extractJson()`의
-  `server/debug-logs/parse-failures/` 원문 덤프로 확인할 것(2026-08-15 도입된 디버깅 장치)
+  자체는 여전히 미특정 — 다만 같은 계열의 실패가 이번 세션에서 2건 더 확인됨(Ford
+  value_chain_v2, discovery_question_curation), 재발 시 `callSection()` FAIL 로그의
+  stop_reason/output_tokens + `extractJson()`의 `server/debug-logs/parse-failures/`
+  원문 덤프로 확인할 것
 - (이월) 회사명 캐시 키 분절 버그 — 재작업 금지 대상, 상세는 git log 참고
 - (이월) Quality Gate 재현성 체크 설계 미정으로 구현 보류
 - (이월) SEC 링크 유효성 자동 검증 — 스코프 밖 보류
@@ -108,13 +164,20 @@ MCP)이 이 세션에 없음, Render 대시보드에서 직접 확인 필요
   localStorage 기반 언어 선호값을 SSR 시점에 반영 못 함 — a11y상 사소한 부정확, 의도적 보류
 - AnalysisCard.tsx 탭 내부 콘텐츠 일부(섹션 타이틀·배지·버튼)는 의도적으로 미번역 — 탭
   라벨/액션버튼/차트 범례만 다국어 적용, AE Skills 탭은 스텁이라 계속 한국어 고정
+- `DataSourceBadge`/`DATA_SOURCE_CONFIG`(재무 탭 상단 배지)가 하드코딩 한국어라 언어
+  토글이 적용 안 됨 — 작업 D 중 "SEC/DART 데이터 없음" 문구로 바꾸면서 재확인, 기존부터
+  있던 격차라 이번엔 범위 밖으로 두고 그대로 유지
 - PDF의 `pdftotext` 텍스트 추출이 한글 구간에서 깨짐(시각적 렌더링엔 영향 없음) — 별도 확인
   필요
 - react-pdf 테이블 행에 `wrap={false}` 없음 — 표 행이 페이지 경계에서 잘릴 가능성 이론상
   있음, 실측에선 미재현이나 표시만 해둠
 
 ### 다음 세션 우선순위
-1. Supabase MCP OAuth 완료 확인 → 마이그레이션 2건 prod+dev 적용 → Task A 골든셋 실제 동작 확인
+1. 공유 링크 로딩 이슈(`/share/C2ud9AuX`) 실제 브라우저로 재확인
+2. discovery_questions 노출 개수 확장(2단계 필터링 제거) 착수 여부 판단
+3. 구글 로그인 + 온보딩 착수 — Task A 실사용 검증과 관리자 대시보드가 여기 막혀 있음
+4. FCF 제거 여부 판단(EBITDA와 동일 원칙 적용할지)
+5. `latticework-daily-cron` Render 대시보드에서 삭제 확인
 
 ## Vision & Mission
 
