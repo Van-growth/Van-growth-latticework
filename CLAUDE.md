@@ -9,49 +9,116 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-12
-**커밋**: 없음 — 전부 로컬 미커밋 상태(코드 변경 + 신규 마이그레이션 파일, `/done`은 CLAUDE.md만 별도 커밋)
-**Render 배포**: 미확인 — 이번 세션 push 없음(로컬 미커밋 상태라 배포 대상 자체가 없음)
+**날짜**: 2026-08-14
+**커밋**: ICP 인사이트 탭 관련 2건만 기존 커밋(`8a50e5b` 신규 구현, `d7e8cf5` 설정 페이지 라벨
+버그 수정) — 오늘 세션의 나머지 작업(전략탭 문단분할 UI 반영, Ford/EDGAR 재무 파이프라인
+크래시 수정, PDF 매출비중 0% 표시 수정 등)은 전부 로컬 미커밋
+**Render 배포**: 미확인 — 이번 세션 push 없음
 
 ### 완료
-- 언어 정책 재도입(v2.2.0 영어 단일화 번복, v2.6.0) — 랜딩페이지 제외 솔루션 앱 전체 + PDF에 KR/EN 토글. CLAUDE.md "언어 정책"/"GTM 방향"/버전 히스토리 갱신
-- DB: `analyses.language` 컬럼(`'ko'|'en'`, 기본 `'en'`) 마이그레이션(`20260812_analyses_language.sql`) prod+dev 둘 다 적용 확인
-- 백엔드: `server/src/lib/claude.ts`의 `SECTION_SYSTEM`/`callFounderSection`/`GROWTH_SCENARIO_NARRATIVE_SYSTEM`/`SEC_BENCHMARK_INTERPRETATION_SYSTEM` 4곳 언어 분기 + `analyzeCompany()`/`reanalyzeSingleSection()`/`refreshFinancials()`에 language 파라미터 스레딩. 라우트(`/stream`·`/resolve`는 body로 수신, `/reanalyze`·`/pain-diagnosis`·`/refresh-financials`는 DB 행에서 derive) 전부 연결. `analyze.ts`의 `buildFinancialsV2FromRaw`(fin_preview 경로)도 데이터 소스 국적이 아니라 요청 언어 기준으로 라벨 분기하도록 수정
-- Quality Gate 마커 매칭 버그 2건 수정: `isPlaceholderText`가 영문 "Not disclosed" 마커를 인식 못 하던 것, golden-set financials 체크가 한국어 마커만 검사하던 것 — `NO_DATA_MARKERS` 공용 상수로 통일
-- 프론트엔드: `LanguageContext`(localStorage, 기본 EN, 자동감지 없음) + `uiStrings.ts` 딕셔너리 신설, `/settings` 페이지에 토글 UI 추가. Header/History/LoginPromptModal/OnboardingModal/ProfileForm(`profileLabels.ts` en 사전 실번역 채움)/HomeContent/AnalysisCard(탭 라벨·툴팁·액션버튼·SecBenchmarkComparisonBlock 범례, `data.language` 우선·전역값 폴백) 전부 연결
-- PDF(`AnalysisPdf.tsx`) 전체 국영문 전환(~150개 하드코딩 라벨을 `t(ko,en)` 헬퍼로 변환) + `Font.register`에 누락돼 있던 NotoSansKR 700(볼드) weight 등록 버그 수정
-- **버그 발견+수정 (1)**: 컨텍스트 빌더(`financialContext.ts`)가 Claude에게 항상 영문 "Not disclosed"/"Not applicable"을 지시 문구로 박아넣는데, Claude가 이를 번역하지 않고 그대로 출력에 베끼는 문제를 KR 실측에서 발견 — `sectionSystem()` 프롬프트에 "컨텍스트의 마커 표기 언어와 무관하게 출력은 항상 지정된 언어 마커로 번역하라"는 규칙 추가로 수정. Rocket Lab EN 1회 + KR 3회(수정 전 1회 재현, 수정 후 2회 재확인) 실측으로 검증 완료
-- 클라이언트/서버 `tsc --noEmit` 전부 통과 확인
-- **PDF 실물 렌더링 육안 검증 완료** — `@react-pdf/renderer`가 Node에서도 동작한다는 점을 활용해 `pdf().toBuffer()`로 Rocket Lab EN/KR 9탭 전체 리포트를 실제 PDF 파일로 생성(브라우저 자동화 없이 가능했음, 기존 "브라우저 없어 불가" 가정 갱신 필요), PyMuPDF로 페이지 이미지 렌더링해 육안 확인. 과정에서 실제 버그 3건 발견+수정:
-  1. `financials_v2.income_statement[].yoy`의 ▲/▼ 기호가 NotoSansKR woff 서브셋에 없는 글리프라 PDF에서 숫자와 겹쳐 깨짐 — 언어 무관 기존 버그(오늘 작업 전부터 존재, 최초 실물 검증에서 처음 발견)
-  2. `financials_v2.outlook.shortTerm/midLongTerm`의 ○/△ 접두 기호도 동일 문제
-  3. 재무제표 `item` 라벨("Revenue"/"Operating Income" 등)이 SECTION_SCHEMAS의 JSON 스키마 예시를 Claude가 리터럴로 베껴써서 KR 모드에서도 영어로 나옴 — `sectionSystem()`에 "스키마 예시는 구조 설명이지 베낄 값이 아니다" 규칙 추가로 수정
-  4. (1)(2) 수정 중 `→`(오른쪽 화살표)가 bull_case/oneLiner/founder 경력 등 자유서술 필드 전반에 자연발생적으로 등장하며 동일하게 깨지는 걸 발견 — 개별 필드마다 sp() 감싸는 대신 `AnalysisPdf.tsx` 최상단에서 `data` 전체를 재귀 정화하는 `sanitizeDeep()` 신설(→/←/✓/✗/⚠/●/■/★ 등 서브셋에 없는 기호 전부 ASCII로 일괄 치환)로 근본 해결
-  검증 파일(1차): EN `rocketlab-en.pdf`(113KB), KR `rocketlab-ko.pdf`(151KB) — 이후 아래 2차 라운드에서 재생성됨
-- **버그 발견+수정 (2) — 재무제표 과거 연도 공백**: Gross Profit 5개년 전부 "—", Operating Income도 FY2025 제외 전부 "—"로 나오는 문제를 사용자가 지적 — `isPlaceholder()`/`pdfVal()`/`DataValue`/`FinancialValue`/`MetricCard` 전부 재확인했으나 음수를 특별 취급하는 로직은 없음(사용자가 의심한 "음수라 —로 숨김" 가설은 기각, 전부 `-999` 리터럴 패턴이나 마커 문자열만 매칭). **진짜 원인은 `financial_cache` 테이블의 스테일 캐시** — Supabase에서 RKLB 캐시 행을 직접 조회해 확인: `raw_edgar`에 `grossProfit` 키 자체가 없고 `context_text`가 구버전(한국어 라벨, 다년도 블록 없음) 포맷이었음. 반면 현재 `edgarBatchPrecompute.ts` 코드는 이미 GrossProfit/Cash concept 조회 + 다년도 영문 컨텍스트 블록을 갖추고 있음(2026-08 MSFT 사고 이후 수정분, 주석에 기록됨) — 즉 캐시가 이 수정 이전 배치 실행분으로 스테일. `processCompany()`를 `export` + `require.main===module` 가드 추가(전체 8천개 배치 재실행 없이 특정 티커 하나만 재사용 가능하게, 향후 재사용 가능한 개선) 후 RKLB 캐시 1건만 재생성 → Gross Profit 5개년 전부 채워짐(FY2021 -$1.9M 음수 포함, 부호 정상 보존 확인) → "확인 필요 데이터" 25건→5건(전부 EBITDA, XBRL 비표준 concept이라 정상적으로 미확인)
-- **PDF "분석 일자: 1970년 1월 1일" 확인** — 실제 버그 아님. 이번 세션의 PDF 테스트 스크립트(`server/scripts/genPdfTestData.ts`, 검증용 임시 파일)가 `createdAt`에 `new Date(0)` placeholder를 썼던 것 — 프로덕션은 `analyses.created_at`(DB 값)을 그대로 씀(`analyses.ts`/`share.ts` 확인 완료). 스크립트만 실제 생성 시각 쓰도록 수정, 재검증 시 정상 표시 확인
-- **PDF 여백/타이포 밀도 개선** — `AnalysisPdf.tsx` StyleSheet 전체 재조정(mm/px 참고 기준 → react-pdf pt 환산 후 육안 반복 조정): 페이지 여백 62/68pt(≈22/24mm), 본문 fontSize 8→9.5, lineHeight 1.4~1.5→1.7~1.8, 섹션 헤더 marginTop 30pt 신설, 표 셀 padding 3~4→7~9pt·fontSize 7→8~8.5, 카드/callout(성장모멘텀·핵심리스크 등) padding 8→18pt·lineHeight→1.8, 핵심요약 검정 블록도 동일 비율로 확대. Rocket Lab EN/KR 재생성 후 PyMuPDF로 육안 확인 — 페이지 수 증가(KO 14→21p, EN 15→26p)는 여백 확대에 따른 예상된 결과
-- 클라이언트/서버 `tsc --noEmit` 재확인 통과
-  최종 검증 파일(2차, 전체 수정 반영): EN/KR `rocketlab-en.pdf`/`rocketlab-ko.pdf` — scratchpad에 보관, 사용자에게 전달 완료
+
+**1. ICP 맞춤형 인사이트 탭 (Step 1~6 완료, 커밋 `8a50e5b`/`d7e8cf5`) + 버그 수정 요청 6건**
+- ✅ **전략탭 문단분할**: `strategy_coherence`를 `<p>`에 `whitespace-pre-line` 추가해 렌더링
+  (`AnalysisCard.tsx`의 `StrategyV2Tab`) — 백엔드가 이미 `\n\n`으로 2~3문단 분할해 보내고
+  있었는데 프론트가 기본 `white-space:normal`이라 줄바꿈이 뭉개지던 것. 완료, 로컬 미커밋.
+- ✅ **Ford 재무조사**: 아래 "3. Ford 재무 파이프라인 전체 히스토리" 참고 — 원인 규명부터
+  최종 크래시 수정+검증까지 완료(NVIDIA/J&J 교차검증만 API 사용량 한도로 보류 중).
+- ⬜ **창업자탭 legacy 기업**: 요청만 접수, 코드 변경 없음 — 착수 전.
+- ⬜ **탭이동시 취소버그**: 요청만 접수, 코드 변경 없음 — 착수 전.
+- ⬜ **로딩 UI 스피너 통일**: 요청만 접수, 코드 변경 없음 — 착수 전.
+- ⬜ **재방문시 결과 유지**: 요청만 접수, 코드 변경 없음 — 착수 전.
+  (4건 미착수는 `git diff` 직접 확인으로 검증됨 — `AnalysisCard.tsx` 전체 diff가 위 전략탭
+  1건뿐이라 나머지 4건에 해당하는 코드 변경이 아예 없음)
+
+**2. 공유링크+PDF에 ICP 인사이트 반영 — 결정만 됨, 구현 착수 전**
+방향 결정: "공유링크는 원 분석자 본인의 ICP 그대로 보임(뷰어 본인 ICP로 재계산 안 함)",
+"PDF는 별도 섹션으로 분리하고 'OOO의 ICP 기준' 명시". 코드베이스 전체 확인 결과
+`AnalysisPdf.tsx`/공유 라우트(`share.ts`) 어디에도 ICP 관련 코드가 없음 — 결정은 됐지만
+구현은 0%.
+
+**3. Ford 재무 파이프라인 전체 히스토리** (이전 세션 + 오늘 세션 종합)
+- 최초 의심: XBRL concept 태그 오매칭 → 실측 검증 결과 빗나간 가설로 판명
+- 다음 의심: 연도키(`fy`) 오용 → 이것도 빗나간 가설
+- **진짜 원인**: Claude가 다년도 재무표를 매 실행마다 텍스트로 재서술하며 발생하는 실행별
+  비결정성(완전히 동일한 컨텍스트를 줘도 어떤 실행은 값을 다 옮기고 어떤 실행은 일부 연도를
+  놓침) — `financialsTableBuilder.ts` 신설로 **서버가 EDGAR/DART raw series에서 직접
+  income_statement/balance_sheet를 조립**해 Claude 응답을 덮어쓰는 구조로 근본 해결
+  (이전 세션에서 완료, 상세는 위 Architecture 섹션 "재무 파이프라인 서버 조립 리팩터링" 참고)
+- **오늘 세션**: 이 리팩터링을 검증할 `server/scripts/testEdgarReanalysisConsistency.ts`
+  신설(Ford/NVIDIA/Johnson & Johnson 각 3회 재실행, 5개년 재무 5개 항목이 실행마다 완전
+  동일한지 확인) → **EBITDA 서버조립 코드가 매 실행 100% 크래시하는 걸 발견**
+  (`s.depreciation[i]`가 옛 `financial_cache` 캐시 blob에서 `undefined`인 채로 배열
+  인덱싱 시도) → 처음엔 `depreciation` 필드만 패치했다가, NVIDIA에서 이번엔 `grossProfit`
+  필드도 동일하게 undefined인 걸 재확인 → Ford만의 문제가 아니라 "필드 추가 시점 이후로
+  캐시가 안 갱신된 회사는 그 필드가 뭐든 undefined"라는 일반 패턴이었음 →
+  `toSeriesInput()`을 8개 필드(revenue/grossProfit/operatingIncome/netIncome/
+  depreciation/assets/liabilities/equity) 전부 공용 `fallback()` 헬퍼로 일반화해 근본
+  수정(`financialsTableBuilder.ts`) — 앞으로 두 타입에 필드가 추가돼도 이 크래시 재발 안 함
+- **최종 검증 상태**: Ford Motor 3회 재실행 income_statement 완전 동일 확인(진짜 PASS —
+  실제 5개년 수치를 직접 diff까지 해서 바이트 단위 동일 확인함, Gross Profit/EBITDA는
+  "Not applicable"로 정상 폴백). **NVIDIA/Johnson & Johnson은 검증 도중 Anthropic API
+  사용량 한도 도달로 중단**(`"You have reached your specified API usage limits. You
+  will regain access on 2026-09-01 at 00:00 UTC."`) — 코드 문제 아님, 재검증 필요.
+
+**4. financial_cache 스테일 이슈**
+`depreciation` 필드가 2026-08-13 `EdgarRawSeries`에 신규 추가됐는데 배치 크론이 월
+1회(매월 1일 02:00 UTC)라 그 이후 재실행된 적이 없음 → Supabase 직접 조회로 확인한 결과
+**`financial_cache` EDGAR 소스 6,819건 전부(100%) depreciation 필드 없음**(RKLB 때처럼
+일부가 아니라 전체 — 상세는 위 Architecture 섹션 "재무 파이프라인 서버 조립 리팩터링"의
+"남은 한계" 참고). **결정: 배치 수동 전체 재실행 안 하고 9/1 정기 크론까지 대기** — 그동안
+EDGAR 소스 기업 전부 EBITDA만 "확인 필요"로 정상 표시(크래시 없음, 다른 4개 지표는 영향
+없음). 급하게 특정 기업을 보여줘야 하면 RKLB 때처럼 `processCompany()` 개별 수동 재생성으로
+대응.
+
+**5. 클라이언트/서버 `tsc --noEmit` 통과 확인** (오늘 세션 변경분 포함)
 
 ### 남음
-- **커밋 + push + Render 배포 확인** — 오늘 작업 전체가 로컬에만 있음(언어 정책 + PDF 버그 수정 5건 + `edgarBatchPrecompute.ts` 재사용성 개선 포함), 사용자가 최종 PDF 육안 확인 후 커밋 여부 결정 예정 → 다음 세션 우선순위
-- (이월) CLAUDE.md 문서화 3건(콘텐츠 포맷 원칙 신규 규칙/재현성 방어 원칙/핵심 포지셔닝+검증 테스트 설계) — 이번 세션 무관 주제라 손대지 않음, 여전히 미해결
-- (이월) dev/ops 서버 분리(Render) — 이번 세션에도 착수 못 함(사용자가 언어 정책 재도입을 우선 요청), 계속 이월 중
-- (이월) Reddit r/Sales_Professionals 반응 확인/답글, AE 인터뷰 추가 진행 — 별도 세션(GTM, 코드 작업 아님)
+- **⚠️ 최우선 — Anthropic API 사용량 한도가 프로덕션과 같은 키인지 미확인**: 아래 "발견
+  (미처리)" 참고
+- **NVIDIA/Johnson & Johnson 재무 일관성 재검증** — API 사용량 한도로 중단, 9/1 재개 예정
+  (또는 사용자가 콘솔에서 한도 조정 시 그전에도 가능). `server/scripts/
+  testEdgarReanalysisConsistency.ts`(3사×3회 재실행, 재사용 가능하게 남겨둠) 재실행하면 됨.
+  `server/scripts/checkFinancialCacheDepreciationCoverage.ts`(스테일 규모 확인용, 1회성)도
+  남아있음 — 다 쓰면 삭제 대상.
+- **오늘 세션 전체 커밋+push** — CLAUDE.md/AnalysisCard.tsx/AnalysisPdf.tsx/서버 5개 파일
+  (`claude.ts`/`edgar.ts`/`financialContext.ts`/`analyze.ts`/`edgarBatchPrecompute.ts`)/
+  신규 파일(`financialsTableBuilder.ts`, 스크립트 2개)/마이그레이션 1건
+  (`20260813_concept_miss_log.sql`) 전부 로컬 미커밋
+- 창업자탭 legacy 기업 / 탭이동시 취소버그 / 로딩 UI 스피너 통일 / 재방문시 결과 유지 —
+  4건 전부 착수 전(위 "1." 참고)
+- 공유링크+PDF ICP 인사이트 구현 — 방향 결정만 되고 코드 0%(위 "2." 참고)
+- **언어 토글 마스터 계정 전환** — 요청은 들어갔으나 진행 여부 미확인 상태
+- **비상장 기업 검색 실제 동작 테스트** — 요청했으나 아직 결과 못 받음
+- (이월) CLAUDE.md 문서화 3건(콘텐츠 포맷 원칙 신규 규칙/재현성 방어 원칙/핵심 포지셔닝+검증
+  테스트 설계) — 계속 미해결
+- (이월) dev/ops 서버 분리(Render) — 계속 이월 중
+- (이월) Reddit r/Sales_Professionals 반응 확인/답글, AE 인터뷰 추가 진행 — 별도 세션(GTM)
 
 ### 발견 (미처리)
+- **⚠️ Anthropic API 사용량 한도가 프로덕션 키와 공유되는지 확인 필요** — 오늘 세션 재테스트
+  중 "9/1까지 사용량 한도 도달"(400 BadRequestError, "You have reached your specified
+  API usage limits") 에러를 만남. "9/1 00:00 UTC부터 재개"라는 문구가 월간 리셋 한도
+  패턴과 일치 — 콘솔에서 설정한 워크스페이스/키 단위 지출 한도로 추정. 이게 프로덕션
+  서비스가 쓰는 것과 같은 `ANTHROPIC_API_KEY`라면, 지금 이 순간도 실제 유저 분석 요청이
+  이 에러로 실패하고 있을 가능성 있음 — 세션 중 사용자에게 직접 확인 요청했으나 아직 답
+  못 받음. **다음 세션 최우선 확인 사항**.
 - (이월) 회사명 캐시 키 분절 버그 — 재작업 금지 대상, 상세는 git log 참고
 - (이월) Quality Gate 재현성 체크 설계 미정으로 구현 보류
 - (이월) SEC 링크 유효성 자동 검증 — 스코프 밖 보류
-- `layout.tsx`의 `<html lang="en">`과 metadata title/description이 서버 컴포넌트라 localStorage 기반 언어 선호값을 SSR 시점에 반영 못 함 — 기능 영향 없는 a11y상 사소한 부정확, 쿠키 기반 전환 시 해결되지만 이번 요구사항 범위 밖이라 의도적으로 보류
-- AnalysisCard.tsx 탭 내부 콘텐츠(섹션 타이틀·배지·버튼 — 예: "동종업계 비교 (SEC)", "데이터 새로고침", "SEC EDGAR 공식" 등)는 이번 스코프에서 의도적으로 미번역 — 탭 라벨/액션버튼/차트 범례만 다국어 적용(계획 단계에서 스코프로 확정), AE Skills 탭도 스텁 콘텐츠라 계속 한국어 고정
-- PDF의 `pdftotext` 텍스트 추출이 한글 구간에서 깨짐(글리프 렌더링 자체는 정상 — fontkit으로 실측한 글리프 커버리지 11,596자 확인, PyMuPDF 렌더링 이미지도 정상) — react-pdf가 CJK 서브셋 폰트를 임베드할 때 ToUnicode CMap을 제대로 안 심는 것으로 추정, 한글 PDF에서 텍스트 선택/복사/OS 레벨 검색이 안 될 가능성 있음. 시각적 렌더링엔 영향 없어 이번엔 미수정 — 별도 확인 필요
-- react-pdf 테이블 행에 `wrap={false}`(또는 동등 처리) 없음 — 표 행이 페이지 경계에서 잘릴 가능성이 이론상 있음(사용자가 명시적으로 질문한 항목). 이번 실측(Rocket Lab EN/KR)에서는 재무/경쟁사 표 모두 한 페이지 안에 들어가 재현되지 않았음 — 행 수가 많거나 셀 텍스트가 훨씬 길어지는 케이스에서 재발 가능성 있어 표시만 해둠
-- **`financial_cache`의 EDGAR 배치 캐시 스테일 문제가 RKLB 외 다른 기업에도 광범위하게 있을 가능성** — `edgarBatchPrecompute.ts`가 2026-08 중 GrossProfit/Cash concept 추가 + 다년도 영문 컨텍스트 블록을 갖추도록 수정됐는데, 그 수정 이전에 캐시된 행(월 1회 크론이라 최대 한 달 스테일 가능)은 전부 구버전 데이터를 계속 서빙 중일 수 있음. 전체 재실행은 ~8천개 기업 대상 SEC API 레이트리밋 하에 상당한 시간이 걸리는 작업이라 이번엔 RKLB 1건만 수동 재생성(`processCompany()` 재사용, 코드 변경은 위 "완료" 참고) — 전체 재실행 여부는 사용자 판단 필요(다음 정기 크론이 자연 해결하긴 하나, 그 전까지 다른 기업들도 같은 증상 가능)
+- `layout.tsx`의 `<html lang="en">`과 metadata title/description이 서버 컴포넌트라
+  localStorage 기반 언어 선호값을 SSR 시점에 반영 못 함 — a11y상 사소한 부정확, 의도적 보류
+- AnalysisCard.tsx 탭 내부 콘텐츠 일부(섹션 타이틀·배지·버튼)는 의도적으로 미번역 — 탭
+  라벨/액션버튼/차트 범례만 다국어 적용, AE Skills 탭은 스텁이라 계속 한국어 고정
+- PDF의 `pdftotext` 텍스트 추출이 한글 구간에서 깨짐(시각적 렌더링엔 영향 없음) — 별도 확인
+  필요
+- react-pdf 테이블 행에 `wrap={false}` 없음 — 표 행이 페이지 경계에서 잘릴 가능성 이론상
+  있음, 실측에선 미재현이나 표시만 해둠
 
 ### 다음 세션 우선순위
-1. 오늘 작업(언어 정책 재도입 + PDF 버그 수정 5건) 커밋+push하고 Render 배포 확인
+1. **Anthropic API 사용량 한도가 프로덕션에 영향 주는지부터 확인** (가장 급함)
+2. NVIDIA/Johnson & Johnson 재무 일관성 재검증 (한도 해제/조정 후)
+3. 오늘 세션 전체 커밋+push, Render 배포 확인
+4. 나머지 4개 버그(창업자탭 legacy/탭이동취소/스피너통일/재방문유지) 착수 여부 우선순위 결정
 
 ## Vision & Mission
 
@@ -162,7 +229,7 @@ ChatAE(개인가격, 사실나열), Outreach/AlphaSense(엔터프라이즈가격
 - **client/** — Next.js 15, TypeScript, Tailwind CSS (App Router, `src/` 구조)
 - **server/** — Node.js, Express, TypeScript
 - **DB** — Supabase (PostgreSQL)
-- **AI** — Anthropic Claude claude-sonnet-4-6 + web_search_20250305 tool
+- **AI** — Anthropic Claude claude-sonnet-5 (2026-08-15 claude-sonnet-4-6에서 전환) + web_search_20250305 tool
 
 ## Folder structure
 ```
@@ -509,6 +576,13 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
    반드시 문장 끝에만(문장 중간 삽입 금지, 여러 출처면 "...다[1][2]." 처럼 끝에 붙여쓰기),
    길이는 3-4문장으로. `SECTION_SCHEMAS`에 "every [n] source marker must sit at the very end
    of the sentence" 형태로 명시.
+   - **`strategy_coherence`만 추가 예외(2026-08-13)**: 문단 유지 원칙(불릿 전환 아님)은
+     그대로지만, 하나의 긴 문단으로 뭉치지 않도록 **2~3개의 짧은 문단(빈 줄 "\n\n"으로
+     구분, 각 2~4문장)으로 분할**하도록 프롬프트에 명시 — 1문단 "3개 전략 블록이 어떻게
+     연결되는가", 2문단 "그 연결이 만드는 재무적 결과", 있을 때만 3문단 "남은 리스크/전제조건".
+     프론트(`AnalysisCard.tsx`의 `StrategyV2Tab`)도 `whitespace-pre-line`을 추가해야
+     실제로 문단이 나뉘어 보임 — 기본 `white-space:normal`이면 `\n`이 공백으로 뭉개져서
+     프롬프트만 고쳐선 화면상 변화가 없다.
 3. **시계열/단계형 콘텐츠는 처음부터 구조화 필드로** — industry_history_v2의 timeline,
    tech_evolution_v2의 stages, founder_v2의 career_trajectory 전부 이미 배열 스키마 + 전용
    타임라인/카드 UI(`IndustryHistoryV2Tab`/`TechEvolutionV2Tab`/`FounderV2Tab`)로 렌더링되고
@@ -945,6 +1019,11 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
     템플릿 설계를 잘못하면 산업역사 출처 오매칭 같은 억지 매칭이 재발할 위험.
     실제 설계는 AE 인터뷰로 "어떤 트리거가 실제로 와닿는지" 검증 후 진행
   - 2026-08-12 논의, 아직 개발 범위 밖 — 구조만 기록, 설계는 보류
+  - **(2026-08-15) 이 방향 대신 discovery_questions 2단계 통합으로 구현됨** — 트리거
+    카테고리별 함의 템플릿을 미리 정의하는 대신, 이미 생성되는 9개 섹션 각자가 자기
+    데이터에 근거한 질문 후보를 직접 만들어두고 ICP 탭에서 선별만 하는 구조로 결정.
+    상세는 아래 "✅ 완료"와 Architecture 섹션 참고 — 이 항목(트리거 패턴 라이브러리)은
+    설계 참고용으로만 남겨두고 더 이상 진행하지 않음.
 
 ### ✅ 완료
 - [x] 창업자 탭 추가
@@ -1124,6 +1203,23 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   과정에서 평균이 소표본 극단치에 취약한 문제(SIC 6411 보험중개업 부채/자본 비율이 평균
   10,749%로 왜곡)를 발견해 중앙값 전환 + 분모 최소 기준 상향(매출 $10M/자본·자산 $5M)으로
   해결 — Quality Gate 원칙 섹션에 일반 원칙으로 기록됨.
+- [x] ICP 인사이트 탭 → discovery_questions 2단계 통합 (2026-08-15) — 5카테고리
+  insight+consequence 생성(2026-08-13) 대신, summary_v2/financials_v2/business_model_v2/
+  competitors_v2/value_chain_v2/strategy_v2/industry_history_v2/tech_evolution_v2/founder_v2
+  9개 섹션이 각자 프롬프트에서 `discovery_questions: string[]`(3-5개, 발표형 금지·질문형만,
+  근거 없으면 빈 배열 허용)를 직접 생성해두고, ICP 탭 클릭 시 9개 섹션 + cross_industry_nudge_v1의
+  기존 `financial_impact_question`(새 필드 추가 안 하고 재사용)까지 합쳐 후보 풀을 서버에서
+  통합 수집(`server/src/lib/discoveryQuestions.ts`, 옛 `icpSignals.ts` 대체)한 뒤 3-5개만
+  선별한다. ICP(icp_product/icp_target_industry/icp_target_role) 전부 비어있으면 Claude
+  호출 없이 결정론적으로 선택(재무 벤치마크 이탈 있으면 financials_v2 우선 → 섹션 노출
+  순서), 하나라도 있으면 `curateDiscoveryQuestions()`(claude.ts)가 후보 id 기반으로
+  선별·경미한 재구성만 수행 — 반환된 id가 실제 후보 풀에 있는지 서버가 재검증해 근거 없는
+  질문이 섞이는 걸 코드 레벨에서 막는다. financials_v2는 SEC 벤치마크 편차를 Claude가
+  볼 수 없어(콘텐츠 포맷 원칙 1번, 이 숫자는 프롬프트 컨텍스트에 안 실림) `generateSecBenchmarkInterpretations`와
+  같은 자리에서 `generateBenchmarkDiscoveryQuestion()`이 편차 소재 질문 1개를 별도로 만들어
+  financials_v2.discovery_questions 맨 앞에 붙인다. `icp_insights` 테이블/fingerprint 캐시는
+  기존 그대로 재사용(신규 테이블 없음), 응답 `content`만 `{ questions: [...] }` 형태로 변경.
+  상세는 Architecture 섹션 "ICP 인사이트 discovery_questions 2단계 통합" 참고.
 
 ## Security Principles (SSOT)
 
@@ -1484,6 +1580,23 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
       비로그인 시절 설계된 기능이 로그인 필수화 이후에도 안 바뀐 채 방치) —
       즉 한 번의 실수가 아니라 "로그인 필수화"라는 정책이 도입된 시점에 **기존
       라우트 전수 재감사가 없었던 것**이 근본 원인. 아래 체크리스트에 항목 추가.
+17. (2026-08-15) 16번에서 "고아 코드"로 판단해 제거한 `/api/cron/daily`(2026-07-16
+    삭제)가 사실은 고아가 아니었음 — **Render 대시보드에 `render.yaml`과 무관하게 별도로
+    존재하던 Cron Job(`latticework-daily-cron`, 매일 01:00 UTC)이 그 죽은 엔드포인트를
+    지금까지 계속 호출하고 있었음**. 삭제 당시 감사는 "client 코드 전체 grep"까지만 했고,
+    Render Cron Jobs 대시보드(이 repo의 `render.yaml`엔 `edgar-batch-monthly`/
+    `dart-batch-monthly` 월간 배치 2개만 정의돼 있고, 이 daily cron은 거기 없음 — 즉
+    Blueprint 밖에서 대시보드로 직접 만들어진 인프라라 코드 grep으로는 애초에 안 잡힘)까지는
+    확인하지 않았음. 코드베이스 전체(server/client/scripts) 재검색 결과 `/api/cron/daily`·
+    `selectDailyCompany`·`latticework-daily-cron` 참조는 이 CLAUDE.md 기록 외엔 전무 —
+    **코드 쪽엔 삭제할 게 없고, Render 대시보드에서 이 Cron Job 자체를 직접 삭제하면 정리
+    끝남**(사용자가 직접 처리 예정). 이 daily cron은 애초에 `edgarBatchPrecompute.ts`(월간
+    EDGAR 배치)와 무관한 별개 기능(매일 랜덤 기업 1개를 골라 `analyzeCompany()` 전체를
+    돌리는 자동분석)이었다는 점도 확인 — financial_cache 스테일 이슈와도 무관.
+    교훈: **라우트/엔드포인트를 "아무도 안 부른다"고 판단해 제거할 때는 client 코드
+    grep만으로 끝내지 말고 Render Cron Jobs 대시보드(특히 `render.yaml`에 없는, 대시보드에서
+    직접 만들어진 서비스가 있는지)도 같이 확인할 것** — 애플리케이션 코드 밖에서 그
+    엔드포인트를 호출하는 인프라는 grep으로 안 잡힌다.
 
 ### 새 프로젝트/기능 착수 시 체크리스트
 - [ ] 신규 테이블 생성 시 RLS 활성화 여부 확인
@@ -1503,6 +1616,11 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
   정책을 적용하고 기존 라우트를 그대로 두면 조용히 예외로 남는다(resolve →
   `/history` → reanalyze/share/refresh-financials/cron까지 한 세션에서 3라운드
   반복 발견, 실전 발견 이력 11·15·16번 참고)
+- [ ] API 라우트/엔드포인트를 "안 쓰인다"고 판단해 제거할 때는 client 코드 grep뿐 아니라
+  Render Cron Jobs 대시보드(`render.yaml`에 없는, 대시보드에서 직접 만든 서비스가 있을 수
+  있음)도 같이 확인할 것 — 애플리케이션 코드 밖에서 그 엔드포인트를 호출하는 인프라는
+  grep으로 안 잡힌다(2026-08-15 `latticework-daily-cron`이 이미 삭제된 `/api/cron/daily`를
+  계속 호출하고 있던 사고, 실전 발견 이력 17번 참고)
 
 ## Data Aggregation Principles (SSOT)
 
@@ -1554,6 +1672,9 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
 - financials에 최소 1개 이상의 실제 수치가 있는가?
 - sources 배열이 비어있지 않은가?
 - 모든 섹션이 "—" 또는 null이 아닌가? (전체 실패 감지)
+- 각 섹션의 `discovery_questions`가 발표형("OO% 매출 의존이 있네요")으로 새지 않고
+  질문형("의존도를 낮추려는 움직임이 있나요?")을 유지했는가 육안 확인(2026-08-15) —
+  빈 배열은 정상(데이터 부족 시 허용), 전체 실패로 취급하지 않음
 
 **산업 벤치마크 지표는 항상 중앙값(median) 우선, 평균(avg) 사용 시 최소 표본/분모 기준
 필수** (2026-08-11, `industry_benchmark` 테이블 구축 중 발견) — 표본이 작은 그룹(n=5~20)은
@@ -1564,6 +1685,43 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
 계열 $5M로 상향하자 정상 범위로 돌아옴(`server/scripts/secBenchmarkPrecompute.ts` 참고).
 앞으로 새 벤치마크/집계 지표를 추가할 때 평균을 쓰려면 이 두 방어(중앙값 우선 또는 표본/
 분모 하한)를 먼저 검토할 것 — Data Aggregation Principles의 4단계 원칙과 동일 계열.
+
+**`callSection()` 결과가 null이어도 성공 로그가 찍히던 결함 수정(심각도: 높음, 2026-08-15)**
+— `extractJson()`이 JSON 파싱 실패로 `null`을 반환해도 `callSection()`은 함수 끝에서
+무조건 `[claude] {sectionKey} OK`를 로그하고 있었음. `analyzeCompany()`의 병합 로직은
+`null`을 받으면 `DEFAULT_ANALYSIS_DATA`의 빈 placeholder로 조용히 대체하는데, 로그만
+보면 그 섹션이 정상 생성된 것처럼 보여 원인 추적이 막힘. 실전 발견: claude-sonnet-4-6→
+claude-sonnet-5 전환 직후(같은 세션) Johnson & Johnson의 `strategy_v2`/
+`cross_industry_nudge_v1`이 서술형 필드 때문에 고정 `max_tokens`(4000)를 넘겨 응답이
+잘리며 파싱 실패 → 빈 데이터로 저장됐는데 로그는 계속 "OK". 두 가지로 수정: (1)
+`callSection()`의 `max_tokens`를 4000→6000으로 상향(Sonnet 5 신규 토크나이저가 동일
+내용도 ~30-35% 더 많은 토큰을 소비 — 근본 원인 완화), (2) `result`가 `null`이면
+`[claude] {sectionKey} FAIL ... — JSON 파싱 실패로 null 반환, DEFAULT_ANALYSIS_DATA
+빈 placeholder로 대체됨`으로 정확히 로그하도록 수정(claude.ts). Sonnet 4.6 때도 잠재된
+결함이었을 가능성이 높음 — 그때는 우연히 응답 길이가 짧아 덜 걸렸을 뿐, 근본 원인(파싱
+실패 시 로그 왜곡)은 모델과 무관하게 존재했음.
+**⚠️ 미수정으로 남은 동일 계열 결함**: `analyzeCompany()`의 `runBatch()`도 같은 패턴 —
+개별 `callSection()` 호출이 내부에서 에러를 catch해 `null`을 반환하면 `Promise.all`이
+reject하지 않으므로, 배치 안 섹션이 전부 실패해도 `[claude] batch{N} OK`가 그대로
+찍힘(2026-08-15 Amprius 재조사 중 발견, 아래 참고 — 이번 수정 범위에는 포함 안 됨).
+**Amprius Technologies 요약 탭 빈 화면 재조사 결과(2026-08-15) — 원인 미특정, 닫지 않음**:
+Render 프로덕션 서버 로그를 직접 조회해, 제보와 연결지었던 그 분석 건(2026-08-15 02:21 UTC)의
+Claude 호출 8개(summary_v2/gatherResearch1·2/sec_benchmark_interpretations/competitors_v2/
+sources/founder_v2/cross_industry_nudge_v1) 전부가 "You have reached your specified API
+usage limits" 400 에러로 실패한 로그를 확인했다 — 이 세션에서 테스트 중 마주쳤던 바로 그
+사용량 한도이며, **이전 Handoff에 남아있던 "이 한도가 프로덕션과 같은 키인지 미확인" 질문에
+대한 확답**: 같은 키였고 실제 유저 트래픽도 이걸로 실패하고 있었음(이 로그 사실 자체는 확정).
+다만 이걸 근거로 "Amprius 이슈 = API 한도로 해결, 별도 조치 불필요"라고 닫지는 않는다 — 이유:
+(1) 이 로그 확인은 그 시각 그 한 건에 한정된 증거이지, 제보된 증상이 반드시 이 건을 가리키는지
+별도로 확인되지 않았고, (2) 같은 세션에서 발견한 NVIDIA strategy_v2 사례(`stop_reason=end_turn`,
+`output_tokens=2384`/8000 한도 — 길이초과 아님)가 **API 한도와 전혀 무관하게, 정상 종료됐는데도
+JSON이 깨지는 별개의 미해결 메커니즘**이 실재함을 보여줘 "빈 탭" 증상 클래스 전체가 API 한도
+하나로 설명되지 않는다는 게 같은 세션에서 드러났고, (3) 로깅/max_tokens 수정 후 Amprius를
+1회(언어 ko) 재분석했을 때 8개 섹션 전부 정상 채워졌지만, 이건 "그 재실행 시점엔 재현 안 됨"을
+보여줄 뿐 근본 원인이 확정됐다는 뜻은 아니다. **재발 시 이번에 추가한 디버깅 장치로 바로
+확인할 것**: `callSection()` FAIL 로그의 `stop_reason`/`output_tokens`(길이초과 여부 판별),
+`extractJson()` 파싱 실패 시 `server/debug-logs/parse-failures/`에 저장되는 원문 전체
+(정확한 JSON 문법 오류 위치 확인, `.gitignore` 처리됨 — 커밋 안 됨).
 
 ### 프론트 진행 상태 표시 원칙 (2026-08-02 추가 — 체크마크/온디맨드 트리거 통합 버그 수정 계기)
 - 탭 완료 체크마크(✓)는 반드시 "그 탭 데이터가 프론트 state에 실제로 존재하는가"만으로
@@ -1684,6 +1842,134 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
   크기로는 어차피 못 넘어 새 캐싱도 안 걸림. 순수 입력/출력 단가 차이(Sonnet $3/$15 vs
   Haiku $1/$5 per MTok)가 이 손실분을 상쇄할 가능성이 높지만 실측 없이는 단정 불가.
 
+### 재무 파이프라인 서버 조립 리팩터링 + Ford FY2021-2023 공백 근본 원인 규명 (2026-08-13)
+
+**배경**: Ford Motor 재무 탭에서 FY2021/2022 매출총이익·영업이익·순이익이 반복적으로 "확인
+필요"로 비는 문제를 조사. 처음엔 `extractAnnualSeries()`의 `u.fy`(그 수치가 실린 10-K 제출서
+자체의 회계연도 태그이지 그 수치가 설명하는 기간이 아님) 오용이나 `TARGET_FISCAL_YEARS`
+하드코딩 같은 코드 버그를 의심했으나, 실제 SEC EDGAR 원본 데이터로 직접 검증한 결과 **둘 다
+빗나간 가설이었음** — 당시 최신 코드 로직을 fresh SEC 데이터에 그대로 시뮬레이션하면 매출총이익
+(Ford가 애초에 태깅 안 함, `GrossProfit` concept 자체가 404) 제외 전부 5개년이 정확히 나왔음.
+
+**진짜 원인 — 코드 버그가 아니라 Claude 응답의 실행별 비결정성**: DB에 있던 Ford 분석 3건 중
+2건이 FY2021/2022 공백, 1건만 정상이었는데, `financial_cache`가 이 기업에 대해 비어있어 셋 다
+라이브 fetch 경로였고(동일 코드), 그 중 두 건은 생성 시각이 16분 차이였음에도 그 사이 `edgar.ts`
+커밋이 전혀 없었음(git log 확인) — 즉 **완전히 동일한 코드, 완전히 동일한 완전한 컨텍스트**를
+주고도 Claude가 어떤 실행에서는 multi-year trend 섹션의 값을 전부 옮겨적고 어떤 실행에서는
+일부 연도를 놓쳤다는 뜻. "이미 서버가 확정한 원본값을 Claude에게 매번 텍스트로 다시
+서술시키는" 구조 자체가 근본 원인이었음.
+
+**해결**: multi-year trend를 Claude가 텍스트로 재서술하지 않고, 서버가 EDGAR/DART raw
+series에서 income_statement/balance_sheet를 직접 결정론적으로 조립해 Claude 응답을 덮어쓰도록
+전환(`server/src/lib/financialsTableBuilder.ts` 신설, `analyzeCompany()`/`refreshFinancials()`/
+`reanalyzeSingleSection()`과 기존 fin_preview 경로 전부 이 함수로 통일). 이제 이 필드들은
+Claude의 실행별 변동성과 완전히 무관해짐. **"Ford FY2021-2023 공백"은 별도의 개별 버그가
+아니라 이 구조적 리팩터링으로 근본 해결됨** — 앞으로 다년도 재무 필드에서 "확인 필요" 재발이
+보고되면 개별 concept 버그부터 의심하지 말고 이 서버 조립 구조(raw 데이터 자체가 있는지,
+override가 실제로 걸렸는지)부터 먼저 확인할 것.
+
+**같이 처리한 항목**:
+- **EBITDA 서버 조립**: `EdgarRawSeries`에 `depreciation` 필드 신규(라이브 `edgar.ts` + 배치
+  `edgarBatchPrecompute.ts` 둘 다 — 이전엔 D&A concept 자체를 조회하지 않아 EBITDA가 항상
+  "확인 필요"였음). Operating Income + Depreciation(둘 다 확인된 연도만) 계산. Ford 실측으로
+  5개년 전부 정상 계산 확인.
+- **Concept 충돌 투명성**: `pickConceptSeriesWithConflict()`(순이익 NetIncomeLoss/ProfitLoss
+  한정 적용) — 같은 최신연도에 두 concept 값이 10% 이상 다르면(대기업이 두 태그를 동시에
+  유지하는 경우 자체는 흔함, 실측: Berkshire/GE/3M 전부 두 태그 다 최신 데이터 보유) 어느
+  concept을 썼는지 컨텍스트에 명시해 Claude가 sources[] 각주에 반영하도록 유도.
+  ⚠️ **이 기능의 계기로 인용했던 "Honeywell NetIncomeLoss=-$0.12B vs ProfitLoss=$4.77B" 예시는
+  조사 오류였음, 재인용 금지** — 구현 완료 후 재검증한 결과 실제로는 NetIncomeLoss=$4.729B,
+  ProfitLoss=$4.772B로 0.9% 차이뿐(10% 임계치 미달, conflictNote 미발생이 정상 동작). 감지
+  로직 자체(다른 값 후보 비교, 임계치, 동일 연도끼리만 비교)는 정상 검증됐지만, "실제로 자주
+  재현되는 문제"라는 실측 근거는 이 예시로 증명된 적이 없음.
+- **concept_miss_log**: 후보 concept을 전부 시도해도 못 찾은 필드 기록(`cik`/`company_name`/
+  `field_name`/`candidates_tried`/`resolved_at`, prod+dev 마이그레이션 적용 완료) —
+  **라이브 fetch 경로(`edgar.ts`)에만** 연결, 배치 스크립트(`edgarBatchPrecompute.ts`, 월 1회
+  8천개 기업 대상)는 의도적으로 제외(대량 실행 중 노이즈성 로그가 쌓일 위험, 사람이 검토할
+  실용적 가치가 낮다고 판단).
+
+**남은 한계**:
+- **DART는 여전히 Gross Profit/EBITDA 서버 조립 불가** — DART 파이프라인(`dart.ts`의
+  `DartFinSeries`)이 이 두 concept 자체를 원천적으로 조회하지 않음(필드 자체가 타입에 없음).
+  이번 리팩터링은 EDGAR 소스에서만 완전하고, DART 소스는 income_statement 5개 행 중
+  매출총이익/EBITDA는 여전히 Claude의 자유 서술(또는 "확인 필요")에 의존.
+  Operating Income/Net Income/Revenue/자산·부채·자본은 DART도 서버 조립 적용됨.
+- override(`overrideFinancialsTable`)는 raw 데이터(EDGAR/DART rawSeries)가 있을 때만 적용됨 —
+  워트인텔리전스처럼 EDGAR/DART 둘 다 없이 순수 web_search로만 재무 수치가 나오는 회사는
+  서버 조립 대상이 아니라 Claude 생성값을 그대로 씀(이 경우엔 Data reliability principles
+  규칙 8 + strategy_v2 Rule 5의 사후 검증만 방어선).
+- **(2026-08-13 추가 발견) financial_cache 옛 캐시 blob이 최근 추가된 EdgarRawSeries 필드를
+  통째로 못 갖고 있어 크래시** — 이 리팩터링 검증용 `testEdgarReanalysisConsistency.ts`
+  (Ford/NVIDIA/Johnson & Johnson 각 3회 재실행)로 실행별 일관성을 확인하던 중 batch3가
+  Ford는 9/9, NVIDIA/J&J도 재현되는 걸 발견. 처음엔 `depreciation` 필드(EBITDA 계산,
+  `s.depreciation[i]`) 하나만 패치했다가, NVIDIA/J&J가 이번엔 `grossProfit`(더 이전에
+  추가된 필드, 2026-08-12 RKLB 수정 때 도입)에서 동일하게 크래시하는 걸 재확인 —
+  Ford만의 문제가 아니라 **"필드 추가 시점 이후로 캐시가 안 갱신된 회사는 그 필드가
+  뭐든 undefined"라는 일반 패턴**이었음. `toSeriesInput()`을 필드별 개별 fallback 대신
+  공용 `fallback(vals, n)` 헬퍼로 8개 필드(revenue/grossProfit/operatingIncome/netIncome/
+  depreciation/assets/liabilities/equity) 전부 일괄 정규화하도록 재작성해 근본 해결
+  (`financialsTableBuilder.ts`) — 앞으로 `EdgarRawSeries`/`DartRawSeries`에 필드가
+  추가돼도 이 클래스의 크래시는 재발하지 않음.
+  Supabase 직접 조회로 확인한 스테일 규모: **financial_cache EDGAR 소스 6,819건 전부
+  depreciation 필드 없음(100%)** — RKLB 때처럼 "일부 스테일"이 아니라, depreciation
+  필드 자체가 배치 마지막 실행 이후 하루 전(2026-08-13)에 신규 추가됐고 크론이 월
+  1회(`render.yaml`, 매월 1일 02:00 UTC)라 그 이후 한 번도 재실행 안 된 게 원인 —
+  `grossProfit`은 더 오래전에 추가된 필드라 스테일 비율은 확인 안 함(fallback 적용으로
+  크래시는 어차피 안 남). 크래시는 수정됐고 EBITDA만 "확인 필요"로 정상 표시(다른
+  4개 지표는 영향 없음), 9/1 정기 크론에서 자연 해소 예정. 그전에 특정 기업을 급하게
+  보여줘야 할 일이 생기면 RKLB 때처럼 개별 수동 재생성(`processCompany()`)으로 대응 —
+  배치 수동 전체 재실행은 2026-08-13에 의도적으로 보류 결정.
+
+### ICP 인사이트 discovery_questions 2단계 통합 (2026-08-15)
+
+**배경**: ICP 인사이트 탭이 5카테고리(financial/investment/technology/competitive/market)
+신호 중 실제로 신호가 있는 카테고리만 insight+consequence를 생성하다 보니, 보통 3개 안팎으로만
+채워져 빈약했음(백로그 "ICP 맞춤형 인사이트 탭" 항목 참고). 카테고리별 함의 템플릿을 미리
+설계하는 "트리거 패턴 라이브러리" 방향 대신, 이미 매 분석마다 생성되는 9개 섹션 각자가 자기
+데이터에 근거한 질문 후보를 직접 만들어두고 ICP 탭에서 선별만 하는 2단계 구조로 재설계.
+
+**1단계(섹션 단위, 기존 캐시 정책 그대로)**: summary_v2/financials_v2/business_model_v2/
+competitors_v2/value_chain_v2/strategy_v2/industry_history_v2/tech_evolution_v2/founder_v2
+9개 섹션 타입에 `discovery_questions: string[]`(3-5개, 빈 배열 허용) 필드 신규 —
+`SECTION_SCHEMAS`(`claude.ts`) 각 스키마 끝에 "발표형 금지, 사실이 아니라 그 사실이 만드는
+결과를 궁금해하는 질문형으로" 지시문 추가. `SECTION_CONTENT_SIGNALS`(Quality Gate)에는
+의도적으로 편입하지 않음 — discovery_questions만 채워지고 나머지 필드가 전부 비어있는 걸
+"콘텐츠 있음"으로 오판하면 안 되므로.
+- `cross_industry_nudge_v1`(넛지)는 이 9개 목록에서 제외 — 이미 `industry_pain.
+  financial_impact_question`이라는 질문형 필드가 있어 새 필드를 안 만들고 그대로 재사용
+  (구 5카테고리 중 "market" 자리를 대체).
+- `financials_v2`는 SEC 산업 벤치마크 편차를 프롬프트에서 볼 수 없음(콘텐츠 포맷 원칙 1번 —
+  이 숫자는 narrative/프롬프트 컨텍스트에 안 실리고 막대비교 컴포넌트가 전담) → Claude가
+  callSection()에서 만드는 discovery_questions는 편차와 무관하게 손익/현금흐름/리스크만
+  소재로 삼고, 편차 소재 질문 1개는 `generateSecBenchmarkInterpretations`와 같은 자리
+  (`analyze.ts`의 `buildSecBenchmarkComparison`)에서 `generateBenchmarkDiscoveryQuestion()`이
+  별도로 만들어 `financialsV2.discovery_questions` 맨 앞에 붙이고 합쳐서 5개로 자른다.
+
+**2단계(유저 단위, 온디맨드, 캐시 정책 기존 그대로)**: `POST /api/analyze/:id/icp-insight`가
+`collectDiscoveryQuestionCandidates()`(`server/src/lib/discoveryQuestions.ts`, 옛
+`icpSignals.ts`의 `collectIcpSignals` 대체)로 9개 섹션 + 넛지의 질문을 하나의 후보 풀로
+모은다(id/section/question/sources). ICP(icp_product/icp_target_industry/icp_target_role)가
+3개 다 비어있으면 `pickDefaultDiscoveryQuestions()`가 Claude 호출 없이 결정론적으로 최대
+5개를 고른다(재무 벤치마크 이탈 있으면 financials_v2 후보를 앞으로, 없으면 섹션 노출 순서
+그대로) — 불필요한 Claude 호출을 피하는 기존 원칙과 동일 계열. 하나라도 있으면
+`curateDiscoveryQuestions()`(claude.ts)가 후보 풀 전체를 id와 함께 Claude에 넘겨 ICP에
+맞는 3-5개를 선별(문구 경미한 재구성 허용)하게 하고, **반환된 id가 실제로 넘긴 후보 풀에
+있는지 서버가 다시 검증**해 Claude가 근거 없는 id/문장을 끼워 넣을 방법을 코드 레벨에서
+차단한다(원본 섹션 데이터 근거를 벗어나지 않을 것 원칙의 서버측 강제). `icp_insights` 테이블 +
+`analysis_id`/`icp_fingerprint` 캐시 조회 로직은 기존 그대로 재사용(신규 테이블 없음) —
+응답 `content`만 카테고리 키 객체에서 `{ questions: [{question, section, sources}] }`
+배열로 형태만 바뀜. 프론트(`AnalysisCard.tsx`의 `IcpInsightTab`)도 카테고리별 카드 5장을
+질문 리스트 1장(불릿, `SectionCard`/`SourcesList` 재사용, 새 컴포넌트 없음)으로 교체 —
+별점 위젯(`IcpRatingWidget`)은 카드당 하나씩 중복 렌더링되던 걸 리스트당 1개로 정리.
+
+**남은 한계 (기존 financial_cache 스테일 패턴과 동일 계열)**: financial_cache의 fin_preview
+빠른 경로(`buildFinancialsV2FromRaw`, EDGAR/DART raw로 직접 조립, Claude 미호출)와 이전에
+생성된 `financial_cache.financials_v2`/`analyses` 캐시 blob은 이 필드 추가 이전에 만들어졌으므로
+`discovery_questions`가 없다 — 클라이언트 타입에서 이 필드를 옵셔널(`discovery_questions?:
+string[]`)로 두고, 후보 수집 시 `?? []`로 방어해 크래시 없이 자연히 후보 수가 적게(또는 0개)
+잡히는 데 그친다. 별도 백필 없음 — 재분석/배치 재실행으로 자연 해소(depreciation/grossProfit
+필드 스테일 이슈와 동일 원칙).
+
 ---
 
 ## 버전 히스토리
@@ -1713,4 +1999,8 @@ maxRounds에 도달해도 예외를 던지지 말고, 그 시점까지 모은 �
 | v2.6.0 | 2026-08-12 — 언어 정책 재도입(v2.2.0 영어 단일화 번복): `analyses.language`
   컬럼으로 KR/EN 캐시 분리, 계정 설정 내 수동 토글(localStorage, 기본 EN, 자동감지 없음),
   솔루션 앱 전체(AE Skills·랜딩페이지 제외)에 국영문 지원. 상세는 위 "언어 정책" 섹션 참고. |
+| v2.7.0 | 2026-08-15 — ICP 인사이트 탭 discovery_questions 2단계 통합: 9개 섹션이 각자
+  질문 후보(discovery_questions)를 생성해두고 ICP 탭이 3-5개만 선별(ICP 없으면 결정론적
+  선택, 있으면 Claude 큐레이션 + id 기반 근거 검증). 5카테고리 insight+consequence 방식을
+  대체. 상세는 위 Architecture 섹션 "ICP 인사이트 discovery_questions 2단계 통합" 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

@@ -187,6 +187,7 @@ export interface SummaryV2 {
   bull_case: string[];
   bear_case: string[];
   oneLiner: string;
+  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -203,6 +204,7 @@ export interface IndustryHistoryV2 {
   why_durable: string[];
   chasm_points: string[];
   key_bullets?: string[];
+  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -220,6 +222,7 @@ export interface TechEvolutionV2 {
   current_stage: { label: string; detail: string };
   next_inflection: { label: string; detail: string };
   key_bullets?: string[];
+  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -245,6 +248,7 @@ export interface ValueChainV2 {
   value_flow: string[];
   subject_position: string[];
   key_bullets?: string[];
+  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -282,6 +286,7 @@ export interface BusinessModelV2 {
   };
   moat: MoatV2[];
   key_bullets?: string[];
+  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -317,6 +322,7 @@ export interface CompetitorsV2 {
   substitutes: { name: string; threat: string }[];
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
   key_bullets?: string[];
+  discovery_questions?: string[];
   sources?: Source[];
   // EDGAR 기업 전용 — industryBenchmarkService가 순수 계산 후 병합(Claude 미생성)
   revenue_ranking?: CompetitorRevenueRanking | null;
@@ -359,6 +365,7 @@ export interface StrategyV2 {
   strategy_coherence: string;
   ten_year_durability: string[];
   key_bullets?: string[];
+  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -396,6 +403,7 @@ export interface FinancialsV2 {
     keyRisks: string[];
   };
   key_bullets?: string[];
+  discovery_questions?: string[];
   sources?: Source[];
   // EDGAR 기업 전용 — industryBenchmarkService가 순수 계산 후 병합(Claude 미생성)
   industry_benchmark?: IndustryBenchmarkResult | null;
@@ -472,6 +480,7 @@ export interface FounderV2 {
     cofounders: string[];
   };
   key_bullets: string[];
+  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -519,19 +528,19 @@ export interface UserProfile {
   icp_target_role: string | null;
 }
 
-// ICP 맞춤형 인사이트 탭 — POST /api/analyze/:id/icp-insight 응답.
-export type IcpInsightCategory = 'financial' | 'investment' | 'technology' | 'competitive' | 'market';
-
-export interface IcpInsightCategoryContent {
-  insight: string;
-  consequence_for_icp: string;
-  confidence: 'high' | 'medium';
+// ICP 맞춤형 인사이트 탭 — POST /api/analyze/:id/icp-insight 응답 (2026-08-15 개편:
+// 5카테고리 insight+consequence 대신 9개 섹션의 discovery_questions 후보 풀에서 선별한
+// 3-5개 질문 리스트). section은 근거 섹션 키(summary_v2 등, 또는 cross_industry_nudge_v1) —
+// UI가 어느 섹션 데이터에서 나온 질문인지 짧게 라벨링할 때 쓴다.
+export interface DiscoveryQuestionItem {
+  question: string;
+  section: string;
   sources: Source[];
 }
 
 export interface IcpInsightResponse {
   id: string;
-  content: Partial<Record<IcpInsightCategory, IcpInsightCategoryContent>>;
+  content: { questions: DiscoveryQuestionItem[] };
   created_at: string;
   cached: boolean;
 }

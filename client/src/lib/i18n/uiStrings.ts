@@ -149,8 +149,8 @@ interface UiStringDict {
     loading: string;
     failed: string;
     noSignals: string;
-    categoryLabel: Record<'financial' | 'investment' | 'technology' | 'competitive' | 'market', string>;
-    confidenceLabel: Record<'high' | 'medium', string>;
+    questionsTitle: string;
+    sectionLabel: Record<string, string>;
     ratingPrompt: string;
     ratingCommentPlaceholder: string;
     ratingSubmit: string;
@@ -330,14 +330,19 @@ const ko: UiStringDict = {
     loading: 'ICP 인사이트를 생성하고 있어요...',
     failed: '인사이트 생성에 실패했어요. 잠시 후 다시 시도해주세요.',
     noSignals: '지금은 참고할 만한 신호가 부족해요. 분석이 더 진행되면 다시 시도해보세요.',
-    categoryLabel: {
-      financial: '재무상태변화',
-      investment: '투자변화',
-      technology: '기술변화',
-      competitive: '경쟁변화',
-      market: '시장변화',
+    questionsTitle: '디스커버리 질문',
+    sectionLabel: {
+      summary_v2: '요약',
+      financials_v2: '재무',
+      business_model_v2: '비즈니스모델',
+      competitors_v2: '경쟁사',
+      value_chain_v2: '밸류체인',
+      strategy_v2: '전략',
+      industry_history_v2: '산업역사',
+      tech_evolution_v2: '기술변화',
+      founder_v2: '창업자',
+      cross_industry_nudge_v1: '넛지',
     },
-    confidenceLabel: { high: '확신도 높음', medium: '확신도 보통' },
     ratingPrompt: '이 인사이트, 도움이 됐나요?',
     ratingCommentPlaceholder: '왜 별로였나요? (선택)',
     ratingSubmit: '제출',
@@ -517,14 +522,19 @@ const en: UiStringDict = {
     loading: 'Generating your ICP insight...',
     failed: 'Failed to generate insight. Please try again shortly.',
     noSignals: "There isn't enough signal to work with yet. Try again once the analysis has progressed further.",
-    categoryLabel: {
-      financial: 'Financial change',
-      investment: 'Investment activity',
-      technology: 'Technology shift',
-      competitive: 'Competitive change',
-      market: 'Market pain',
+    questionsTitle: 'Discovery questions',
+    sectionLabel: {
+      summary_v2: 'Summary',
+      financials_v2: 'Financials',
+      business_model_v2: 'Business Model',
+      competitors_v2: 'Competitors',
+      value_chain_v2: 'Value Chain',
+      strategy_v2: 'Strategy',
+      industry_history_v2: 'Industry History',
+      tech_evolution_v2: 'Tech Evolution',
+      founder_v2: 'Founder',
+      cross_industry_nudge_v1: 'Nudge',
     },
-    confidenceLabel: { high: 'High confidence', medium: 'Medium confidence' },
     ratingPrompt: 'Was this insight helpful?',
     ratingCommentPlaceholder: "What didn't work? (optional)",
     ratingSubmit: 'Submit',

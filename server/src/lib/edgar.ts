@@ -84,6 +84,10 @@ export interface EdgarRawSeries {
   operatingCF: (number | null)[];
   investingCF: (number | null)[];
   financingCF: (number | null)[];
+  // 다년도 EBITDA 서버 조립용(Operating Income + Depreciation, 둘 다 있는 연도만) — 2026-08-13
+  // 이전엔 단일 최신연도 스냅샷(financials.ebitda)에서만 oi.val+da.val을 계산했고 rawSeries엔
+  // 아예 실려있지 않아 다년도 표에는 EBITDA를 서버가 조립할 방법이 없었다.
+  depreciation: (number | null)[];
   fiscalYears: string[];
   filedAt: string;
   source: 'EDGAR';
@@ -108,6 +112,10 @@ export interface EdgarData {
     operatingCF?: string;
     investingCF?: string;
     financingCF?: string;
+    // 순이위 concept이 NetIncomeLoss/ProfitLoss 중 하나로 선택됐는데 같은 연도에 두 태그 값이
+    // 10% 이상 다르면(Honeywell 실측 사례) 그 사실을 여기 남긴다 — financialContext.ts가 컨텍스트에
+    // 노출하고, Claude가 sources[] 각주에 반영하도록 유도.
+    netIncomeConceptNote?: string;
   };
   // 최근 10-K/20-F 최대 5개년 시계열 (fiscalYears[0]이 최신) — buildFinancialsV2FromRaw 등에서 사용
   rawSeries?: EdgarRawSeries;
@@ -261,6 +269,79 @@ export function pickConceptSeries(
   return best;
 }
 
+export interface ConceptSeriesResult {
+  series: XbrlAnnualPoint[];
+  conceptUsed: string | null;
+  // 다른 후보 concept이 같은 최신연도에 10% 이상 다른 값을 갖고 있으면 그 사실을 기록한다 —
+  // Honeywell 실측 사례(2026-08-13): NetIncomeLoss FY2025=-$0.12B vs ProfitLoss FY2025=$4.77B처럼
+  // "continuing operations 기준 차이 등으로 값 자체가 다른" 동시 태깅이 대기업에 흔함(3M/GE/
+  // Berkshire도 두 태그를 동시에 유지). pickConceptSeries의 "최신+데이터개수" 선택은 둘 다 최신
+  // 연도면 사실상 후보 나열 순서(먼저 온 이름이 이김)로 결정되는데, 이걸 숨기지 않고 출처
+  // 각주에 남기기 위한 용도 — Ford의 NetIncomeLoss(FY2024까지)→ProfitLoss(FY2025부터) 전환처럼
+  // "최신연도가 다른" 정상 폴백과는 구분(그 경우는 같은 연도가 아니라서 비교 자체를 안 함).
+  conflictNote: string | null;
+}
+
+// pickConceptSeries와 동일한 선택 로직에 "다른 후보와 값이 크게 다른가" 투명성만 추가한 버전.
+// 후보가 여럿이라도 실제로 값이 갈리는 경우가 드문 필드(Revenue/Assets 등)까지 전부 이 버전으로
+// 바꾸면 호출부 13곳을 전부 고쳐야 해서, 지금까지 유일하게 값 충돌이 실측 확인된 순이위(Net
+// Income, NetIncomeLoss vs ProfitLoss)에만 적용한다.
+export function pickConceptSeriesWithConflict(
+  usGaap: Record<string, any>,
+  ...names: string[]
+): ConceptSeriesResult {
+  const candidates: Array<{ name: string; result: XbrlAnnualPoint[] }> = [];
+  for (const name of names) {
+    const concept = usGaap[name];
+    if (!concept) continue;
+    const units: XbrlUnit[] | undefined =
+      concept.units?.USD ??
+      concept.units?.['USD/shares'] ??
+      concept.units?.shares;
+    const result = extractAnnualSeries(units);
+    if (result.length > 0) candidates.push({ name, result });
+  }
+  if (candidates.length === 0) return { series: [], conceptUsed: null, conflictNote: null };
+
+  let best = candidates[0];
+  for (const c of candidates.slice(1)) {
+    if (c.result[0].year > best.result[0].year ||
+        (c.result[0].year === best.result[0].year && c.result.length > best.result.length)) {
+      best = c;
+    }
+  }
+
+  let conflictNote: string | null = null;
+  for (const c of candidates) {
+    if (c.name === best.name || c.result[0].year !== best.result[0].year) continue;
+    const a = best.result[0].val, b = c.result[0].val;
+    if (a === 0) continue;
+    const diffPct = Math.abs((a - b) / a) * 100;
+    if (diffPct >= 10) {
+      conflictNote = `${best.name}=${fmtUsd(a)} vs ${c.name}=${fmtUsd(b)} for FY${best.result[0].year} ` +
+        `(${diffPct.toFixed(0)}% apart, likely different continuing-operations/segment scope) — used ${best.name}`;
+      break;
+    }
+  }
+
+  return { series: best.result, conceptUsed: best.name, conflictNote };
+}
+
+// 후보를 전부 시도해도 못 찾은 경우(진짜 구조적 부재인지, 새 concept 후보를 추가해야 하는지는
+// 사람이 나중에 판단) concept_miss_log에 기록 — fire-and-forget, 분석 흐름을 막지 않는다.
+async function logConceptMissIfEmpty(
+  cik: string, companyName: string, fieldName: string, series: XbrlAnnualPoint[], candidates: string[],
+): Promise<void> {
+  if (series.length > 0) return;
+  try {
+    await supabase.from('concept_miss_log').insert({
+      cik, company_name: companyName, field_name: fieldName, candidates_tried: candidates,
+    });
+  } catch (e) {
+    console.warn(`[edgar] concept_miss_log insert 실패 (${fieldName})`, (e as Error).message);
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 // cik_master DB 전용 조회 (EFTS API 없음 — 빠름, financial_cache 선체크용)
@@ -366,7 +447,10 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     const revData  = pickConceptSeries(gaap, 'Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet');
     const gpData   = pickConceptSeries(gaap, 'GrossProfit');
     const oiData   = pickConceptSeries(gaap, 'OperatingIncomeLoss');
-    const niData   = pickConceptSeries(gaap, 'NetIncomeLoss', 'ProfitLoss');
+    // 순이익만 conflict 감지 버전 사용 — Honeywell 실측 사례(NetIncomeLoss/ProfitLoss가 같은
+    // 최신연도에 10%+ 다른 값)가 유일하게 확인된 필드라 여기만 국한(위 ConceptSeriesResult 주석 참고).
+    const niResult = pickConceptSeriesWithConflict(gaap, 'NetIncomeLoss', 'ProfitLoss');
+    const niData   = niResult.series;
     const aData    = pickConceptSeries(gaap, 'Assets');
     const lData    = pickConceptSeries(gaap, 'Liabilities');
     const eqData   = pickConceptSeries(gaap, 'StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest');
@@ -376,6 +460,21 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     const finCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInFinancingActivities');
     const daData   = pickConceptSeries(gaap, 'DepreciationDepletionAndAmortization', 'DepreciationAndAmortization');
     const epsData  = pickConceptSeries(gaap, 'EarningsPerShareBasic');
+
+    // 후보를 전부 시도해도 못 찾은 필드만 concept_miss_log에 기록(fire-and-forget) — 나중에
+    // 사람이 이 로그를 보고 새 concept 후보를 추가할지 판단하는 용도.
+    void logConceptMissIfEmpty(cik, entityName, 'revenue', revData, ['Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet']);
+    void logConceptMissIfEmpty(cik, entityName, 'grossProfit', gpData, ['GrossProfit']);
+    void logConceptMissIfEmpty(cik, entityName, 'operatingIncome', oiData, ['OperatingIncomeLoss']);
+    void logConceptMissIfEmpty(cik, entityName, 'netIncome', niData, ['NetIncomeLoss', 'ProfitLoss']);
+    void logConceptMissIfEmpty(cik, entityName, 'assets', aData, ['Assets']);
+    void logConceptMissIfEmpty(cik, entityName, 'liabilities', lData, ['Liabilities']);
+    void logConceptMissIfEmpty(cik, entityName, 'equity', eqData, ['StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest']);
+    void logConceptMissIfEmpty(cik, entityName, 'cash', cashData, ['CashAndCashEquivalentsAtCarryingValue', 'CashCashEquivalentsAndShortTermInvestments']);
+    void logConceptMissIfEmpty(cik, entityName, 'operatingCF', opCFData, ['NetCashProvidedByUsedInOperatingActivities']);
+    void logConceptMissIfEmpty(cik, entityName, 'investingCF', invCFData, ['NetCashProvidedByUsedInInvestingActivities']);
+    void logConceptMissIfEmpty(cik, entityName, 'financingCF', finCFData, ['NetCashProvidedByUsedInFinancingActivities']);
+    void logConceptMissIfEmpty(cik, entityName, 'depreciation', daData, ['DepreciationDepletionAndAmortization', 'DepreciationAndAmortization']);
 
     // 최신 연도 단일값 — 기존 narrative(financials) 호환용.
     // 손익계산서 항목(gp/oi/ni/da)은 revenue와 같은 회계연도인지 검증 후에만 사용 — concept마다
@@ -402,6 +501,7 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     if (ocf) financials.operatingCF = fmtUsd(ocf.val);
     if (icf) financials.investingCF = fmtUsd(icf.val);
     if (fcf) financials.financingCF = fmtUsd(fcf.val);
+    if (niResult.conflictNote) financials.netIncomeConceptNote = niResult.conflictNote;
 
     // 다년도 시계열 (최대 5개년, 매출 기준 회계연도 정렬 — 없으면 순이익 기준)
     const fiscalYears = revData.length > 0 ? revData.map(d => d.year) : niData.map(d => d.year);
@@ -425,6 +525,7 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
         operatingCF: align(opCFData),
         investingCF: align(invCFData),
         financingCF: align(finCFData),
+        depreciation: align(daData),
         fiscalYears,
         filedAt: new Date().toISOString(),
         source: 'EDGAR',

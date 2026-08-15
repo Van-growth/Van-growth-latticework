@@ -43,7 +43,6 @@ import {
   GrowthScenarioV2,
   SecBenchmarkComparison,
   UserProfile,
-  IcpInsightCategory,
   IcpInsightResponse,
 } from '@/types';
 import { isPlaceholder, countFinancialsReliability } from '@/lib/financialsReliability';
@@ -1516,13 +1515,13 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
   );
 });
 
-// ── ICP 맞춤형 인사이트 (2026-08-13) ───────────────────────────────────────────
+// ── ICP 맞춤형 인사이트 (2026-08-13, 2026-08-15 discovery_questions 개편) ─────────
 // 다른 온디맨드 탭(산업역사/기술역사)과 달리 analyses 행이 아니라 별도 icp_insights
 // 테이블 + 유저 세션에 묶인 결과라, data(AnalysisDetail)에 결과를 실어보내지 않고
 // 이 컴포넌트가 완전히 자기 상태로 API를 직접 호출한다 — 부모(AnalysisCardInner)에
-// prop을 새로 뚫지 않음.
-
-const ICP_CATEGORY_ORDER: IcpInsightCategory[] = ['financial', 'investment', 'technology', 'competitive', 'market'];
+// prop을 새로 뚫지 않음. 5카테고리 insight+consequence 카드는 9개 섹션의
+// discovery_questions 후보 풀에서 선별한 3-5개 질문 리스트로 대체됐다(UI 컴포넌트는
+// 그대로 재사용 — SectionCard/SourcesList/IcpRatingWidget 신규 없음).
 
 function IcpRatingWidget({ insightId, uiT, onError }: {
   insightId: string;
@@ -1672,12 +1671,10 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
     );
   }
 
-  const entries = ICP_CATEGORY_ORDER
-    .filter(cat => result.content[cat])
-    .map(cat => [cat, result.content[cat]!] as const);
+  const questions = result.content.questions ?? [];
   const daysAgo = Math.max(0, Math.floor((Date.now() - new Date(result.created_at).getTime()) / (1000 * 60 * 60 * 24)));
 
-  if (entries.length === 0) {
+  if (questions.length === 0) {
     return <p className="text-sm text-gray-500 py-16 text-center">{uiT.icpInsight.noSignals}</p>;
   }
 
@@ -1690,17 +1687,22 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
         </button>
       </div>
 
-      {entries.map(([category, item]) => (
-        <SectionCard key={category} title={uiT.icpInsight.categoryLabel[category]} dotColor="bg-amber-400">
-          <p className="text-sm text-gray-800 leading-relaxed mb-2">{item.insight}</p>
-          <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-800 leading-relaxed mb-2">
-            {item.consequence_for_icp}
-          </div>
-          <Tag label={uiT.icpInsight.confidenceLabel[item.confidence]} color={item.confidence === 'high' ? 'emerald' : 'gray'} />
-          <SourcesList sources={item.sources} />
-          <IcpRatingWidget insightId={result.id} uiT={uiT} onError={showRatingErrorToast} />
-        </SectionCard>
-      ))}
+      <SectionCard title={uiT.icpInsight.questionsTitle} dotColor="bg-amber-400">
+        <ul className="space-y-3">
+          {questions.map((item, i) => (
+            <li key={i} className="pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0">
+                  {uiT.icpInsight.sectionLabel[item.section] ?? item.section}
+                </span>
+                <p className="text-sm text-gray-800 leading-relaxed">{item.question}</p>
+              </div>
+              <SourcesList sources={item.sources} />
+            </li>
+          ))}
+        </ul>
+        <IcpRatingWidget insightId={result.id} uiT={uiT} onError={showRatingErrorToast} />
+      </SectionCard>
 
       {ratingToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
@@ -1795,7 +1797,10 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
             {s.strategy_coherence && (
               <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
                 <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-500 mb-2">전략 수렴</div>
-                <p className="text-sm text-gray-700 leading-relaxed">{s.strategy_coherence}</p>
+                {/* 백엔드가 strategy_coherence를 2~3개 문단(빈 줄로 구분, "\n\n")으로 나눠 보내므로
+                    whitespace-pre-line으로 줄바꿈을 실제로 살린다 — 기본 white-space:normal이면
+                    \n이 공백으로 뭉개져서 여전히 한 덩어리 문단처럼 보인다. */}
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{s.strategy_coherence}</p>
               </div>
             )}
             <BulletCallout title="10년 지속 가능성" items={s.ten_year_durability} boxCls="bg-green-50 border border-green-100" titleCls="text-green-600" dotCls="bg-green-400" />

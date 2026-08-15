@@ -1021,8 +1021,8 @@ function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
                 <Text style={[s.td, { flex: 2 }]}>{r.name}</Text>
                 <Text style={s.td}>{r.type}</Text>
                 <Text style={s.td}>{pdfVal(r.revenue_share) !== '—' ? `${r.revenue_share}%` : '—'}</Text>
-                <Text style={s.td}>{pdfVal(r.operating_margin) !== '—' ? `${r.operating_margin}%` : '—'}</Text>
-                <Text style={s.td}>{pdfVal(r.growth_rate) !== '—' ? `${r.growth_rate}%` : '—'}</Text>
+                <Text style={s.td}>{pdfVal(r.operating_margin) !== '—' && r.operating_margin !== 0 ? `${r.operating_margin}%` : '—'}</Text>
+                <Text style={s.td}>{pdfVal(r.growth_rate) !== '—' && r.growth_rate !== 0 ? `${r.growth_rate}%` : '—'}</Text>
               </View>
             ))}
           </View>

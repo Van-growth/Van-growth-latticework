@@ -2,12 +2,13 @@ import { Router, Request, Response } from 'express';
 import { createHash } from 'crypto';
 import { supabase } from '../lib/supabase';
 import {
-  analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, Source, reanalyzeSingleSection,
-  generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, generateIcpInsights, SecBenchmarkComparison,
-  withTimeout, Language,
+  analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, reanalyzeSingleSection,
+  generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, generateBenchmarkDiscoveryQuestion,
+  curateDiscoveryQuestions, SecBenchmarkComparison, withTimeout, Language,
 } from '../lib/claude';
-import { collectIcpSignals, IcpSignalCategory } from '../lib/icpSignals';
+import { collectDiscoveryQuestionCandidates, pickDefaultDiscoveryQuestions, DiscoveryQuestionCandidate } from '../lib/discoveryQuestions';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
+import { buildIncomeStatementRows, buildBalanceSheetRows } from '../lib/financialsTableBuilder';
 import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
 import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
@@ -132,27 +133,49 @@ function fixAllEdgarSourceUrls(analysis: Partial<AnalysisData>, cik: string | un
 // 숫자(편차 계산)는 secIndustryBenchmark.ts가 순수 계산, interpretation 한 줄만 별도
 // Claude 호출(claude.ts). financials_v2.narrative에는 이 숫자를 넣지 않음(막대비교
 // 컴포넌트가 전담) — KPI 카드와의 숫자 중복 방지 원칙.
-async function buildSecBenchmarkComparison(companyName: string, rawEdgar: any, language: Language = 'en'): Promise<SecBenchmarkComparison | null> {
+interface SecBenchmarkResult {
+  comparison: SecBenchmarkComparison | null;
+  // 벤치마크 이탈 소재 discovery_questions 1개 — Claude가 callSection()에서
+  // financials_v2를 생성할 때는 이 편차를 볼 수 없어(콘텐츠 포맷 원칙 1번, 이 숫자는
+  // narrative/프롬프트 컨텍스트에 안 실림) 여기서 별도로 만든다.
+  discoveryQuestion: string | null;
+}
+
+const EMPTY_SEC_BENCHMARK_RESULT: SecBenchmarkResult = { comparison: null, discoveryQuestion: null };
+
+async function buildSecBenchmarkComparison(companyName: string, rawEdgar: any, language: Language = 'en'): Promise<SecBenchmarkResult> {
   const deviations = await computeSecBenchmarkDeviations(rawEdgar);
-  if (!deviations) return null;
+  if (!deviations) return EMPTY_SEC_BENCHMARK_RESULT;
   if (deviations.status === 'insufficient_sample') {
-    return { sicCode: deviations.sicCode, status: 'insufficient_sample', maxN: deviations.maxN };
+    return { comparison: { sicCode: deviations.sicCode, status: 'insufficient_sample', maxN: deviations.maxN }, discoveryQuestion: null };
   }
   const items = deviations.items ?? [];
-  const interpretations = await generateSecBenchmarkInterpretations(companyName, deviations.sicCode, items, language);
+  const [interpretations, discoveryQuestion] = await Promise.all([
+    generateSecBenchmarkInterpretations(companyName, deviations.sicCode, items, language),
+    generateBenchmarkDiscoveryQuestion(companyName, deviations.sicCode, items, language),
+  ]);
   return {
-    sicCode: deviations.sicCode,
-    status: 'compared',
-    items: items.map((it, i) => ({ ...it, interpretation: interpretations[i] ?? '' })),
+    comparison: {
+      sicCode: deviations.sicCode,
+      status: 'compared',
+      items: items.map((it, i) => ({ ...it, interpretation: interpretations[i] ?? '' })),
+    },
+    discoveryQuestion,
   };
 }
 
 // financials_v2에 벤치마크 비교를 붙이고, 실제로 비교 수치를 인용했다면 sources[]에도
 // L1(🟢 공식) 출처를 남긴다 — attachIndustryData가 industry_benchmark_cache에 대해 하는
-// 것과 동일한 패턴(기존 출처 뱃지 시스템 재사용, 새 뱃지 체계 안 만듦).
-function attachSecBenchmarkToFinancials(financialsV2: FinancialsV2 | null | undefined, comparison: SecBenchmarkComparison | null): void {
-  if (!financialsV2 || !comparison) return;
+// 것과 동일한 패턴(기존 출처 뱃지 시스템 재사용, 새 뱃지 체계 안 만듦). 벤치마크 이탈
+// discovery_questions는 Claude가 생성한 목록 앞에 붙인다(우선 소재로 다루기 위함),
+// 합쳐서 최대 5개로 자른다.
+function attachSecBenchmarkToFinancials(financialsV2: FinancialsV2 | null | undefined, result: SecBenchmarkResult): void {
+  if (!financialsV2 || !result.comparison) return;
+  const comparison = result.comparison;
   financialsV2.sec_benchmark_comparison = comparison;
+  if (result.discoveryQuestion) {
+    financialsV2.discovery_questions = [result.discoveryQuestion, ...(financialsV2.discovery_questions ?? [])].slice(0, 5);
+  }
   if (comparison.status !== 'compared' || !comparison.items?.length) return;
   const sources: SectionSource[] = financialsV2.sources ?? [];
   for (const item of comparison.items) {
@@ -269,40 +292,17 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
   );
   if (fyrs.length === 0) return null;
 
-  const IS_COLS = ['2021','2022','2023','2024','2025'];
-  const BS_COLS = ['2023','2024','2025'];
-
-  const toIsRow = (label: string, vals: (number | null)[] = []) => {
-    const row: any = { item: label };
-    IS_COLS.forEach(yr => {
-      const idx = fyrs.indexOf(yr);
-      row[`fy${yr}`] = idx >= 0 ? fmt(vals[idx] ?? null) : undefined;
-    });
-    const idx0 = 0, idx1 = 1;
-    if (vals[idx0] != null && vals[idx1] != null && vals[idx1] !== 0) {
-      const pct = ((vals[idx0]! - vals[idx1]!) / Math.abs(vals[idx1]!)) * 100;
-      row.yoy = pct >= 0 ? `▲${pct.toFixed(0)}%` : `▼${Math.abs(pct).toFixed(0)}%`;
-    } else {
-      row.yoy = '—';
-    }
-    return row;
-  };
-
-  const toBsRow = (label: string, vals: (number | null)[] = []) => {
-    const row: any = { item: label };
-    BS_COLS.forEach(yr => {
-      const idx = fyrs.indexOf(yr);
-      row[`fy${yr}`] = idx >= 0 ? fmt(vals[idx] ?? null) : undefined;
-    });
-    return row;
-  };
+  // income_statement/balance_sheet는 financialsTableBuilder.ts의 공용 함수로 조립(Gross
+  // Profit/EBITDA 포함, Not applicable/Not disclosed 구분, YoY까지 서버가 결정론적으로 계산) —
+  // batch3 최종 병합(claude.ts) 시점의 override와 동일한 함수를 재사용해 fin_preview와 최종
+  // 결과가 항상 일치하도록 한다.
+  const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language);
+  const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language);
 
   const isKr   = source === 'DART';
   const name   = rawDart?.corp_name ?? rawEdgar?.ticker ?? '';
   const yr     = fyrs[0];
   const srcLbl = isKr ? t('DART 공시', 'DART filing') : 'SEC EDGAR';
-
-  const hasVal = (row: any) => Object.keys(row).some(k => k.startsWith('fy') && row[k] && row[k] !== '—');
 
   // 현금흐름 — EDGAR는 이제 rawSeries에 operatingCF/investingCF/financingCF가 실려 오므로
   // (2026-07-30 이전엔 edgar.ts/edgarBatchPrecompute.ts 양쪽에서 이 필드 자체가 누락돼 있었음)
@@ -321,16 +321,8 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
       series.revenue?.[0]        != null ? t(`${yr}년 매출액: ${fmt(series.revenue[0])}`, `FY${yr} Revenue: ${fmt(series.revenue[0])}`) : null,
       series.operatingIncome?.[0] != null ? t(`${yr}년 영업이익: ${fmt(series.operatingIncome[0])}`, `FY${yr} Operating Income: ${fmt(series.operatingIncome[0])}`) : null,
     ] as (string | null)[]).filter((x): x is string => x !== null),
-    income_statement: [
-      toIsRow(t('매출액', 'Revenue'),                     series.revenue),
-      toIsRow(t('영업이익', 'Operating Income'),           series.operatingIncome),
-      toIsRow(t('당기순이익', 'Net Income'),               series.netIncome),
-    ].filter(hasVal),
-    balance_sheet: [
-      toBsRow(t('총자산', 'Total Assets'),                 series.assets),
-      toBsRow(t('총부채', 'Total Liabilities'),            series.liabilities),
-      toBsRow(t('자본총계', "Shareholders' Equity"),       series.equity),
-    ].filter(hasVal),
+    income_statement: isRows ?? [],
+    balance_sheet: bsRows ?? [],
     cash_flow: hasCf
       ? { ...cf, fcf: t('확인 필요', 'Not disclosed'), notes: '' }
       : {
@@ -468,12 +460,12 @@ router.post('/', async (req: Request, res: Response) => {
     if (companyErr) throw companyErr;
 
     const listings = await fetchCompanyListings(companyId ?? company.id);
-    const { source: dataSource, contextText, rawEdgar } = await fetchFinancialContext(name, listings);
-    const analysis = await analyzeCompany(name, contextText || undefined);
+    const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name, listings);
+    const analysis = await analyzeCompany(name, contextText || undefined, undefined, { rawEdgar, rawDart });
     fixAllEdgarSourceUrls(analysis, rawEdgar?.cik);
     if (dataSource === 'edgar' && rawEdgar) {
-      const comparison = await buildSecBenchmarkComparison(name, rawEdgar).catch(() => null);
-      attachSecBenchmarkToFinancials(analysis.financials_v2, comparison);
+      const secBenchmarkResult = await buildSecBenchmarkComparison(name, rawEdgar).catch(() => EMPTY_SEC_BENCHMARK_RESULT);
+      attachSecBenchmarkToFinancials(analysis.financials_v2, secBenchmarkResult);
     }
 
     const { data: savedAnalysis, error: analysisErr } = await supabase
@@ -791,8 +783,8 @@ router.post('/stream', async (req: Request, res: Response) => {
         // 병렬로 미리 시작해두고 batch3(financials_v2) 완료 시점에 await해서 붙인다. 계산
         // 자체는 rawEdgar만 있으면 되므로 다른 배치를 기다릴 필요가 없어 지연을 숨긴다.
         const secBenchmarkPromise = dataSource === 'edgar' && rawEdgar
-          ? buildSecBenchmarkComparison(name, rawEdgar, language).catch(() => null)
-          : Promise.resolve(null);
+          ? buildSecBenchmarkComparison(name, rawEdgar, language).catch(() => EMPTY_SEC_BENCHMARK_RESULT)
+          : Promise.resolve(EMPTY_SEC_BENCHMARK_RESULT);
 
         const analysis = await analyzeCompany(
           name,
@@ -815,7 +807,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               );
             }
           },
-          { skipBatches, initialData, cachedFinancials: useCachedFin, language },
+          { skipBatches, initialData, cachedFinancials: useCachedFin, language, rawEdgar, rawDart },
         );
 
         if (analysis.sources) await saveSources(cached.id, name, analysis.sources);
@@ -866,8 +858,8 @@ router.post('/stream', async (req: Request, res: Response) => {
     // EDGAR 소스에만 적용(SIC 체계라 DART/web_search는 자연히 스킵) — analyzeCompany()와
     // 병렬로 미리 시작해두고 batch3(financials_v2) 완료 시점에 await해서 붙인다.
     const secBenchmarkPromise = dataSource === 'edgar' && rawEdgar
-      ? buildSecBenchmarkComparison(name, rawEdgar, language).catch(() => null)
-      : Promise.resolve(null);
+      ? buildSecBenchmarkComparison(name, rawEdgar, language).catch(() => EMPTY_SEC_BENCHMARK_RESULT)
+      : Promise.resolve(EMPTY_SEC_BENCHMARK_RESULT);
 
     let savedId: string | null = null;
     let savedAt: string | null = null;
@@ -929,7 +921,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
       },
-      { cachedFinancials, language },
+      { cachedFinancials, language, rawEdgar, rawDart },
     );
 
     if (savedId && analysis.sources) await saveSources(savedId, name, analysis.sources);
@@ -1028,12 +1020,14 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
     const language: Language = existing?.language === 'ko' ? 'ko' : 'en';
 
     let financialCtx: string | undefined;
+    let rawFinancials: Parameters<typeof reanalyzeSingleSection>[4];
     if (sectionKey === 'financials_v2') {
-      const { contextText } = await fetchFinancialContext(name);
+      const { contextText, rawEdgar, rawDart } = await fetchFinancialContext(name);
       financialCtx = contextText || undefined;
+      rawFinancials = { rawEdgar, rawDart };
     }
 
-    const data = await reanalyzeSingleSection(name, sectionKey, financialCtx, language);
+    const data = await reanalyzeSingleSection(name, sectionKey, financialCtx, language, rawFinancials);
 
     if (!data) {
       res.status(422).json({ error: '재분석 결과를 얻지 못했습니다. 잠시 후 다시 시도해주세요.' });
@@ -1124,11 +1118,16 @@ router.post('/:id/pain-diagnosis', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/analyze/:id/icp-insight — "ICP 인사이트" 탭 ──────────────────────
-// 이미 생성된 신호(icpSignals.ts)만 재사용 — 신규 web_search 없는 단일 Claude 호출이라
-// pain-diagnosis(10분)보다 훨씬 짧게 잡음(60초, 실측 후 조정). /reanalyze·/pain-diagnosis와
-// 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시 협업 UX).
-const ICP_INSIGHT_TIMEOUT = 60 * 1000;
+// ── POST /api/analyze/:id/icp-insight — "ICP 인사이트"(디스커버리 질문) 탭 (2026-08-15 개편) ──
+// 9개 섹션(discoveryQuestions.ts, summary_v2~founder_v2 + cross_industry_nudge_v1의 기존
+// financial_impact_question)이 이미 생성해둔 discovery_questions 후보 풀에서, 이 유저의
+// ICP와 관련도 높은 3-5개를 선별한다. ICP가 전부 비어있으면 Claude 호출 없이 결정론적으로
+// 선택(pickDefaultDiscoveryQuestions), 하나라도 있으면 Claude 큐레이션(curateDiscoveryQuestions)
+// 호출 — 신규 web_search 없는 단일 호출이라 pain-diagnosis(10분)보다 훨씬 짧게 잡음(60초).
+// /reanalyze·/pain-diagnosis와 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시
+// 협업 UX). analysis_id + icp_fingerprint 캐시(icp_insights 테이블)는 기존 그대로 재사용 —
+// 별도 캐시 테이블 신규 생성 없음.
+const DISCOVERY_QUESTION_TIMEOUT = 60 * 1000;
 
 function normalizeIcpField(v: string | null | undefined): string | null {
   const trimmed = v?.trim();
@@ -1136,34 +1135,17 @@ function normalizeIcpField(v: string | null | undefined): string | null {
 }
 
 // analysis_id + icp_fingerprint가 icp_insights 조회 키 — 3필드를 정규화(trim+소문자) 후
-// md5 해시. 같은 ICP를 다르게 표기해도(공백/대소문자) 같은 fingerprint로 수렴.
+// md5 해시. 같은 ICP를 다르게 표기해도(공백/대소문자) 같은 fingerprint로 수렴. 3필드가
+// 전부 비어있어도 하나의 고정된 fingerprint로 수렴하므로 "ICP 없음" 상태도 정상 캐시된다.
 function computeIcpFingerprint(icp: { product: string | null; targetIndustry: string | null; targetRole: string | null }): string {
   const key = [icp.product, icp.targetIndustry, icp.targetRole].map(v => (v ?? '').toLowerCase()).join('|');
   return createHash('md5').update(key).digest('hex');
 }
 
-// sources.financials(Source[], date/isEstimate 포함)를 섹션 임베디드 sources(SectionSource[])
-// 형태로 맞춰준다 — 프론트 렌더링이 SectionSource 하나의 형태만 다루면 되게.
-function toSectionSource(s: Source): SectionSource {
-  return { index: s.index, level: s.level, organization: s.organization, content: s.content, url: s.url };
-}
-
-// 카테고리별 출처는 Claude에게 시키지 않고(신규 검색 없으니 신규 출처도 없음) 이미 신호
-// 원본에 있던 sources를 그대로 재인용 — 기계적 합집합이라 코드에서 직접 뽑는다.
-function sourcesForCategory(category: IcpSignalCategory, analysis: {
-  sources?: AnalysisSources | null;
-  summary_v2?: AnalysisData['summary_v2'] | null;
-  tech_evolution_v2?: AnalysisData['tech_evolution_v2'];
-  competitors_v2?: AnalysisData['competitors_v2'] | null;
-  cross_industry_nudge_v1?: AnalysisData['cross_industry_nudge_v1'] | null;
-}): SectionSource[] {
-  switch (category) {
-    case 'financial':      return (analysis.sources?.financials ?? []).map(toSectionSource);
-    case 'investment':     return analysis.summary_v2?.sources ?? [];
-    case 'technology':     return analysis.tech_evolution_v2?.sources ?? [];
-    case 'competitive':    return analysis.competitors_v2?.sources ?? [];
-    case 'market':         return analysis.cross_industry_nudge_v1?.sources ?? [];
-  }
+interface StoredDiscoveryQuestion {
+  question: string;
+  section: string; // 근거 섹션(summary_v2 등) — 원본 데이터로 추적 가능하게, UI에선 짧은 라벨로 표시
+  sources: SectionSource[];
 }
 
 router.post('/:id/icp-insight', async (req: Request, res: Response) => {
@@ -1213,7 +1195,7 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
 
     const { data: analysis, error: fetchErr } = await supabase
       .from('analyses')
-      .select('language, summary_v2, financials_v2, tech_evolution_v2, competitors_v2, cross_industry_nudge_v1, sources')
+      .select('language, summary_v2, financials_v2, business_model_v2, competitors_v2, value_chain_v2, strategy_v2, industry_history_v2, tech_evolution_v2, founder_v2, cross_industry_nudge_v1')
       .eq('id', analysisId)
       .maybeSingle();
     if (fetchErr) throw fetchErr;
@@ -1223,30 +1205,42 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
     }
     const language: Language = (analysis as any).language === 'ko' ? 'ko' : 'en';
 
-    const signals = collectIcpSignals(analysis as any).filter(s => s.hasSignal);
+    const candidates = collectDiscoveryQuestionCandidates(analysis as any);
+    const icpIsEmpty = !icp.product && !icp.targetIndustry && !icp.targetRole;
 
-    console.log(`[icp-insight] START for "${name}" (${signals.length}/5 signals)`);
-    const insights = await withTimeout(
-      generateIcpInsights(name, signals, icp, language),
-      ICP_INSIGHT_TIMEOUT,
-      'icp-insight',
-    );
+    console.log(`[icp-insight] START for "${name}" (${candidates.length} candidates, icpEmpty=${icpIsEmpty})`);
 
-    if (!insights) {
-      res.status(422).json({ error: 'ICP 인사이트 생성에 실패했습니다. 잠시 후 다시 시도해주세요.' });
-      return;
+    let selected: DiscoveryQuestionCandidate[];
+    if (icpIsEmpty) {
+      // ICP 미입력(선택 입력이라 흔함) — 불필요한 Claude 호출 없이 결정론적으로 선택.
+      selected = pickDefaultDiscoveryQuestions(candidates, (analysis as any).financials_v2 ?? null);
+    } else {
+      const curated = await withTimeout(
+        curateDiscoveryQuestions(name, candidates, icp, language),
+        DISCOVERY_QUESTION_TIMEOUT,
+        'icp-insight',
+      );
+      if (!curated) {
+        res.status(422).json({ error: 'ICP 인사이트 생성에 실패했습니다. 잠시 후 다시 시도해주세요.' });
+        return;
+      }
+      // Claude가 재구성한 문구는 취하되, section/sources는 서버가 원본 후보에서 id로
+      // 다시 찾아 붙인다 — 근거 추적이 Claude의 재구성 정확도에 의존하지 않게.
+      const byId = new Map(candidates.map(c => [c.id, c]));
+      selected = curated
+        .map(item => {
+          const original = byId.get(item.id);
+          return original ? { ...original, question: item.question } : null;
+        })
+        .filter((c): c is DiscoveryQuestionCandidate => c !== null);
     }
 
-    const content: Record<string, { insight: string; consequence_for_icp: string; confidence: string; sources: SectionSource[] }> = {};
-    for (const item of insights) {
-      content[item.category] = {
-        insight: item.insight,
-        consequence_for_icp: item.consequence_for_icp,
-        confidence: item.confidence,
-        sources: sourcesForCategory(item.category, analysis as any),
-      };
-    }
-    const signalsUsed = Object.fromEntries(signals.map(s => [s.category, s.rawData]));
+    const questions: StoredDiscoveryQuestion[] = selected.map(c => ({
+      question: c.question,
+      section: c.section,
+      sources: c.sources,
+    }));
+    const content = { questions };
 
     const { data: inserted, error: insertErr } = await supabase
       .from('icp_insights')
@@ -1257,13 +1251,13 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
         icp_target_role: icp.targetRole,
         icp_fingerprint: fingerprint,
         content,
-        signals_used: signalsUsed,
+        signals_used: { candidates },
       })
       .select('id, content, created_at')
       .single();
     if (insertErr) throw insertErr;
 
-    console.log(`[icp-insight] OK for "${name}"`);
+    console.log(`[icp-insight] OK for "${name}" (${questions.length}/${candidates.length} selected)`);
     res.json({ id: inserted.id, content: inserted.content, created_at: inserted.created_at, cached: false });
   } catch (err) {
     console.error('[icp-insight] FAIL', err);

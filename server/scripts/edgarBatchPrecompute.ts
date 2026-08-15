@@ -90,6 +90,48 @@ function pickConcept(
   return best;
 }
 
+// server/src/lib/edgar.ts의 pickConceptSeriesWithConflict와 동일 로직(순이익 전용, 이 스크립트도
+// 별도 실행 컨텍스트라 복제) — NetIncomeLoss/ProfitLoss가 같은 최신연도에 10%+ 다른 값을 갖는
+// Honeywell류 케이스를 감지해 context_text에 남긴다.
+function pickConceptWithConflict(
+  usGaap: Record<string, any>,
+  ...names: string[]
+): { series: Array<{ year: string; val: number }>; conceptUsed: string | null; conflictNote: string | null } {
+  const candidates: Array<{ name: string; result: Array<{ year: string; val: number }> }> = [];
+  for (const name of names) {
+    const concept = usGaap[name];
+    if (!concept) continue;
+    const units: any[] | undefined =
+      concept.units?.USD ?? concept.units?.['USD/shares'] ?? concept.units?.shares;
+    const result = extractAnnual(units);
+    if (result.length > 0) candidates.push({ name, result });
+  }
+  if (candidates.length === 0) return { series: [], conceptUsed: null, conflictNote: null };
+
+  let best = candidates[0];
+  for (const c of candidates.slice(1)) {
+    if (c.result[0].year > best.result[0].year ||
+        (c.result[0].year === best.result[0].year && c.result.length > best.result.length)) {
+      best = c;
+    }
+  }
+
+  let conflictNote: string | null = null;
+  for (const c of candidates) {
+    if (c.name === best.name || c.result[0].year !== best.result[0].year) continue;
+    const a = best.result[0].val, b = c.result[0].val;
+    if (a === 0) continue;
+    const diffPct = Math.abs((a - b) / a) * 100;
+    if (diffPct >= 10) {
+      conflictNote = `${best.name}=${a} vs ${c.name}=${b} for FY${best.result[0].year} ` +
+        `(${diffPct.toFixed(0)}% apart, likely different continuing-operations/segment scope) — used ${best.name}`;
+      break;
+    }
+  }
+
+  return { series: best.result, conceptUsed: best.name, conflictNote };
+}
+
 function fmtUsd(val: number | null): string {
   if (val == null) return 'Not disclosed';
   const sign = val < 0 ? '-' : '';
@@ -132,8 +174,12 @@ export async function processCompany(
     'RevenueFromContractWithCustomerExcludingAssessedTax',
     'SalesRevenueNet',
   );
-  const niData   = pickConcept(g, 'NetIncomeLoss', 'ProfitLoss');
+  const niResult = pickConceptWithConflict(g, 'NetIncomeLoss', 'ProfitLoss');
+  const niData   = niResult.series;
   const oiData   = pickConcept(g, 'OperatingIncomeLoss');
+  // EBITDA 다년도 서버 조립용(Operating Income + Depreciation) — 2026-08-13 이전엔 이 배치
+  // 스크립트가 D&A concept 자체를 조회하지 않아 EBITDA가 항상 "확인 필요"였음.
+  const daData   = pickConcept(g, 'DepreciationDepletionAndAmortization', 'DepreciationAndAmortization');
   // GrossProfit/Cash — server/src/lib/edgar.ts의 pickConceptSeries에는 이미 있던 후보인데
   // 이 배치 스크립트(별도 실행 컨텍스트라 로직이 복제돼 있음)엔 통째로 빠져있었음(2026-08
   // 발견 — MSFT 등 EDGAR 전체 기업의 매출총이익/현금성자산이 항상 "확인 필요"로 비던 원인).
@@ -180,6 +226,7 @@ export async function processCompany(
   const operatingCF     = align(opCFData);
   const investingCF     = align(invCFData);
   const financingCF     = align(finCFData);
+  const depreciation    = align(daData);
 
   const rawEdgar = {
     ticker,
@@ -196,6 +243,7 @@ export async function processCompany(
     operatingCF,
     investingCF,
     financingCF,
+    depreciation,
     fiscalYears,
     filedAt: new Date().toISOString(),
     source: 'EDGAR',
@@ -211,6 +259,7 @@ export async function processCompany(
     `· Gross Profit     ${fmtUsdField(grossProfit[0], grossProfit)}  (EDGAR)`,
     `· Operating Income ${fmtUsdField(operatingIncome[0], operatingIncome)}  (EDGAR)`,
     `· Net Income       ${fmtUsd(netIncome[0])}  (EDGAR)`,
+    ...(niResult.conflictNote ? [`  (Note: ${niResult.conflictNote})`] : []),
     ...(operatingIncome.every(v => v == null)
       ? [`  (Note: this company never tags operating income in its SEC financial statements across ` +
          `any year — likely a holding company, insurer, or other complex segment structure that ` +

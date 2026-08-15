@@ -148,3 +148,6 @@ vite.config.ts.timestamp-*
 
 # 로컬 수동 다운로드 원본 데이터 (SEC Financial Statement Data Sets 등, 용량 큼 — 커밋 금지)
 /data/raw/
+
+# JSON 파싱 실패 시 원문 전체 디버깅 덤프 (extractJson(), 2026-08-15 추가 — 커밋 금지)
+/server/debug-logs/

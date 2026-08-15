@@ -48,6 +48,35 @@ function formatKrw(raw: string | undefined): string | undefined {
 // 오인해 "확인 필요"로 반환함(2026-07-09 Apple/라이콤 FY2021 공백 사고).
 const TARGET_FISCAL_YEARS = ['2021', '2022', '2023', '2024', '2025'];
 
+// 실제로 인접한 두 연도 모두 값이 확인되는 경우만 "YoY 1회"로 센다 — 중간에 빈 연도가
+// 끼어 있으면(예: FY2023/FY2025는 있는데 FY2024가 없음) 진짜 연속 YoY가 아니므로 제외.
+// "N년 평균 성장률" 같은 과장된 표현을 막기 위해 이 숫자를 Claude에게 명시적으로 준다
+// (2026-08-13 워트인텔리전스 "2년 평균 43%" 사고 — 실제로는 YoY 1회(44.7%)뿐이었음).
+function countAdjacentYoY(fiscalYears: string[], values: (number | null)[]): number {
+  let count = 0;
+  for (let i = 0; i < fiscalYears.length - 1; i++) {
+    const y1 = Number(fiscalYears[i]);
+    const y2 = Number(fiscalYears[i + 1]);
+    if (Math.abs(y1 - y2) === 1 && values[i] != null && values[i + 1] != null) count++;
+  }
+  return count;
+}
+
+function growthDataAvailabilityNote(yoyCount: number, lang: 'ko' | 'en'): string {
+  if (lang === 'ko') {
+    return yoyCount <= 1
+      ? `· 확인 가능한 전년 대비 성장률: ${yoyCount}개. 이걸 "N개년 평균"이나 "N년 평균 성장률"이라고 ` +
+        `부르지 말 것 — "전년 대비 X% 증가" 형태로만 서술.`
+      : `· 확인 가능한 전년 대비 성장률: ${yoyCount}개. 이 ${yoyCount}개를 실제로 평균낼 때만 "평균"이라고 ` +
+        `부를 것 — 실제 데이터보다 더 많은 연도를 평균낸 것처럼 표현하지 말 것.`;
+  }
+  return yoyCount <= 1
+    ? `· Confirmed YoY growth figures available: ${yoyCount}. Never call this an "N-year average" or CAGR — ` +
+      `describe it as "grew X% YoY" only.`
+    : `· Confirmed YoY growth figures available: ${yoyCount}. Only call something an "N-year average" if you're ` +
+      `genuinely averaging across these ${yoyCount} figures — don't imply more years of data than this.`;
+}
+
 function missingYearsNote(presentYears: string[]): string | null {
   const missing = TARGET_FISCAL_YEARS.filter(y => !presentYears.includes(y));
   if (missing.length === 0) return null;
@@ -85,6 +114,9 @@ function buildDartContext(d: DartData, kis: KisQuote | null): string {
     }
     const missingNote = missingYearsNote(trend.fiscalYears);
     if (missingNote) lines.push(missingNote);
+
+    lines.push('\n[성장률 데이터 확인 범위]');
+    lines.push(growthDataAvailabilityNote(countAdjacentYoY(trend.fiscalYears, trend.revenue), 'ko'));
   }
 
   // KIS 시세 데이터
@@ -182,6 +214,10 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
       row('EBITDA',         ef.ebitda,            fi?.ebitda),
     ];
     r.filter(Boolean).forEach(l => lines.push(l!));
+    // 순이익 concept이 NetIncomeLoss/ProfitLoss 중 하나로 선택됐는데 같은 연도에 두 태그 값이
+    // 10%+ 다르면(edgar.ts의 pickConceptSeriesWithConflict) 숨기지 않고 그대로 노출 — Claude가
+    // sources[] 각주에 "어느 태그 기준인지" 반영하도록.
+    if (ef.netIncomeConceptNote) lines.push(`  (Net Income source note: ${ef.netIncomeConceptNote})`);
 
     lines.push(`\n[Balance sheet]`);
     const b: (string | null)[] = [
@@ -234,6 +270,9 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
     }
     const missingNote = missingYearsNote(e.rawSeries.fiscalYears);
     if (missingNote) lines.push(missingNote);
+
+    lines.push('\n[Growth rate data availability]');
+    lines.push(growthDataAvailabilityNote(countAdjacentYoY(e.rawSeries.fiscalYears, e.rawSeries.revenue), 'en'));
   }
 
   // FMP key metrics (valuation)
