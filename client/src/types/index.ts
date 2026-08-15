@@ -547,6 +547,10 @@ export interface IcpInsightResponse {
   content: { questions: DiscoveryQuestionItem[] };
   created_at: string;
   cached: boolean;
+  // 별점/코멘트 — POST /api/icp-insights/:id/rate로 저장되고, 이 응답(신규 생성/캐시
+  // 히트 둘 다)에 실려 온다. 탭 재진입 시 이미 평가했는지 복원하는 용도(2026-08-15).
+  rating?: number | null;
+  rating_comment?: string | null;
 }
 
 export interface CompanyListing {

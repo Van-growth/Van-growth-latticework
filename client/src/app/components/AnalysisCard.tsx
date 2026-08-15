@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo, useCallback, useMemo, useTransition } from 'react';
+import { useState, useEffect, memo, useCallback, useMemo, useTransition, Dispatch, SetStateAction } from 'react';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { buildAuthHeaders } from '@/lib/authHeaders';
@@ -1510,29 +1510,38 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
 // discovery_questions 후보 풀에서 선별한 3-5개 질문 리스트로 대체됐다(UI 컴포넌트는
 // 그대로 재사용 — SectionCard/SourcesList/IcpRatingWidget 신규 없음).
 
-function IcpRatingWidget({ insightId, uiT, onError }: {
+function IcpRatingWidget({ insightId, initialRating, initialComment, uiT, onError, onRated }: {
   insightId: string;
+  // 탭 재진입으로 이 컴포넌트가 재마운트될 때, 이미 저장된 평가를 복원하기 위한 초기값
+  // (result.rating/rating_comment에서 내려옴 — 2026-08-15). "재마운트 시 최신값을 다시
+  // 반영"은 useState(initial) 자체가 매 마운트마다 새로 읽으므로 별도 useEffect 불필요.
+  initialRating: number | null;
+  initialComment: string | null;
   uiT: ReturnType<typeof getUiStrings>;
   // 실패를 조용히 삼키면 유저가 "제출됐다"고 착각한 채 넘어간다(CLAUDE.md "비동기 액션은
   // 침묵 리턴 금지" 원칙 — pain 진단 버튼과 동일한 논리). 성공은 조용히(체크 표시로 대체)
   // 두되, 실패했을 때만 부모(IcpInsightTab)의 토스트로 알린다.
   onError: () => void;
+  // 제출 성공 시 부모(IcpInsightTab)가 끌어올려진 result에 반영하도록 알린다.
+  onRated: (rating: number | null, comment: string | null) => void;
 }) {
-  const [rating, setRating] = useState<number | null>(null);
-  const [comment, setComment] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [rating, setRating] = useState<number | null>(initialRating);
+  const [comment, setComment] = useState(initialComment ?? '');
+  const [submitted, setSubmitted] = useState(initialRating != null || !!initialComment);
 
   const handleSubmit = async () => {
     if (rating == null && !comment.trim()) return;
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+      const trimmedComment = comment.trim() || null;
       const res = await fetch(`${apiUrl}/api/icp-insights/${insightId}/rate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating, rating_comment: comment.trim() || null }),
+        body: JSON.stringify({ rating, rating_comment: trimmedComment }),
       });
       if (!res.ok) { onError(); return; }
       setSubmitted(true);
+      onRated(rating, trimmedComment);
     } catch {
       onError();
     }
@@ -1581,15 +1590,19 @@ function IcpRatingWidget({ insightId, uiT, onError }: {
   );
 }
 
-function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT }: {
+function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT, result, setResult, status, setStatus }: {
   analysisId: string;
   companyName: string;
   session: Session | null;
   signInWithGoogle: () => Promise<void>;
   uiT: ReturnType<typeof getUiStrings>;
+  // 결과/상태는 AnalysisCardInner에 끌어올려져 있다(painDiagnosisStarted와 동일 패턴) —
+  // 탭 전환으로 이 컴포넌트가 언마운트/재마운트돼도 값이 유지되도록. 2026-08-15.
+  result: IcpInsightResponse | null;
+  setResult: Dispatch<SetStateAction<IcpInsightResponse | null>>;
+  status: 'idle' | 'loading' | 'error';
+  setStatus: Dispatch<SetStateAction<'idle' | 'loading' | 'error'>>;
 }) {
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-  const [result, setResult] = useState<IcpInsightResponse | null>(null);
   // 설정에 ICP가 전부 비어있으면 생성 버튼 위에 안내만 띄운다(진행은 막지 않음) — 탭을
   // 열 때만 조회, 다른 탭 보는 동안엔 불필요한 /api/profile 호출을 하지 않는다.
   const [icpAllEmpty, setIcpAllEmpty] = useState(false);
@@ -1633,7 +1646,13 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
     } catch {
       setStatus('error');
     }
-  }, [analysisId, companyName, session, signInWithGoogle]);
+  }, [analysisId, companyName, session, signInWithGoogle, setResult, setStatus]);
+
+  // 별점 제출 성공 시 끌어올려진 result에도 반영 — 안 그러면 "평가 → 바로 탭 전환 →
+  // 복귀" 시 result가 여전히 옛 rating(null)을 들고 있어 미평가 상태로 보인다.
+  const handleRated = useCallback((rating: number | null, comment: string | null) => {
+    setResult(prev => (prev ? { ...prev, rating, rating_comment: comment } : prev));
+  }, [setResult]);
 
   if (status === 'loading') return <CardsSkeleton count={3} />;
 
@@ -1688,7 +1707,14 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
             </li>
           ))}
         </ul>
-        <IcpRatingWidget insightId={result.id} uiT={uiT} onError={showRatingErrorToast} />
+        <IcpRatingWidget
+          insightId={result.id}
+          initialRating={result.rating ?? null}
+          initialComment={result.rating_comment ?? null}
+          uiT={uiT}
+          onError={showRatingErrorToast}
+          onRated={handleRated}
+        />
       </SectionCard>
 
       {ratingToast && (
@@ -3222,6 +3248,15 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
     onPainDiagnosisStart?.();
   };
 
+  // ICP 인사이트 결과 — IcpInsightTab은 다른 탭과 달리 데이터를 상위 data prop이 아니라
+  // 이 상태에서만 받는다. painDiagnosisStarted와 동일한 이유로 여기(AnalysisCardInner,
+  // 탭 전환에도 언마운트 안 됨)에 둔다 — IcpInsightTab 자체는 탭 전환마다 언마운트/재마운트
+  // 되지만(다른 모든 탭과 동일한 조건부 렌더링 패턴), 값 자체는 여기 살아있어 복원된다.
+  // (2026-08-15, "ICP 인사이트 탭 재진입 시 결과 소실" 버그 수정 — 원인은 컴포넌트
+  // 자체 로컬 state였고, 서버는 이미 icp_fingerprint로 정상 캐시하고 있었음.)
+  const [icpInsightResult, setIcpInsightResult] = useState<IcpInsightResponse | null>(null);
+  const [icpInsightStatus, setIcpInsightStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
 
@@ -3414,8 +3449,11 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
                   : <PainDiagnosisStart onStart={handlePainDiagnosisClick} intro={uiT.actions.painDiagnosisIntro} startLabel={uiT.actions.startPainDiagnosis} />
         )}
         {/* ICP 인사이트: 다른 온디맨드 탭과 달리 analyses 행에 결과를 저장하지 않고
-            컴포넌트 자체 상태 + 별도 icp_insights 테이블로 관리 — batchDone/painDiagnosisStarted
-            게이트를 거치지 않고 IcpInsightTab이 클릭→로딩→결과를 전부 자체적으로 처리한다.
+            별도 icp_insights 테이블로 관리 — batchDone/painDiagnosisStarted 게이트를
+            거치지 않고 IcpInsightTab이 클릭→로딩→결과를 전부 자체적으로 처리한다. 결과
+            자체(icpInsightResult/icpInsightStatus)는 painDiagnosisStarted와 동일하게
+            AnalysisCardInner에 끌어올려져 있다 — 탭 전환마다 IcpInsightTab은 다른 모든
+            탭처럼 언마운트/재마운트되지만, 값은 여기 살아있어 재생성 없이 복원된다.
             공유 뷰(isShareView)는 인터랙티브 생성/재생성/별점 위젯 없이 서버가 이미 골라준
             소유자의 결과만 읽기 전용으로 보여준다(SharedIcpQuestionsTab, 2026-08-15). */}
         {tab === 'icp_insight' && (
@@ -3427,6 +3465,10 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
                 session={session}
                 signInWithGoogle={signInWithGoogle}
                 uiT={uiT}
+                result={icpInsightResult}
+                setResult={setIcpInsightResult}
+                status={icpInsightStatus}
+                setStatus={setIcpInsightStatus}
               />
         )}
         {tab === 'value_chain' && (

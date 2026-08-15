@@ -1187,14 +1187,21 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
     const fingerprint = computeIcpFingerprint(icp);
 
     // 동일 기업 + 동일 ICP 조합이면 재생성 없이 즉시 반환.
+    // rating/rating_comment도 같이 반환 — 프론트가 탭 재진입 시 이미 평가했는지
+    // 복원할 유일한 경로가 이 응답이다(POST /api/icp-insights/:id/rate로 저장은
+    // 이미 되고 있었지만, 이 응답에 안 실려서 매번 미평가 상태로 보였던 버그 수정,
+    // 2026-08-15 — AnalysisCard.tsx의 상태 끌어올리기 작업과 함께).
     const { data: existing } = await supabase
       .from('icp_insights')
-      .select('id, content, created_at')
+      .select('id, content, created_at, rating, rating_comment')
       .eq('analysis_id', analysisId)
       .eq('icp_fingerprint', fingerprint)
       .maybeSingle();
     if (existing) {
-      res.json({ id: existing.id, content: existing.content, created_at: existing.created_at, cached: true });
+      res.json({
+        id: existing.id, content: existing.content, created_at: existing.created_at, cached: true,
+        rating: existing.rating, rating_comment: existing.rating_comment,
+      });
       return;
     }
 
@@ -1263,7 +1270,8 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
     if (insertErr) throw insertErr;
 
     console.log(`[icp-insight] OK for "${name}" (${questions.length}/${candidates.length} selected)`);
-    res.json({ id: inserted.id, content: inserted.content, created_at: inserted.created_at, cached: false });
+    // 방금 만든 행이라 rating은 항상 null — 그래도 명시해서 캐시 히트 응답과 shape을 맞춘다.
+    res.json({ id: inserted.id, content: inserted.content, created_at: inserted.created_at, cached: false, rating: null, rating_comment: null });
   } catch (err) {
     console.error('[icp-insight] FAIL', err);
     res.status(500).json({ error: 'ICP 인사이트 생성 중 오류가 발생했습니다.' });
