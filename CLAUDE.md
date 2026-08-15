@@ -556,26 +556,42 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - Bull/Bear 금지 → 성장 모멘텀/핵심 리스크
 - "확인 필요" 남발 금지 → 추정값이라도 출처와 함께 제공
 
-### 재무 파생 지표 처리 원칙 (2026-08-15)
+### 재무 파생 지표 처리 원칙 (2026-08-15 확정 — Ford 세그먼트 매출 비중 오류 조사에서 촉발)
 
-- **EBITDA는 표시하지 않는다.** GAAP 표준 계정과목이 아니고, 계산하려면
-  감가상각비(D&A)가 필요한데 회사마다 현금흐름표 내 위치·태그가 달라
-  안정적으로 자동 추출이 안 됨. 직접 계산해서 보여주는 것 자체가
-  신뢰성 리스크 — "확인 필요 남발 금지, 추정값도 출처와 함께" 원칙을
-  지킬 수 없는 항목이므로 아예 노출하지 않는다.
-- **매출총이익(Gross Profit)은 EDGAR/DART가 직접 제공하는 태그값만
-  표시하고, 매출-매출원가로 역산하지 않는다.** 태그가 없으면(예: Ford
-  Motor처럼 제조+금융 결합 구조라 이 라인 자체가 공시에 없는 경우)
-  "해당없음"으로 그대로 노출.
-- **원칙 요약**: 손익계산서 항목은 공시된 그대로(as-reported)만 보여준다.
-  1min이 임의로 계산해서 채워넣는 파생 지표는 만들지 않는다 — 정확성이
-  담보 안 되는 계산값보다 "없으면 없다고 보여주는" 쪽이 신뢰성 원칙에
-  부합.
-- **재무 연도 컬럼은 고정 fy2021~fy2025가 아니라 회사가 실제로 보유한
-  연도만 동적으로 렌더링한다**(`financialsTableBuilder.ts` 등, 2026-08-15) —
-  V1 스키마로 캐시된 기존 분석은 이번 동적 컬럼 수정이 소급 적용되지
-  않음 — 재분석해야 반영됨. NVIDIA FY2026 드롭 같은 구 버그는 신규/
-  재분석 건부터만 해소됨.
+**상위 원칙**: 1min의 모든 재무 수치는 공식 F/S(EDGAR 원본 공시)에 실제로 존재하는 값만
+표시한다. Claude가 계산·추정·재구성한 재무 수치는 만들지 않는다. F/S에 없는 값은 그 항목
+자체를 안 보여준다("확인 필요"나 억지 추정으로 채우지 않음) — 정확성이 담보 안 되는 계산값
+보다 "없으면 없다고 보여주는" 쪽이 신뢰성 원칙에 부합. 이 원칙 아래 다섯 가지를 확정:
+
+1. **EBITDA 미표시.** GAAP 표준 계정과목이 아니고, 계산하려면 감가상각비(D&A)가 필요한데
+   회사마다 현금흐름표 내 위치·태그가 달라 안정적으로 자동 추출이 안 됨. 직접 계산해서
+   보여주는 것 자체가 신뢰성 리스크라 아예 노출하지 않는다.
+2. **매출총이익(Gross Profit)은 EDGAR/DART가 직접 제공하는 태그값만 표시**, 매출-매출원가로
+   역산하지 않는다. 태그가 없으면(예: Ford Motor처럼 제조+금융 결합 구조라 이 라인 자체가
+   공시에 없는 경우) "해당없음"으로 그대로 노출.
+3. **매출 라인 구분(세그먼트/제품 매출 비중)은 F/S에 실제로 나뉜 대로만 표시**(2026-08-15
+   신설) — 회사마다 나누는 축이 다르다(Ford=사업부 축, Apple=제품 카테고리 축, NVIDIA=라인
+   구분 없음). 축 종류·라인 개수를 미리 정해두지 않고 `financials_v2.revenue_lines`가
+   회사의 실제 라인명·값을 그대로 담는다(`edgar.ts`의 `fetchRevenueLineItems()`가 SEC
+   R.htm을 직접 파싱 — companyfacts/companyconcept JSON API는 XBRL 차원(axis/member)이
+   붙은 값을 통째로 걸러내 도달 불가능함이 실측 확인됨). 라인 구분이 없는 회사는 이 필드
+   자체가 없고, 그 경우 매출 구성 섹션 자체를 스킵한다(Total Revenue 한 줄만 손익계산서에
+   남음). **`summary_v2.products`/`business_model_v2.revenue_streams`의 `revenue_share`(%)
+   필드는 완전히 제거됨** — 웹서치 기반 자유추정치였고, 두 필드가 같은 회사를 놓고 서로
+   다른 %를 만들어내는 사고(Ford Credit이 한쪽 탭엔 12%, 다른 탭엔 7%로 나온 사고, 실제
+   정답은 7.09%)가 실측으로 재현됨 — `revenue_lines`가 유일한 매출 비중 출처가 되도록
+   두 필드는 이제 이름+정성적 설명(무엇을 하는 사업부/제품인지)만 생성한다.
+4. **문서 소스는 반드시 10-K(연간 보고서) 기준 — 10-Q 잠정치를 섞지 않는다.** EDGAR 라이브
+   조회 경로(`edgar.ts`)와 DART(사업보고서만, `reprt_code=11011`)는 이미 만족하고 있었고,
+   월간 배치(`edgarBatchPrecompute.ts`)만 `20-F`(외국 민간발행인) 필터가 빠져 라이브
+   경로와 불일치했던 걸 통일함(2026-08-15).
+5. **회계연도 라벨은 회사가 쓰는 표기 그대로, 고정 창을 쓰지 않는다.** SEC XBRL의 `fy`
+   필드(회사가 자기 10-K 표지에 태깅한 연도) 추출 자체는 이미 정확했지만, 그 다음 단계에서
+   `fy2021~fy2025`/`fy2023~fy2025` 같은 리터럴 5년/3년 창으로 욱여넣고 있었다 — 이미 오늘
+   기준 NVIDIA의 최신 회계연도(FY2026, 1월 결산)가 이 리터럴 창 밖으로 밀려나 드롭될
+   뻔했음을 실측으로 확인. `financialsTableBuilder.ts` 등에서 회사가 실제로 보유한
+   연도만 동적으로 렌더링하도록 전환(2026-08-15) — **V1 스키마로 캐시된 기존 분석은 이
+   수정이 소급 적용되지 않음, 재분석해야 반영됨.**
 
 ### 콘텐츠 포맷 원칙 (2026-08-12 신설)
 필드 성격별로 서술 방식을 고정한다 — 전부 문단으로 몰아쓰지 않는다:
@@ -1237,6 +1253,15 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   financials_v2.discovery_questions 맨 앞에 붙인다. `icp_insights` 테이블/fingerprint 캐시는
   기존 그대로 재사용(신규 테이블 없음), 응답 `content`만 `{ questions: [...] }` 형태로 변경.
   상세는 Architecture 섹션 "ICP 인사이트 discovery_questions 2단계 통합" 참고.
+- [x] 재무제표 표시 원칙 5가지 확정 + `financials_v2.revenue_lines` 신설 (2026-08-15) — Ford
+  세그먼트 매출 비중이 탭마다 12%/7%로 다르게 나오던 사고(정답 7.09%) 조사에서 촉발. EBITDA
+  미표시/Gross Profit 원본 태그만/매출 라인은 F/S 그대로/10-K only/FY 라벨 그대로 5원칙 확정,
+  `edgar.ts`의 `fetchRevenueLineItems()`가 SEC R.htm을 직접 파싱해 세그먼트/제품 매출 라인
+  확보(companyfacts API로는 XBRL 차원이 붙은 값에 도달 불가), `summary_v2.products`/
+  `business_model_v2.revenue_streams`/`segments`의 `revenue_share`(%) 완전 제거(이름+정성적
+  설명만), 재무 연도 컬럼 고정 fy2021~fy2025 → 회사별 동적 렌더링. 상세는 Architecture 섹션
+  "Ford 세그먼트 매출 비중 오류 조사 → 재무제표 표시 원칙 5가지 확정 + revenue_lines 신설"
+  및 위 "재무 파생 지표 처리 원칙" 참고.
 
 ## Security Principles (SSOT)
 
@@ -1936,6 +1961,14 @@ override가 실제로 걸렸는지)부터 먼저 확인할 것.
   4개 지표는 영향 없음), 9/1 정기 크론에서 자연 해소 예정. 그전에 특정 기업을 급하게
   보여줘야 할 일이 생기면 RKLB 때처럼 개별 수동 재생성(`processCompany()`)으로 대응 —
   배치 수동 전체 재실행은 2026-08-13에 의도적으로 보류 결정.
+- **(2026-08-15 추가) `EdgarRawSeries.revenueLines`(세그먼트/제품 매출 라인)도 같은 계열의
+  스테일 리스크를 갖지만, depreciation/grossProfit과 결정적으로 다른 점이 있다** — 이 필드는
+  `edgarBatchPrecompute.ts`(월간 배치)에 의도적으로 연결하지 않았음(HTML 스크레이핑을 수천
+  개 기업 대상 대량 배치에 넣는 리스크는 별도 결정 사항으로 남김). 즉 depreciation/
+  grossProfit은 "다음 정기 크론이 돌면 자연 해소"되지만, **`revenueLines`는 크론이 아무리
+  돌아도 절대 채워지지 않는다** — 오직 그 회사가 라이브 분석(신규 분석 또는 "재분석하기")될
+  때만 채워진다. 배치가 채운 `financial_cache`를 그대로 쓰는 캐시 히트 상태에서는 "매출 구성"
+  섹션이 계속 안 보이는 게 정상 동작이며, 버그로 오인하지 말 것.
 
 ### ICP 인사이트 discovery_questions 2단계 통합 (2026-08-15)
 
@@ -2030,6 +2063,56 @@ prod+dev 적용) 신규 — `POST /api/analyze/:id/icp-insight`가 생성 시 `a
   한 줄만**("이 분석은 OOO님의 ICP 기준으로 생성됨") — `data.icpDiscoveryQuestions`가 있을
   때만(소유자가 생성한 적 있을 때만) 조건부 렌더링, ICP 세부 필드/질문 목록은 렌더링 안 함.
 
+### Ford 세그먼트 매출 비중 오류 조사 → 재무제표 표시 원칙 5가지 확정 + revenue_lines 신설 (2026-08-15)
+
+**발단**: Ford Motor 리포트에서 "01 기업개요 > 주요 제품/서비스"(summary_v2.products)와
+"05 비즈니스모델 > 수익구조"(business_model_v2.revenue_streams)가 Ford Credit 매출 비중을
+각각 12%/7%로 다르게 표시. 외부 10-K 원문 대조로 정답은 7.09%(Ford Credit $13,271M / 전사
+$187,267M)로 확정, 조사 결과 **둘 다 raw 데이터를 전혀 받지 않고 웹서치+Claude 자유추정으로
+채워지고 있었음**을 확인 — companyfacts/companyconcept JSON API가 XBRL 차원(axis/member)이
+붙은 세그먼트 값을 통째로 걸러내 반환하지 않기 때문에(Ford/Apple 실측 확인), 애초에 raw
+데이터에 접근할 방법 자체가 없었던 것. Ford를 2회 재실행해 재현한 결과 "어느 쪽이 맞는지"가
+실행마다 뒤바뀜(1회차: 01번탭 라인 누락·05번탭 7% 정답 / 2회차: 01번탭 7% 정답·05번탭 12%
+오답) — 즉 "05번이 원래 더 정확한 로직"이 아니라 순수 운이었음을 확인. 상세 조사 경위는 위
+"재무 파생 지표 처리 원칙" 3번 항목 참고.
+
+**해결 — R.htm 직접 파싱으로 raw 매출 라인 확보**: `edgar.ts`의 `fetchRevenueLineItems()`
+신규 — `FilingSummary.xml`에서 소득계산서 R파일을 ShortName 패턴("CONSOLIDATED INCOME
+STATEMENTS"/"...STATEMENTS OF OPERATIONS"/"...STATEMENTS OF INCOME" 등 폭넓게 매칭)으로
+찾고, 그 R.htm(SEC가 필링마다 자동 생성하는 재무제표 렌더링 HTML)을 cheerio로 파싱해 XBRL
+차원(axis/member)으로 구분된 매출 라인을 그대로 추출. 안전장치: ShortName 매칭 실패/라인
+2개 미만/라벨 중복/합계가 총계와 15%+ 벌어짐 → 전부 `null`(라인 구분 없음과 동일 취급),
+전체 `try/catch`로 절대 예외 안 던짐. **단위 배율 자동 보정**: R.htm 셀 값은 보통 "백만
+달러" 표시인데 XBRL JSON의 `val`은 원 달러 단위라 배율을 모르면 합계 검증이 항상 실패하는
+버그가 될 뻔했음 — 세그먼트 헤더 이전에 나오는 "연결 총계" 스크래핑값과 이미 확인된 JSON
+API 총계의 비율로 배율(1/1,000/1,000,000/1,000,000,000)을 역산해 보정.
+`financialsTableBuilder.ts`의 `buildRevenueLines()`가 포맷팅+비중(%) 계산(단순 나눗셈,
+Claude 미개입)까지 전담, `financials_v2.revenue_lines`로 노출 — 프론트("매출 구성" 신규
+섹션)/PDF 둘 다 라인 없으면 섹션째 스킵. `analyze.ts`의 fin_preview 빠른 경로에도 동일
+연결(곁다리로 `['2021'..'2025']` 리터럴 필터가 이 함수에도 남아있던 걸 발견해 같이 제거 —
+NVIDIA FY2026이 손익계산서 표엔 나오는데 fin_preview 요약 문구만 FY2025로 스테일해지는
+불일치였음).
+
+**검증**: Ford(사업부 축, 커스텀 멤버) 92.9%/7.1% — 7.1%가 원문 7.09%와 정확히 일치. Apple
+(제품 축, 표준 멤버) 73.8%/26.2%. NVIDIA(라인 구분 없음) 정확히 `null`. Taiwan Semiconductor
+(20-F, IFRS라 us-gaap 태그 자체 없음)·Toyota Motor(20-F, 2012년 이후 태깅 중단 추정) 둘 다
+크래시 없이 `null`로 우아하게 저하 확인 — Toyota는 R.htm까지 실제 도달했지만 매출 컨셉 태그
+불일치로 0라인이 된 케이스라 "ShortName 매칭 실패"와는 다른 실패 모드지만 동일하게 안전하게
+처리됨을 보여줌. ShortName 정규식 자체는 9가지 합성 케이스(실제 표현 3종 + 변형 2종 +
+Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별도 검증, 9/9 PASS. 속도
+영향 실측: `[edgar] revenueLines` 로그로 회사당 50~300ms 추가(기존 파이프라인이 Claude
+호출만으로 60초 이상 걸리는 것에 비하면 무시할 수준).
+
+**scope 결정**: EDGAR 전용(DART 미포함, GTM 타겟 아님) / `edgarBatchPrecompute.ts`(월간
+배치) 미연결(스테일 리스크는 위 Quality Gate 원칙 섹션 참고) / `summary_v2.products`·
+`business_model_v2.revenue_streams`·`business_model_v2.segments`의 `revenue_share`(%)
+필드는 완전히 제거하고 이름+정성적 설명(무엇을 하는 사업부/제품인지)만 남김 — Ford 재검증
+결과 새 프롬프트 지시를 정확히 따름(설명 텍스트에 %를 우회 삽입하는 사례 0건, `revenue_share`
+키 자체가 응답에서 완전히 사라짐). `customer_concentration.customers[].revenue_share`/
+`key_markets[].revenue_share`(고객 집중도/지역 매출 비중)는 건드리지 않음 — 애초에 "공시
+확인된 것만, 아니면 드롭"이라는 별도의 엄격한 규칙을 이미 따르고 있어 이번 사고와 같은
+계열의 문제가 아님.
+
 ---
 
 ## 버전 히스토리
@@ -2063,4 +2146,12 @@ prod+dev 적용) 신규 — `POST /api/analyze/:id/icp-insight`가 생성 시 `a
   질문 후보(discovery_questions)를 생성해두고 ICP 탭이 3-5개만 선별(ICP 없으면 결정론적
   선택, 있으면 Claude 큐레이션 + id 기반 근거 검증). 5카테고리 insight+consequence 방식을
   대체. 상세는 위 Architecture 섹션 "ICP 인사이트 discovery_questions 2단계 통합" 참고. |
+| v2.8.0 | 2026-08-15 — 재무제표 표시 원칙 5가지 확정(EBITDA 미표시/Gross Profit 원본 태그만/
+  매출 라인은 F/S 그대로/10-K only/FY 라벨 그대로) + `financials_v2.revenue_lines` 신설
+  (SEC R.htm 직접 파싱으로 세그먼트·제품 매출 라인 확보, EDGAR 전용) + `summary_v2.products`/
+  `business_model_v2.revenue_streams`/`segments`의 `revenue_share`(%) 완전 제거(이름+정성적
+  설명만) + 재무 연도 컬럼 고정 fy2021~fy2025 → 회사별 동적 렌더링 전환. Ford Credit 매출
+  비중이 탭마다 12%/7%로 다르게 나오던 사고(정답 7.09%)를 근본 해결. 상세는 위 Architecture
+  섹션 "Ford 세그먼트 매출 비중 오류 조사 → 재무제표 표시 원칙 5가지 확정 + revenue_lines
+  신설" 및 "재무 파생 지표 처리 원칙" 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |

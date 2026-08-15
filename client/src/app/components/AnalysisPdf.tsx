@@ -723,15 +723,17 @@ function SummarySection({ v, t }: { v: SummaryV2; t: TFn }) {
         {v.products?.length > 0 && (
           <View style={s.gridLeft}>
             <SubHeader>{t('주요 제품/서비스', 'Key Products/Services')}</SubHeader>
+            {/* 매출 비중(%)은 여기서 더 이상 표시 안 함 — 재무 섹션의 "매출 구성"(revenue_lines,
+                EDGAR 10-K 실측)만이 유일한 비중 출처. 이름+설명만 표시. */}
             <View style={s.table}>
               <View style={s.tHead}>
                 <Text style={[s.th, { flex: 2 }]}>{t('제품/서비스', 'Product/Service')}</Text>
-                <Text style={s.th}>{t('매출 비중', 'Revenue Share')}</Text>
+                <Text style={[s.th, { flex: 3 }]}>{t('설명', 'Description')}</Text>
               </View>
               {v.products.map((p, i) => (
                 <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
                   <Text style={[s.td, { flex: 2 }]}>{p.name}</Text>
-                  <Text style={s.td}>{p.revenue_share}%</Text>
+                  <Text style={[s.td, { flex: 3 }]}>{p.description || '—'}</Text>
                 </View>
               ))}
             </View>
@@ -1014,7 +1016,8 @@ function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
         ))}
       </View>
 
-      {/* Revenue streams */}
+      {/* Revenue streams — 매출 비중(%)은 여기서 더 이상 표시 안 함(재무 섹션의 "매출 구성"만이
+          유일한 비중 출처, 2026-08-15). operating_margin/growth_rate는 그대로 유지. */}
       {v.revenue_streams?.length > 0 && (
         <>
           <SubHeader>{t('수익 구조', 'Revenue Streams')}</SubHeader>
@@ -1022,15 +1025,16 @@ function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
             <View style={s.tHead}>
               <Text style={[s.th, { flex: 2 }]}>{t('스트림', 'Stream')}</Text>
               <Text style={s.th}>{t('유형', 'Type')}</Text>
-              <Text style={s.th}>{t('비중', 'Share')}</Text>
               <Text style={s.th}>{t('영업이익률', 'Op. Margin')}</Text>
               <Text style={s.th}>{t('성장률', 'Growth')}</Text>
             </View>
             {v.revenue_streams.map((r, i) => (
               <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
-                <Text style={[s.td, { flex: 2 }]}>{r.name}</Text>
+                <View style={{ flex: 2 }}>
+                  <Text style={s.td}>{r.name}</Text>
+                  {r.description && <Text style={[s.td, { color: C.mid }]}>{r.description}</Text>}
+                </View>
                 <Text style={s.td}>{r.type}</Text>
-                <Text style={s.td}>{pdfVal(r.revenue_share) !== '—' ? `${r.revenue_share}%` : '—'}</Text>
                 <Text style={s.td}>{pdfVal(r.operating_margin) !== '—' && r.operating_margin !== 0 ? `${r.operating_margin}%` : '—'}</Text>
                 <Text style={s.td}>{pdfVal(r.growth_rate) !== '—' && r.growth_rate !== 0 ? `${r.growth_rate}%` : '—'}</Text>
               </View>
@@ -1282,6 +1286,29 @@ function FinancialsSection({ v, t }: { v: FinancialsV2; t: TFn }) {
       {/* Income statement */}
       <SubHeader>{t('손익계산서', 'Income Statement')}</SubHeader>
       <IncomeTable rows={v.income_statement} t={t} />
+
+      {/* 매출 구성 — 회사가 실제 10-K에서 라인 구분해 공시한 경우만(서버가 R.htm에서 직접
+          파싱, Claude 미생성). 라인 구분이 없는 회사는 v.revenue_lines가 undefined라 섹션째
+          스킵된다. */}
+      {v.revenue_lines && v.revenue_lines.length > 0 && (
+        <>
+          <SubHeader>{t('매출 구성', 'Revenue Mix')}</SubHeader>
+          <View style={s.table}>
+            <View style={s.tHead}>
+              <Text style={s.thItem}>{t('항목', 'Item')}</Text>
+              <Text style={s.th}>{t('금액', 'Value')}</Text>
+              <Text style={s.th}>{t('비중', 'Share')}</Text>
+            </View>
+            {v.revenue_lines.map((rl, i) => (
+              <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
+                <Text style={s.tdItem}>{rl.label}</Text>
+                <Text style={s.td}>{rl.value}</Text>
+                <Text style={s.td}>{rl.sharePct}%</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
 
       {/* Balance sheet */}
       <SubHeader>{t('재무상태표', 'Balance Sheet')}</SubHeader>

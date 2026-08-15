@@ -168,6 +168,32 @@ export function buildIncomeStatementRows(
   ];
 }
 
+export interface RevenueLineRowLike {
+  label: string;
+  value: string;
+  sharePct: number;
+}
+
+// 회사가 실제 10-K에서 라인 구분해 공시한 매출만 그대로 보여준다(edgar.ts의
+// fetchRevenueLineItems 참고, 축이 사업부든 제품군이든 무관하게 그 회사가 쓴 라벨 그대로) —
+// DART는 이 필드 자체가 없고(스코프 밖), 회사가 라인을 안 나눴으면(NVIDIA 등) null을 반환해
+// 프론트가 이 섹션 자체를 스킵하게 한다. Claude는 이 값을 계산도 추정도 하지 않는다 — 비중(%)도
+// 서버가 실제 라인 합계 대비 단순 나눗셈으로 결정론적으로 계산.
+export function buildRevenueLines(rawEdgar: EdgarRawSeries | null): RevenueLineRowLike[] | null {
+  const lines = rawEdgar?.revenueLines;
+  if (!lines || lines.length < 2) return null;
+  const total = lines.reduce((a, l) => a + l.value, 0);
+  if (total <= 0) return null;
+  return lines
+    .slice()
+    .sort((a, b) => b.value - a.value)
+    .map(l => ({
+      label: l.label,
+      value: fmtUsd(l.value),
+      sharePct: Math.round((l.value / total) * 1000) / 10,
+    }));
+}
+
 export function buildBalanceSheetRows(
   rawEdgar: EdgarRawSeries | null,
   rawDart: DartRawSeries | null,

@@ -8,7 +8,7 @@ import {
 } from '../lib/claude';
 import { collectDiscoveryQuestionCandidates, pickDefaultDiscoveryQuestions, DiscoveryQuestionCandidate } from '../lib/discoveryQuestions';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
-import { buildIncomeStatementRows, buildBalanceSheetRows } from '../lib/financialsTableBuilder';
+import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines } from '../lib/financialsTableBuilder';
 import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
 import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
@@ -287,9 +287,12 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
   const series = rawEdgar ?? rawDart?.cfs ?? rawDart?.ofs;
   if (!series) return null;
   const fmt: (v: number | null) => string = rawEdgar ? fmtUsd : fmtKrw;
-  const fyrs: string[] = (series.fiscalYears ?? []).filter(
-    (y: string) => ['2021','2022','2023','2024','2025'].includes(y),
-  );
+  // series.fiscalYears는 이미 그 회사가 실제로 보유한 연도만 담고 있다(extractAnnualSeries 등
+  // 참고) — 예전엔 리터럴 2021~2025로 다시 걸러서 NVIDIA FY2026 같은 최신 연도가 fyrs[0](=이
+  // 함수의 대표 연도 라벨)에서만 한 해 스테일하게 남는 불일치가 있었다(income_statement 표는
+  // financialsTableBuilder.ts가 이미 정확히 보여주는데 key_bullets/sources 문구만 구버전
+  // 연도를 말하는 상태, 2026-08-15 발견).
+  const fyrs: string[] = series.fiscalYears ?? [];
   if (fyrs.length === 0) return null;
 
   // income_statement/balance_sheet는 financialsTableBuilder.ts의 공용 함수로 조립(Gross Profit은
@@ -298,6 +301,7 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
   // 시점의 override와 동일한 함수를 재사용해 fin_preview와 최종 결과가 항상 일치하도록 한다.
   const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language);
   const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language);
+  const revenueLines = buildRevenueLines(rawEdgar ?? null);
 
   const isKr   = source === 'DART';
   const name   = rawDart?.corp_name ?? rawEdgar?.ticker ?? '';
@@ -322,6 +326,7 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
       series.operatingIncome?.[0] != null ? t(`${yr}년 영업이익: ${fmt(series.operatingIncome[0])}`, `FY${yr} Operating Income: ${fmt(series.operatingIncome[0])}`) : null,
     ] as (string | null)[]).filter((x): x is string => x !== null),
     income_statement: isRows ?? [],
+    revenue_lines: revenueLines ?? undefined,
     balance_sheet: bsRows ?? [],
     cash_flow: hasCf
       ? { ...cf, fcf: t('확인 필요', 'Not disclosed'), notes: '' }

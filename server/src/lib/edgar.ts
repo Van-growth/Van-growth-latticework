@@ -42,6 +42,111 @@ async function fetchEdgarDocumentText(cik: string, accessionNumber: string, prim
   }
 }
 
+// 회사가 실제 손익계산서(또는 Note 4류 Revenue Disaggregation)에서 매출을 라인 구분해 공시한
+// 경우, 그 라인명·값을 그대로 가져온다. 매출 라인은 XBRL 표준 태그(예:
+// RevenueFromContractWithCustomerExcludingAssessedTax) 하나를 축(axis)/멤버(member)로만
+// 구분해 재사용하는 경우가 대부분이라(Ford=StatementBusinessSegmentsAxis+커스텀 멤버,
+// Apple=srt:ProductOrServiceAxis+표준 멤버) companyfacts/companyconcept JSON API로는 이
+// 차원이 붙은 값 자체가 통째로 빠져 도달 불가능하다(2026-08-15 실측 확인) — SEC가 필링마다
+// 자동 생성하는 재무제표 렌더링 HTML(R.htm)을 직접 파싱해야만 얻을 수 있다.
+//
+// 실패 시(축 매칭 실패, ShortName 매칭 실패, 파싱 결과가 총계와 안 맞음 등) 무조건 null —
+// "라인 구분 없음"과 동일하게 취급되어 Total Revenue 한 줄만 남는다. 절대 예외를 던지지 않음.
+const REVENUE_CONCEPT_TAGS = [
+  'us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax',
+  'us-gaap_Revenues',
+  'us-gaap_SalesRevenueNet',
+];
+// "CONSOLIDATED INCOME STATEMENTS"(Ford) / "CONSOLIDATED STATEMENTS OF OPERATIONS"(Apple) /
+// "Consolidated Statements of Income"(NVIDIA) 등 회사마다 다른 표현을 폭넓게 매칭하되,
+// "STATEMENTS OF COMPREHENSIVE INCOME"(별개의 표)는 COMPREHENSIVE가 OF와 INCOME/OPERATIONS
+// 사이에 끼어들어 자연히 매칭 안 됨.
+const INCOME_STATEMENT_SHORTNAME = /^(CONDENSED\s+)?CONSOLIDATED\s+(INCOME\s+STATEMENTS?|STATEMENTS?\s+OF\s+(OPERATIONS|INCOME))\b/i;
+
+async function fetchRevenueLineItems(
+  cik: string,
+  filings: { form: string[]; accessionNumber: string[] },
+  latestTotalRevenue: number | null,
+): Promise<RevenueLineItem[] | null> {
+  try {
+    const idx = filings.form.findIndex(f => f === '10-K' || f === '20-F');
+    if (idx < 0) return null;
+    const cikNoLeadingZeros = String(Number(cik));
+    const accNoDashes = filings.accessionNumber[idx].replace(/-/g, '');
+    const base = `https://www.sec.gov/Archives/edgar/data/${cikNoLeadingZeros}/${accNoDashes}`;
+
+    const summaryRes = await fetch(`${base}/FilingSummary.xml`, { headers: EDGAR_HEADERS, signal: AbortSignal.timeout(8_000) });
+    if (!summaryRes.ok) return null;
+    const summaryXml = await summaryRes.text();
+
+    let rFile: string | null = null;
+    for (const m of summaryXml.matchAll(/<Report[^>]*>([\s\S]*?)<\/Report>/g)) {
+      const shortName = m[1].match(/<ShortName>([^<]*)<\/ShortName>/)?.[1]?.trim();
+      const htmlFile  = m[1].match(/<HtmlFileName>([^<]*)<\/HtmlFileName>/)?.[1]?.trim();
+      if (shortName && htmlFile && INCOME_STATEMENT_SHORTNAME.test(shortName)) { rFile = htmlFile; break; }
+    }
+    if (!rFile) return null; // ShortName 매칭 실패 — 라인 구분 없음으로 폴백
+
+    const rRes = await fetch(`${base}/${rFile}`, { headers: EDGAR_HEADERS, signal: AbortSignal.timeout(8_000) });
+    if (!rRes.ok) return null;
+    const html = await rRes.text();
+    const $ = cheerio.load(html);
+
+    // R.htm은 세그먼트별로 행 그룹이 통째로 반복되는 구조 — "Company excluding Ford Credit"
+    // 같은 축(axis)/멤버(member) 라벨 행이 나오면 그 뒤에 이어지는 매출 행이 그 세그먼트 소속.
+    // 축 헤더 없이 처음 나오는 매출 행은 "라인"이 아니라 연결 총계(preSegmentTotal)다 — 라인
+    // 목록에는 안 넣지만, R.htm의 표시 단위(보통 100만 달러 단위)를 역산하는 기준값으로 쓴다.
+    let currentSegment: string | null = null;
+    let preSegmentTotal: number | null = null;
+    const rawLines: RevenueLineItem[] = [];
+    $('tr').each((_, tr) => {
+      const $link = $(tr).find('a[onclick*="Show.showAR"]').first();
+      if (!$link.length) return;
+      const ref = $link.attr('onclick')?.match(/defref_([^']+)/)?.[1];
+      if (!ref) return;
+      const label = $link.text().trim();
+
+      if (/Axis=.*Member/i.test(ref)) { currentSegment = label; return; }
+      if (!REVENUE_CONCEPT_TAGS.some(tag => ref === tag)) return;
+
+      const cells = $(tr).find('td').map((__, td) => $(td).text().trim()).get().filter(Boolean);
+      const valueCell = cells.find(c => /^\$?\s*\(?-?[\d,]+\)?$/.test(c));
+      if (!valueCell) return;
+      const numeric = Number(valueCell.replace(/[$,()]/g, '')) * (valueCell.includes('(') ? -1 : 1);
+      if (!Number.isFinite(numeric)) return;
+
+      if (!currentSegment) { if (preSegmentTotal == null) preSegmentTotal = numeric; return; }
+      rawLines.push({ label: currentSegment, value: numeric });
+      currentSegment = null; // 이 세그먼트 블록당 매출 행은 1번만 소비(중복 집계 방지)
+    });
+
+    if (rawLines.length < 2) return null; // 라인이 1개 이하면 "구분 없음"과 동일 취급
+    if (new Set(rawLines.map(l => l.label)).size !== rawLines.length) return null; // 라벨 중복 — 파싱 이상, 폐기
+
+    // R.htm의 셀 값은 대개 "단위: 백만 달러"로 표시(예: "187,267" = $187,267M)인데 XBRL JSON의
+    // val은 항상 원 달러 단위다 — 이 배율을 모르고 그대로 쓰면 합계 검증이 항상 실패한다.
+    // preSegmentTotal(스크래핑한 연결 총계)과 latestTotalRevenue(JSON API로 이미 확인된 원
+    // 달러 총계)의 비율로 배율을 역산하고, 깨끗한 10의 거듭제곱(1/1,000/1,000,000/1,000,000,000)
+    // 에 가장 가까운 값으로 스냅한다 — 스크래핑한 총계 자체가 반올림된 표시값이라 완전히 정확한
+    // 비율은 아니기 때문.
+    if (latestTotalRevenue == null || latestTotalRevenue === 0 || preSegmentTotal == null || preSegmentTotal === 0) return null;
+    const rawScale = latestTotalRevenue / preSegmentTotal;
+    const scale = [1, 1_000, 1_000_000, 1_000_000_000].reduce((best, cand) =>
+      Math.abs(Math.log10(rawScale / cand)) < Math.abs(Math.log10(rawScale / best)) ? cand : best
+    );
+    if (Math.abs(Math.log10(rawScale / scale)) > Math.log10(1.05)) return null; // 5% 이상 벗어나면 배율 추정 실패로 간주
+
+    const lines = rawLines.map(l => ({ label: l.label, value: l.value * scale }));
+    const sum = lines.reduce((a, l) => a + l.value, 0);
+    const diffPct = Math.abs((sum - latestTotalRevenue) / latestTotalRevenue) * 100;
+    if (diffPct > 15) return null; // 배율 보정 후에도 합계가 크게 안 맞으면 신뢰 못 함
+
+    return lines;
+  } catch {
+    return null;
+  }
+}
+
 interface SubmissionsData {
   name: string;
   filings: {
@@ -69,6 +174,17 @@ export interface TriggerEventCandidate {
 interface XbrlUnit { form: string; fp?: string; fy?: number; val: number; end: string }
 export interface XbrlAnnualPoint { year: string; val: number }
 
+// 10-K 손익계산서(또는 바로 이어지는 Revenue Disaggregation Note)에 회사가 실제로 나눠 공시한
+// 매출 라인 — 축(사업부/제품군 등)과 라벨은 회사마다 제각각이라 미리 정해두지 않고, 그 회사가
+// 쓴 라벨 그대로 담는다. 최신 회계연도 1개 값만(현재 매출 구성 스냅샷 용도) — 다년도 트렌드는
+// 스코프 밖. companyfacts/companyconcept API는 XBRL 차원(axis/member)이 붙은 값을 전부 걸러내
+// 반환하지 않으므로(Ford/Apple 실측 확인), R.htm(SEC가 자동 생성하는 재무제표 렌더링 HTML)을
+// 직접 파싱해야만 얻을 수 있다 — fetchRevenueLineItems() 참고.
+export interface RevenueLineItem {
+  label: string;
+  value: number;
+}
+
 export interface EdgarRawSeries {
   ticker: string | null;
   cik: string;
@@ -86,6 +202,9 @@ export interface EdgarRawSeries {
   financingCF: (number | null)[];
   fiscalYears: string[];
   filedAt: string;
+  // 회사가 실제로 라인 구분해 공시한 경우만 채워짐(2개 미만이면 "라인 구분 없음"과 동일 취급해
+  // undefined) — Total Revenue 한 줄뿐인 회사(NVIDIA 등)는 이 필드 자체가 없다.
+  revenueLines?: RevenueLineItem[];
   source: 'EDGAR';
 }
 
@@ -521,6 +640,12 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
         filedAt: new Date().toISOString(),
         source: 'EDGAR',
       };
+
+      // 매출 라인 구분(R.htm 파싱) — FilingSummary.xml + R.htm 2회 왕복이 추가로 붙는 경로라
+      // 지연시간을 별도로 로깅한다(실측 근거 없이 "느릴 것"이라고만 말하지 않기 위해).
+      const t0 = Date.now();
+      rawSeries.revenueLines = (await fetchRevenueLineItems(cik, recent, rev?.val ?? null)) ?? undefined;
+      console.log(`[edgar] revenueLines "${entityName}": ${rawSeries.revenueLines?.length ?? 0}개 라인, ${Date.now() - t0}ms`);
     }
   }
 

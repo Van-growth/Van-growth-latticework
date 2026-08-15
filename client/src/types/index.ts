@@ -163,7 +163,9 @@ export interface SummaryV2 {
   industry: string;
   hq: string;
   value_chain_position: 'upstream' | 'midstream' | 'downstream';
-  products: { name: string; revenue_share: number }[];
+  // revenue_share(매출 비중 %) 필드는 2026-08-15부로 제거 — financials_v2.revenue_lines
+  // (EDGAR R.htm 실측)가 유일한 매출 비중 출처, 여긴 이름+정성적 설명만.
+  products: { name: string; description: string }[];
   key_metrics: { label: string; value: string; trend: 'up' | 'down' | 'flat'; source_index?: number | null }[];
   top_customers: string[];
   customer_concentration?: {
@@ -252,17 +254,18 @@ export interface ValueChainV2 {
   sources?: Source[];
 }
 
+// revenue_share(매출 비중 %) 필드는 2026-08-15부로 제거 — financials_v2.revenue_lines가
+// 유일한 매출 비중 출처, 여긴 정성적 설명만.
 export interface RevenueStream {
   name: string;
   type: 'subscription' | 'transaction' | 'service' | 'license' | 'other';
-  revenue_share: number;
+  description: string;
   operating_margin: number;
   growth_rate: number;
 }
 
 export interface BusinessSegment {
   name: string;
-  revenue_share: number;
   characteristics: string;
 }
 
@@ -385,6 +388,9 @@ export interface FinancialsV2BSRow {
 
 export interface FinancialsV2 {
   income_statement: FinancialsV2Row[];
+  // 회사가 실제 10-K에서 라인 구분해 공시한 매출만(서버가 R.htm에서 직접 파싱, Claude 미생성) —
+  // 라인 구분이 없는 회사는 undefined, EDGAR 전용(DART는 스코프 밖). 2026-08-15 신설.
+  revenue_lines?: { label: string; value: string; sharePct: number }[];
   balance_sheet: FinancialsV2BSRow[];
   cash_flow: {
     operating: string;

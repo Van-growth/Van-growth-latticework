@@ -8,7 +8,7 @@ import type { IndustryBenchmarkResult, CompetitorRevenueRanking } from '../servi
 import type { DiscoveryQuestionCandidate } from './discoveryQuestions';
 import type { EdgarRawSeries } from './edgar';
 import type { DartRawSeries } from './dart';
-import { buildIncomeStatementRows, buildBalanceSheetRows, getRowYearCols } from './financialsTableBuilder';
+import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, getRowYearCols } from './financialsTableBuilder';
 
 dotenv.config();
 
@@ -84,7 +84,10 @@ export interface SummaryV2 {
   industry: string;
   hq: string;
   value_chain_position: 'upstream' | 'midstream' | 'downstream';
-  products: { name: string; revenue_share: number }[];
+  // revenue_share(매출 비중 %) 필드는 2026-08-15부로 제거 — 웹서치 기반 자유추정치였고,
+  // financials_v2.revenue_lines(EDGAR R.htm 실측)가 유일한 매출 비중 출처가 되어야 한다는
+  // 원칙에 따라 이름+정성적 설명만 남긴다. Ford 사례(01번 탭 12%/05번 탭 7% 불일치) 재발 방지.
+  products: { name: string; description: string }[];
   key_metrics: { label: string; value: string; trend: 'up' | 'down' | 'flat'; source_index?: number | null }[];
   top_customers: string[];
   customer_concentration?: {
@@ -175,17 +178,19 @@ export interface ValueChainV2 {
   sources: SectionSource[];
 }
 
+// revenue_share(매출 비중 %) 필드는 2026-08-15부로 제거 — 웹서치 기반 자유추정치였고,
+// financials_v2.revenue_lines(EDGAR R.htm 실측)가 유일한 매출 비중 출처가 되어야 한다는
+// 원칙에 따라 정성적 설명만 남긴다.
 export interface RevenueStream {
   name: string;
   type: 'subscription' | 'transaction' | 'service' | 'license' | 'other';
-  revenue_share: number;
+  description: string;
   operating_margin: number;
   growth_rate: number;
 }
 
 export interface BusinessSegment {
   name: string;
-  revenue_share: number;
   characteristics: string;
 }
 
@@ -296,6 +301,10 @@ export interface SecBenchmarkComparison {
 
 export interface FinancialsV2 {
   income_statement: FinancialsV2Row[];
+  // 회사가 실제 10-K에서 라인 구분해 공시한 매출만(축 종류·개수 무관, 서버가 R.htm에서 직접
+  // 파싱 — Claude는 생성하지 않음) — 라인 구분이 없는 회사(NVIDIA 등)는 undefined, 프론트가
+  // 섹션째 스킵한다. EDGAR 소스 전용(DART는 스코프 밖).
+  revenue_lines?: { label: string; value: string; sharePct: number }[];
   balance_sheet: FinancialsV2BSRow[];
   cash_flow: {
     operating: string;
@@ -709,9 +718,10 @@ research report. Aim for Gong / HubSpot / Salesforce blog voice, not McKinsey de
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `Output only a JSON object matching this schema:
-{"company":"Company name","ticker":"TradingView-format ticker or null","industry":"Industry classification","hq":"HQ city, country","value_chain_position":"upstream|midstream|downstream","products":[{"name":"Product name","revenue_share":number}],"key_metrics":[{"label":"Revenue","value":"figure — 'Not disclosed' if unconfirmed","trend":"up|down|flat","source_index":number or null},{"label":"Operating margin","value":"figure% — 'figure% (estimated)' if estimated","trend":"up|down|flat","source_index":number or null},{"label":"Market cap","value":"figure","trend":"up|down|flat","source_index":number or null},{"label":"YoY growth","value":"figure%","trend":"up|down|flat","source_index":number or null}],"top_customers":["Only customer names confirmed by disclosure. Empty array [] if uncertain"],"customer_concentration":{"customers":[{"name":"Customer name","revenue_share":number confirmed by disclosure}],"top_n":number,"top_n_share":number,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"Country","revenue_share":number confirmed by disclosure only — omit the entry if unavailable}],"trigger_events":[{"date":"YYYY-MM-DD or YYYY-MM","type":"Funding|Equity Offering|Major Deal","amount":"amount — empty string if unconfirmed","counterparty":"counterparty (investor/partner name) — empty string if unconfirmed","description":"1-line description, include [n] source markers","source_index":number}],"key_bullets":["Why this company is distinct in this market — core positioning, 8 words or fewer","This company's core growth driver, 8 words or fewer","This company's biggest execution risk, 8 words or fewer"],"bull_case":["Growth momentum bullet — market expansion, partnership, or competitive edge point, 1 line","2nd growth momentum bullet, 1 line"],"bear_case":["Key risk bullet — execution, competitive, regulatory, or market risk, 1 line","2nd key risk bullet, 1 line"],"oneLiner":"1-2 sentence read on where this company stands right now, written so a strategy or sales practitioner gets it immediately","discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"company":"Company name","ticker":"TradingView-format ticker or null","industry":"Industry classification","hq":"HQ city, country","value_chain_position":"upstream|midstream|downstream","products":[{"name":"Product/segment name","description":"What it covers, 1 line"}],"key_metrics":[{"label":"Revenue","value":"figure — 'Not disclosed' if unconfirmed","trend":"up|down|flat","source_index":number or null},{"label":"Operating margin","value":"figure% — 'figure% (estimated)' if estimated","trend":"up|down|flat","source_index":number or null},{"label":"Market cap","value":"figure","trend":"up|down|flat","source_index":number or null},{"label":"YoY growth","value":"figure%","trend":"up|down|flat","source_index":number or null}],"top_customers":["Only customer names confirmed by disclosure. Empty array [] if uncertain"],"customer_concentration":{"customers":[{"name":"Customer name","revenue_share":number confirmed by disclosure}],"top_n":number,"top_n_share":number,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"Country","revenue_share":number confirmed by disclosure only — omit the entry if unavailable}],"trigger_events":[{"date":"YYYY-MM-DD or YYYY-MM","type":"Funding|Equity Offering|Major Deal","amount":"amount — empty string if unconfirmed","counterparty":"counterparty (investor/partner name) — empty string if unconfirmed","description":"1-line description, include [n] source markers","source_index":number}],"key_bullets":["Why this company is distinct in this market — core positioning, 8 words or fewer","This company's core growth driver, 8 words or fewer","This company's biggest execution risk, 8 words or fewer"],"bull_case":["Growth momentum bullet — market expansion, partnership, or competitive edge point, 1 line","2nd growth momentum bullet, 1 line"],"bear_case":["Key risk bullet — execution, competitive, regulatory, or market risk, 1 line","2nd key risk bullet, 1 line"],"oneLiner":"1-2 sentence read on where this company stands right now, written so a strategy or sales practitioner gets it immediately","discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 discovery_questions: 3-5 candidate discovery-call questions an AE could ask on a call, grounded only in this section's own data. Phrase each as something you're curious to ask — never a statement of a fact you already know. Bad: "70% of revenue is concentrated in Product A." Good: "Is there a deliberate push to reduce that revenue concentration?" — state the consequence a fact implies, not the fact itself. If trigger_events is non-empty, turn each event's implication into a question this way — Bad: "You raised a Series C recently." Good: "Has anything changed in team structure or priorities since that round?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
 top_customers: only names confirmed via IR or disclosure. Empty array if it's a guess. key_markets.revenue_share: if there's no disclosed figure, drop that country's entry entirely.
+products.description: 1 short line on what that product/segment actually does or covers — never state, imply, or round off a revenue-share percentage or dollar figure here (e.g. never write "roughly half of revenue" or "the smaller of the two segments"). The financials tab's revenue_lines section (server-computed straight from the 10-K, not you) is the only place revenue mix appears now — this section is name + what-it-is only.
 key_metrics.value must contain only the figure itself (e.g. "$215.9B", "38%", "38% (estimated)") — never append a fiscal year or data-source name in parentheses like "(EDGAR, FY2026)"; that detail belongs in the linked source instead. key_metrics.source_index must point at the index of the entry in this section's own sources[] array that backs that figure — put the fiscal year in that source's content (e.g. "FY2026 10-K revenue disclosure") so the footnote carries it. Use null only if the figure genuinely can't be attributed to any listed source.
 ticker must be returned in TradingView format: US NASDAQ → "NASDAQ:SYMBOL" (e.g. NASDAQ:NVDA), US NYSE → "NYSE:SYMBOL" (e.g. NYSE:PLTR), Korea KOSPI → "KRX:code" (e.g. KRX:005930), Korea KOSDAQ → "KOSDAQ:code" (e.g. KOSDAQ:388130), null if private or uncertain.
 bull_case/bear_case: 2-4 short bullets each, one distinct point per bullet — never restate the same point twice worded differently. Write from a strategy/practitioner point of view. No stock price, valuation, or investment-return language. If a bullet draws on a source, put the [n] marker at the very end of that bullet.
@@ -758,10 +768,11 @@ Only set pricing_power:"high"|"medium"|"low" on supplier, manufacturing, or dist
 value_flow/subject_position: 2-4 short bullets each, one distinct point per bullet. If a bullet draws on a source, put the [n] marker at the very end of that bullet. Any URL confirmed via web search must go in sources[].url.`,
 
   business_model_v2: `Output only a JSON object matching this schema:
-{"revenue_streams":[{"name":"Revenue stream","type":"subscription|transaction|service|license|other","revenue_share":number,"operating_margin":number,"growth_rate":number}],"segments":[{"name":"Segment name","revenue_share":number,"characteristics":"Characteristics, 1 line"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"How growth works, 2 sentences max","unit_economics":{"gross_margin":number,"operating_margin":number,"net_margin":number,"fcf_margin":number,"nrr":number},"moat":[{"type":"Moat type","strength":"strong|medium|weak","description":"Moat description, 1 line"}],"key_bullets":["The core of this company's revenue engine — why it makes money, 8 words or fewer","The core moat holding up the business model, 8 words or fewer","A structural weakness or collapse risk in the business model, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+{"revenue_streams":[{"name":"Revenue stream","type":"subscription|transaction|service|license|other","description":"What this stream covers, 1 line","operating_margin":number,"growth_rate":number}],"segments":[{"name":"Segment name","characteristics":"Characteristics, 1 line"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"How growth works, 2 sentences max","unit_economics":{"gross_margin":number,"operating_margin":number,"net_margin":number,"fcf_margin":number,"nrr":number},"moat":[{"type":"Moat type","strength":"strong|medium|weak","description":"Moat description, 1 line"}],"key_bullets":["The core of this company's revenue engine — why it makes money, 8 words or fewer","The core moat holding up the business model, 8 words or fewer","A structural weakness or collapse risk in the business model, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (revenue mix, growth motion, moat, unit economics). Phrase each as something you're curious to ask, never a stated fact. Bad: "Your NRR looks soft." Good: "What's driving expansion revenue right now versus new-logo growth?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
 Tag important facts in growth_motion_detail/moat.description with [n] source markers. Any URL confirmed via web search must go in sources[].url.
-operating_margin/growth_rate (inside revenue_streams) and unit_economics' gross_margin/operating_margin/net_margin/fcf_margin/nrr are numeric fields — return 0 if unconfirmable. Never use text like "Not disclosed"/"N/A" or a sentinel like -999 (that produces invalid JSON). For revenue_share, don't default to 0 if unconfirmable — always fill in a reasonable estimate.`,
+operating_margin/growth_rate (inside revenue_streams) and unit_economics' gross_margin/operating_margin/net_margin/fcf_margin/nrr are numeric fields — return 0 if unconfirmable. Never use text like "Not disclosed"/"N/A" or a sentinel like -999 (that produces invalid JSON).
+revenue_streams.description / segments.characteristics: 1 short line on what that stream/segment actually is or does — never state, imply, or round off a revenue-share percentage or dollar figure (e.g. never write "the majority of revenue" or "a small but growing stream"). Revenue mix now lives only in the financials tab's revenue_lines section (server-computed straight from the 10-K, not you).`,
 
   cross_industry_nudge_v1: `Output only a JSON object matching this schema:
 {"industry_pain":{"title":"Pain point title, 8 words or fewer","description":["Pain point bullet common across the analyzed company's industry (by SIC/KSIC classification) as a whole — not specific to this one company, 1 line","2nd bullet, 1 line"],"financial_impact_question":"A question only — never a stated number, percentage, or dollar-figure conclusion — about how this pain point could hit the business financially. Example: 'How much of quarterly revenue could this bottleneck be putting at risk?'"},"cross_industry_example":{"source_industry":"The OTHER industry this solution came from — must be genuinely different from the analyzed company's own industry","case_name":"The company or case name that solved it","solution_description":"How that other industry solved an analogous operational problem, 2 sentences max"},"key_bullets":["Why this pain point matters right now for this company, 8 words or fewer","The core mechanism behind the cross-industry solution, 8 words or fewer","The single biggest condition for applying this solution here, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://..."}]}
@@ -1115,8 +1126,10 @@ function overrideFinancialsTable(
   if (!f || (!rawEdgar && !rawDart)) return f;
   const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language);
   const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language);
+  const revenueLines = buildRevenueLines(rawEdgar ?? null);
   if (isRows) f.income_statement = isRows as unknown as FinancialsV2['income_statement'];
   if (bsRows) f.balance_sheet = bsRows as unknown as FinancialsV2['balance_sheet'];
+  f.revenue_lines = revenueLines ?? undefined;
   return f;
 }
 

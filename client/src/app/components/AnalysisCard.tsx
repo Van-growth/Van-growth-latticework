@@ -515,17 +515,16 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
       <div className="space-y-3">
         {s.products.length > 0 && (
           <SectionCard title="주요 제품/서비스" dotColor="bg-blue-400">
-            <div className="space-y-2.5">
+            {/* 매출 비중(%)은 여기서 더 이상 안 보여준다 — 재무 탭의 "매출 구성"(revenue_lines,
+                EDGAR 10-K 실측)만이 유일한 비중 출처. 이름+정성적 설명만 표시. */}
+            <ul className="space-y-2">
               {s.products.map((p, i) => (
-                <div key={i}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-700">{p.name}</span>
-                    <span className="font-medium text-gray-800">{p.revenue_share}%</span>
-                  </div>
-                  <ProgressBar value={p.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
-                </div>
+                <li key={i} className="text-xs">
+                  <span className="font-medium text-gray-800">{p.name}</span>
+                  {p.description && <span className="text-gray-500"> — {p.description}</span>}
+                </li>
               ))}
-            </div>
+            </ul>
           </SectionCard>
         )}
 
@@ -1018,20 +1017,10 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
   const gm = GROWTH_MOTION_CFG[bm.growth_motion] ?? GROWTH_MOTION_CFG.hybrid;
   const ue = bm.unit_economics ?? { gross_margin: 0, operating_margin: 0, net_margin: 0, fcf_margin: 0, nrr: 0 };
   const revenueStreams = bm.revenue_streams ?? [];
-  const segments = bm.segments ?? [];
   const moat = bm.moat ?? [];
-  // Revenue Streams와 사업 세그먼트가 사실상 같은 항목을 중복 표시하던 문제(2026-08) —
-  // 세그먼트 섹션은 제거하고, 거기에만 있던 금액/배경 설명(characteristics)은 이름이
-  // 일치하는 Revenue Streams 항목 아래 1줄 설명으로 옮겨 정보 손실을 막는다.
-  const normSegName = (s: string) => s.toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
-  const rsCharacteristics = revenueStreams.map(rs => {
-    const rsNorm = normSegName(rs.name);
-    const match = segments.find(seg => {
-      const segNorm = normSegName(seg.name);
-      return segNorm === rsNorm || segNorm.includes(rsNorm) || rsNorm.includes(segNorm);
-    });
-    return match?.characteristics || null;
-  });
+  // Revenue Streams는 이제 자체 description 필드를 갖는다(2026-08-15) — 예전엔 이름이
+  // 일치하는 segments[].characteristics를 퍼지 매칭으로 끌어와 보여줬지만, revenue_share(%)와
+  // 함께 segments를 화면에서 제거하면서 그 매칭 로직도 같이 정리했다.
   const ueMetrics = [
     { label: 'Gross Margin', value: `${ue.gross_margin}%` },
     { label: 'Operating Margin', value: `${ue.operating_margin}%` },
@@ -1044,20 +1033,17 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
     <div className="space-y-4">
       <KeyBulletsBlock bullets={bm.key_bullets} />
 
-      {/* Revenue Streams 전체 항상 표시 */}
+      {/* Revenue Streams 전체 항상 표시 — 매출 비중(%)은 여기서 더 이상 안 보여준다(재무 탭의
+          "매출 구성"만이 유일한 비중 출처, 2026-08-15). operating_margin/growth_rate는 그대로 유지. */}
       {revenueStreams.length > 0 && (
         <SectionCard title="Revenue Streams" dotColor="bg-green-400">
           <div className="space-y-3">
             {revenueStreams.map((rs, i) => (
               <div key={i}>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-gray-700">{rs.name}</span>
-                    <Tag label={rs.type} color="gray" />
-                  </div>
-                  <span className="text-xs font-medium text-gray-800">{rs.revenue_share}%</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-medium text-gray-700">{rs.name}</span>
+                  <Tag label={rs.type} color="gray" />
                 </div>
-                <ProgressBar value={rs.revenue_share} color={BAR_COLORS[i % BAR_COLORS.length]} />
                 {(rs.operating_margin !== 0 || rs.growth_rate !== 0) && (
                   <div className="flex gap-3 mt-1">
                     {rs.operating_margin !== 0 && (
@@ -1070,8 +1056,8 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
                     )}
                   </div>
                 )}
-                {rsCharacteristics[i] && (
-                  <p className="text-[11px] text-gray-400 mt-1 leading-snug">{rsCharacteristics[i]}</p>
+                {rs.description && (
+                  <p className="text-[11px] text-gray-400 mt-1 leading-snug">{rs.description}</p>
                 )}
               </div>
             ))}
@@ -2194,6 +2180,26 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
         </SectionCard>
       )}
 
+      {/* 매출 구성 — 회사가 실제 10-K에서 라인 구분해 공시한 경우만(서버가 R.htm에서 직접
+          파싱, Claude 미생성) — 축이 사업부든 제품군이든 그 회사가 쓴 라벨 그대로. 라인 구분이
+          없는 회사(f.revenue_lines가 undefined)는 이 섹션 자체를 스킵한다. */}
+      {f.revenue_lines && f.revenue_lines.length > 0 && (
+        <SectionCard title="매출 구성" dotColor="bg-teal-400">
+          <div className="space-y-3">
+            {f.revenue_lines.map((rl, i) => (
+              <div key={i}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-gray-700">{rl.label}</span>
+                  <span className="text-xs font-medium text-gray-800">{rl.value} ({rl.sharePct}%)</span>
+                </div>
+                <ProgressBar value={rl.sharePct} color={BAR_COLORS[i % BAR_COLORS.length]} />
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-3">10-K 손익계산서에 실제로 공시된 라인만 표시 — 비중(%)은 서버가 단순 계산, 추정치 아님</p>
+        </SectionCard>
+      )}
+
       {/* Below fold: Balance sheet, Cash flow, Key risks */}
       <ShowMore label="재무상태표 · 현금흐름 보기">
         <>
@@ -2863,7 +2869,7 @@ function summaryToMd(s: SummaryV2, sources: Source[] | undefined): string {
     s.oneLiner,
     s.key_bullets?.length ? `**핵심 요약**\n${mdList(s.key_bullets)}` : '',
     s.key_metrics.length ? `**핵심 지표**\n${mdList(s.key_metrics.map(m => `${m.label}: ${m.value}`))}` : '',
-    s.products.length ? `**주요 제품/서비스**\n${mdList(s.products.map(p => `${p.name} — ${p.revenue_share}%`))}` : '',
+    s.products.length ? `**주요 제품/서비스**\n${mdList(s.products.map(p => p.description ? `${p.name} — ${p.description}` : p.name))}` : '',
     s.key_markets.length ? `**주요 시장**\n${mdList(s.key_markets.map(m => `${m.country} — ${m.revenue_share}%`))}` : '',
     s.top_customers.length ? `**주요 고객사**: ${s.top_customers.join(', ')}` : '',
     cc && cc.top_n_share > 0 ? `상위 ${cc.top_n}개 고객이 매출 ${cc.top_n_share}% 차지${cc.trend === 'diversifying' ? ' (다변화 진행 중)' : cc.trend === 'concentrating' ? ' (집중도 심화)' : ''}` : '',
@@ -2919,7 +2925,7 @@ function businessModelToMd(bm: BusinessModelV2, sources: Source[] | undefined): 
   const body = mdJoin([
     bm.key_bullets?.length ? `**핵심 요약**\n${mdList(bm.key_bullets)}` : '',
     bm.growth_motion_detail ? `**Growth Motion (${bm.growth_motion})**: ${bm.growth_motion_detail}` : '',
-    bm.revenue_streams.length ? `**Revenue Streams**\n${mdList(bm.revenue_streams.map(rs => `${rs.name} (${rs.type}) — ${rs.revenue_share}%`))}` : '',
+    bm.revenue_streams.length ? `**Revenue Streams**\n${mdList(bm.revenue_streams.map(rs => `${rs.name} (${rs.type})${rs.description ? ` — ${rs.description}` : ''}`))}` : '',
     (ue.gross_margin || ue.operating_margin || ue.net_margin) ? `**Unit Economics**\n${mdList([
       ue.gross_margin ? `Gross Margin: ${ue.gross_margin}%` : '',
       ue.operating_margin ? `Operating Margin: ${ue.operating_margin}%` : '',
@@ -2927,7 +2933,7 @@ function businessModelToMd(bm: BusinessModelV2, sources: Source[] | undefined): 
       ue.fcf_margin ? `FCF Margin: ${ue.fcf_margin}%` : '',
       ue.nrr ? `NRR: ${ue.nrr}%` : '',
     ])}` : '',
-    bm.segments.length ? `**사업 세그먼트**\n${mdList(bm.segments.map(seg => `${seg.name} — ${seg.revenue_share}%: ${seg.characteristics}`))}` : '',
+    bm.segments.length ? `**사업 세그먼트**\n${mdList(bm.segments.map(seg => `${seg.name}: ${seg.characteristics}`))}` : '',
     bm.moat.length ? `**경제적 해자**\n${mdList(bm.moat.map(m => `${m.type} (${m.strength}) — ${m.description}`))}` : '',
     mdSourcesBlock(sources),
   ]);
