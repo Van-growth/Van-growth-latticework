@@ -171,6 +171,9 @@ interface UiStringDict {
     jobLevel: string;
     purpose: string;
     purposeOtherPlaceholder: string;
+    nickname: string;
+    nicknameHelperText: string;
+    nicknamePlaceholder: string;
     icpSectionTitle: string;
     icpHelperText: string;
     icpProduct: string;
@@ -366,6 +369,9 @@ const ko: UiStringDict = {
     jobLevel: '직급',
     purpose: '사용 목적 (복수 선택 가능)',
     purposeOtherPlaceholder: '기타 목적을 입력해주세요',
+    nickname: '닉네임',
+    nicknameHelperText: '공유 링크/PDF에서 이 분석을 만든 사람을 표시할 때 쓰여요 (이메일은 노출되지 않아요). 비워두면 이름 없이 표시돼요.',
+    nicknamePlaceholder: '예: Ben',
     icpSectionTitle: 'ICP (이상적 고객 프로필)',
     icpHelperText: '구체적으로 작성할수록 더 정확한 인사이트를 받을 수 있어요',
     icpProduct: '제품/서비스',
@@ -561,6 +567,9 @@ const en: UiStringDict = {
     jobLevel: 'Level',
     purpose: 'Purpose (select all that apply)',
     purposeOtherPlaceholder: 'Tell us your purpose',
+    nickname: 'Nickname',
+    nicknameHelperText: "Shown as the author on shared links/PDFs (your email is never exposed). Leave it blank to show no name.",
+    nicknamePlaceholder: 'e.g. Ben',
     icpSectionTitle: 'ICP (Ideal Customer Profile)',
     icpHelperText: 'The more specific you are, the more accurate your insights will be',
     icpProduct: 'Product/service',

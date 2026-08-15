@@ -1258,6 +1258,7 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
       .from('icp_insights')
       .insert({
         analysis_id: analysisId,
+        created_by: authUser.id,
         icp_product: icp.product,
         icp_target_industry: icp.targetIndustry,
         icp_target_role: icp.targetRole,

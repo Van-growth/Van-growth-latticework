@@ -21,6 +21,7 @@ export interface ProfileFormValues {
   icp_product: string;
   icp_target_industry: string;
   icp_target_role: string;
+  nickname: string;
 }
 
 function toFormValues(p?: Partial<UserProfile> | null): ProfileFormValues {
@@ -36,6 +37,7 @@ function toFormValues(p?: Partial<UserProfile> | null): ProfileFormValues {
     icp_product: p?.icp_product ?? '',
     icp_target_industry: p?.icp_target_industry ?? '',
     icp_target_role: p?.icp_target_role ?? '',
+    nickname: p?.nickname ?? '',
   };
 }
 
@@ -183,6 +185,21 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
           />
         )}
       </div>
+
+      {showIcp && (
+        <div className="pt-2 border-t border-gray-100">
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t.nickname}</label>
+          <p className="text-xs text-gray-400 mb-2">{t.nicknameHelperText}</p>
+          <input
+            type="text"
+            value={values.nickname}
+            onChange={e => setValues(v => ({ ...v, nickname: e.target.value }))}
+            placeholder={t.nicknamePlaceholder}
+            maxLength={40}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+      )}
 
       {showIcp && (
         <div className="pt-2 border-t border-gray-100">

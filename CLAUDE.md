@@ -325,6 +325,55 @@ prod에 적용돼 있던 걸 발견 — SQL Editor 직접 실행 금지 규칙�
 
 - PostToolUse hook(`scripts/migration-hook.mjs`)이 파일 감지 후 적용 정보를 출력함 — dev 프로젝트 ID도 반영됨(`ininmbvzzdqplnfdnisf`)
 
+### ⚠️ 2026-08-15 발견 — MCP `apply_migration`의 버전 기록 포맷과 로컬 파일명 포맷이 애초에 안 맞았음
+
+**배경**: Supabase MCP OAuth가 "Unrecognized client_id" 에러로 이번 세션에서 막혀서, 대안으로
+Supabase CLI(`npx supabase`, MCP와는 별도 경로로 이미 로그인되어 있었음)로 마이그레이션 적용을
+시도하다가 발견. `supabase migration list`를 돌려보니 로컬 파일 40개 전부가 원격(prod) 이력과
+매칭이 하나도 안 됨 — 로컬 파일명은 `20260624_add_financial_cache.sql`처럼 날짜만 담고(그마저도
+`001`이 2개, `20260703`이 5개처럼 같은 프리픽스가 여러 파일에 중복), MCP `apply_migration`이
+원격 `supabase_migrations.schema_migrations`에 실제로 기록하는 버전은 `20260624094549`처럼
+분·초까지 담은 전체 타임스탬프라, 애초에 문자열이 일치할 수 없는 구조였음.
+
+**확인 절차 (실행 전 반드시 이렇게 확인할 것 — `db push` 먼저 돌리지 말 것)**: 이 불일치만 보고
+"로컬 마이그레이션이 하나도 적용 안 됐다"고 오판해 `supabase db push`를 돌리면, CLI가 40개
+전부를 "미적용"으로 보고 처음(`001_companies.sql`)부터 프로덕션에 실제로 재실행을 시도한다 —
+매우 위험. 대신 읽기 전용 쿼리(`supabase db query --linked "SELECT ... FROM information_schema
+.columns/tables WHERE ..."`)로 전체 기간에 걸친 테이블/컬럼 마커 18개를 직접 대조한 결과,
+**기존 40개는 전부 이미 prod에 정상 적용돼 있음을 실측 확인** — 문제는 순수하게 버전 문자열
+포맷 불일치였지, 실제 스키마 미적용이 아니었음.
+
+**남은 미해결 사항(우선순위 낮음, 별도 정리 과제로 남김)**: 원격 이력에 로컬 어떤 파일과도
+매칭 안 되는 `2026-07-02 22:55:38`/`23:45:39` 타임스탬프 2건이 있음 — git 이력에 삭제된
+마이그레이션 파일도 없어 원인이 확실친 않으나, 그 시각을 KST로 환산하면 `2026-07-03` 새벽
+(07:55/08:45 KST)이라 `20260703_*.sql` 배치(로컬 5개, 원격은 이 2건 포함 6건 매칭)가 적용될
+때의 UTC/KST 표시 차이일 가능성이 높음. 실제 스키마 대조에서는 이상 없었으므로 데이터 손상
+리스크는 없다고 판단 — 기존 40개 전체의 버전 이력을 CLI 기준으로 통째로 재정비하는 것도 이번
+범위에서 제외, 필요해지면 별도 작업으로.
+
+**오늘 신규 2건(`icp_insights.created_by`, `profiles.nickname`) 처리 방식**: 파일명을
+`20260815120000_icp_insights_created_by.sql`/`20260815120100_profiles_nickname.sql`처럼
+고유한 전체 타임스탬프 프리픽스로 리네이밍(이번 두 파일만 `20260815`를 그대로 공유해서 CLI가
+구분을 못 하는 문제가 있었음) → `supabase db query --linked -f <파일>`로 DDL을 마이그레이션
+이력 시스템 밖에서 직접 실행(둘 다 `IF NOT EXISTS`라 안전) → 읽기 전용 쿼리로 컬럼 실제 생성
+확인 → `supabase migration repair --status applied <버전>`으로 이력에만 기록(SQL 재실행 없이
+"이미 적용됨" 표시). `supabase migration list`로 이 2건만 local/remote가 정확히 매칭됨을 확인.
+
+**재발 방지 원칙 — 앞으로 새 마이그레이션 파일명은 CLI 호환 고유 타임스탬프를 쓸 것**:
+`YYYYMMDDHHmmss_설명.sql` 형식(초 단위까지, 같은 날 여러 개면 시각을 다르게)으로 통일 —
+기존처럼 `YYYYMMDD_설명.sql`(날짜만)로 쓰고 같은 날 여러 파일을 만들면, MCP `apply_migration`로
+적용하는 것 자체는 문제없이 성공하지만 이번처럼 CLI 도구(`db push`/`migration list`/
+`migration repair`)와의 호환이 깨진다. MCP가 정상화되더라도 이 네이밍 규칙은 유지할 것 —
+CLI가 유일하게 신뢰 가능한 대체 경로였다는 게 이번에 확인됐고, 다음에 MCP가 또 막힐 수 있음.
+
+**dev 프로젝트 현재 상태**: `ininmbvzzdqplnfdnisf`("1min-dev")는 여전히 존재하지만 현재
+운영에 실질적으로 쓰이지 않고 있음 — "dev 환경이 없다"는 뜻이 아니라 "있지만 이번
+마이그레이션 검증에는 안 씀"이라는 의도적 결정(2026-08-15). 이번 2건은 **prod에만 적용됨**,
+dev에는 미적용 — dev를 나중에 다시 활성화해서 쓰게 되면 이 마이그레이션도 그때 동일하게
+재적용해야 함. 위 "규칙: 새 마이그레이션 파일 작성 시 반드시... prod + dev 둘 다" 원칙은 dev가
+실제로 운영에 쓰이는 상태를 전제로 한 것 — 지금처럼 dev가 사실상 미사용 상태인 동안은 이
+원칙이 잠정 보류됨.
+
 ## Dev
 ```bash
 # Server (port 4000)
@@ -1057,6 +1106,16 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
     데이터에 근거한 질문 후보를 직접 만들어두고 ICP 탭에서 선별만 하는 구조로 결정.
     상세는 아래 "✅ 완료"와 Architecture 섹션 참고 — 이 항목(트리거 패턴 라이브러리)은
     설계 참고용으로만 남겨두고 더 이상 진행하지 않음.
+- [ ] **비정형 신호 수집 (Unstructured signal harvesting)** — 채용공고/신규채용 트렌드를
+  트리거 이벤트 후보로 쓰는 아이디어(근거: u/weisswurstseeadler 실전 사례, 위 "시장
+  검증 현황 — 레딧" 참고). Greenhouse/Lever 같은 공개 ATS API로 채용 데이터를 저비용
+  수집할 수 있는지 커버리지 검증 후 **보류(deprioritize) 확정**.
+  - **2026-08-15 검증**: S&P500 샘플 30개 중 Greenhouse/Lever 매핑 성공 4개(13.3%,
+    검증 후 오탐 2개 제외), Lever는 0건. 메가캡(시총 최상위) 14개는 0/14로 전멸 —
+    1min 핵심 타겟(Enterprise AE가 다루는 대형 상장사)과 정확히 겹치는 구간에서
+    커버리지 없음. 목표 기준(30~40%)에 크게 미달해 보류.
+  - **재검토 조건**: 대형 기업이 표준적으로 쓰는 ATS(Workday/iCIMS 등) 공개 API 접근
+    방법이 확인되면 그때 재고려.
 
 ### ✅ 완료
 - [x] 창업자 탭 추가

@@ -83,7 +83,7 @@ export default function ShareContent({ token }: { token: string }) {
           </div>
         )}
 
-        {!loading && data && <AnalysisCard data={data} />}
+        {!loading && data && <AnalysisCard data={data} isShareView />}
       </div>
 
       {/* Watermark */}

@@ -53,6 +53,7 @@ export default function SettingsPage() {
           icp_product: values.icp_product || null,
           icp_target_industry: values.icp_target_industry || null,
           icp_target_role: values.icp_target_role || null,
+          nickname: values.nickname || null,
         }),
       });
       if (res.ok) {

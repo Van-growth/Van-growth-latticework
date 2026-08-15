@@ -21,7 +21,7 @@ const JOB_LEVELS = ['junior', 'mid', 'senior', 'team_lead', 'executive'];
 const PURPOSES = ['meeting_prep', 'partner_research', 'competitor_analysis', 'other'];
 const REGIONS = ['kr', 'us', 'other'];
 
-const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, onboarding_completed_at, icp_product, icp_target_industry, icp_target_role';
+const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, onboarding_completed_at, icp_product, icp_target_industry, icp_target_role, nickname';
 
 router.get('/', async (req: Request, res: Response) => {
   const authUser = await resolveAuthUser(req);
@@ -53,7 +53,7 @@ router.patch('/', async (req: Request, res: Response) => {
 
   const {
     company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, completeOnboarding,
-    icp_product, icp_target_industry, icp_target_role,
+    icp_product, icp_target_industry, icp_target_role, nickname,
   } = req.body as {
     company_name?: string | null;
     org_size?: string | null;
@@ -67,6 +67,7 @@ router.patch('/', async (req: Request, res: Response) => {
     icp_product?: string | null;
     icp_target_industry?: string | null;
     icp_target_role?: string | null;
+    nickname?: string | null;
   };
 
   if (org_size != null && !ORG_SIZES.includes(org_size)) {
@@ -93,6 +94,10 @@ router.patch('/', async (req: Request, res: Response) => {
     res.status(400).json({ error: `region은 ${REGIONS.join('/')} 중 하나여야 합니다.` });
     return;
   }
+  if (nickname != null && nickname.length > 40) {
+    res.status(400).json({ error: '닉네임은 40자 이내여야 합니다.' });
+    return;
+  }
 
   const fields: Record<string, unknown> = {};
   if (company_name !== undefined) fields.company_name = company_name;
@@ -107,6 +112,10 @@ router.patch('/', async (req: Request, res: Response) => {
   if (icp_product !== undefined) fields.icp_product = icp_product;
   if (icp_target_industry !== undefined) fields.icp_target_industry = icp_target_industry;
   if (icp_target_role !== undefined) fields.icp_target_role = icp_target_role;
+  // 공유 링크/PDF에 소유자 표시용(2026-08-15) — 이메일은 어떤 형태로도(마스킹 포함) 노출하지
+  // 않기로 결정, 대신 유저가 선택적으로 입력하는 닉네임을 쓴다. 안 채우면 공유 화면엔 소유자
+  // 이름 없이 일반 문구로만 표시(share.ts 참고).
+  if (nickname !== undefined) fields.nickname = nickname?.trim() || null;
   if (completeOnboarding) fields.onboarding_completed_at = new Date().toISOString();
 
   if (Object.keys(fields).length === 0) {
