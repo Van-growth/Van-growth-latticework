@@ -145,6 +145,9 @@ vite.config.ts.timestamp-*
 # Claude Code local config (settings.local.json은 로컬 전용)
 .claude/*
 !.claude/settings.json
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/*.md
 
 # 로컬 수동 다운로드 원본 데이터 (SEC Financial Statement Data Sets 등, 용량 큼 — 커밋 금지)
 /data/raw/
