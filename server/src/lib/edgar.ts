@@ -84,10 +84,6 @@ export interface EdgarRawSeries {
   operatingCF: (number | null)[];
   investingCF: (number | null)[];
   financingCF: (number | null)[];
-  // 다년도 EBITDA 서버 조립용(Operating Income + Depreciation, 둘 다 있는 연도만) — 2026-08-13
-  // 이전엔 단일 최신연도 스냅샷(financials.ebitda)에서만 oi.val+da.val을 계산했고 rawSeries엔
-  // 아예 실려있지 않아 다년도 표에는 EBITDA를 서버가 조립할 방법이 없었다.
-  depreciation: (number | null)[];
   fiscalYears: string[];
   filedAt: string;
   source: 'EDGAR';
@@ -104,7 +100,6 @@ export interface EdgarData {
     grossProfit?: string;
     operatingIncome?: string;
     netIncome?: string;
-    ebitda?: string;
     totalAssets?: string;
     totalLiabilities?: string;
     totalEquity?: string;
@@ -458,7 +453,6 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     const opCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInOperatingActivities');
     const invCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInInvestingActivities');
     const finCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInFinancingActivities');
-    const daData   = pickConceptSeries(gaap, 'DepreciationDepletionAndAmortization', 'DepreciationAndAmortization');
     const epsData  = pickConceptSeries(gaap, 'EarningsPerShareBasic');
 
     // 후보를 전부 시도해도 못 찾은 필드만 concept_miss_log에 기록(fire-and-forget) — 나중에
@@ -474,10 +468,9 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     void logConceptMissIfEmpty(cik, entityName, 'operatingCF', opCFData, ['NetCashProvidedByUsedInOperatingActivities']);
     void logConceptMissIfEmpty(cik, entityName, 'investingCF', invCFData, ['NetCashProvidedByUsedInInvestingActivities']);
     void logConceptMissIfEmpty(cik, entityName, 'financingCF', finCFData, ['NetCashProvidedByUsedInFinancingActivities']);
-    void logConceptMissIfEmpty(cik, entityName, 'depreciation', daData, ['DepreciationDepletionAndAmortization', 'DepreciationAndAmortization']);
 
     // 최신 연도 단일값 — 기존 narrative(financials) 호환용.
-    // 손익계산서 항목(gp/oi/ni/da)은 revenue와 같은 회계연도인지 검증 후에만 사용 — concept마다
+    // 손익계산서 항목(gp/oi/ni)은 revenue와 같은 회계연도인지 검증 후에만 사용 — concept마다
     // 태깅이 끊긴 시점이 다를 수 있어(예: Berkshire Hathaway는 'OperatingIncomeLoss'를 2012년
     // 이후로 아예 태깅 안 함), 검증 없이 "최신"을 취하면 13년 전 수치가 "올해" 라벨을 달고
     // 나가는 사고가 남(2026-07-04 발견 — 5.4% 영업이익률이 실제론 2012년 수치였음).
@@ -485,7 +478,7 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     const rev = latest(revData);
     const anchorYear = rev?.year;
     const matchYear = (d: XbrlAnnualPoint[]) => (d[0] && d[0].year === anchorYear) ? d[0] : null;
-    const gp = matchYear(gpData), oi = matchYear(oiData), ni = matchYear(niData), da = matchYear(daData);
+    const gp = matchYear(gpData), oi = matchYear(oiData), ni = matchYear(niData);
     const as_ = latest(aData), li = latest(lData), eq = latest(eqData), ca = latest(cashData);
     const ocf = latest(opCFData), icf = latest(invCFData), fcf = latest(finCFData);
 
@@ -493,7 +486,6 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     if (gp)  financials.grossProfit = fmtUsd(gp.val);
     if (oi)  financials.operatingIncome = fmtUsd(oi.val);
     if (ni)  financials.netIncome = fmtUsd(ni.val);
-    if (oi && da) financials.ebitda = fmtUsd(oi.val + da.val);
     if (as_) financials.totalAssets = fmtUsd(as_.val);
     if (li)  financials.totalLiabilities = fmtUsd(li.val);
     if (eq)  financials.totalEquity = fmtUsd(eq.val);
@@ -525,7 +517,6 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
         operatingCF: align(opCFData),
         investingCF: align(invCFData),
         financingCF: align(finCFData),
-        depreciation: align(daData),
         fiscalYears,
         filedAt: new Date().toISOString(),
         source: 'EDGAR',

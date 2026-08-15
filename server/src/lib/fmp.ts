@@ -143,7 +143,6 @@ export function buildFmpContext(d: FmpData): string {
       ['매출총이익',    'grossProfit'],
       ['영업이익',      'operatingIncome'],
       ['순이익',        'netIncome'],
-      ['EBITDA',       'ebitda'],
     ];
     for (const [label, field] of rows) {
       lines.push(

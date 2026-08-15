@@ -44,8 +44,9 @@ import {
   SecBenchmarkComparison,
   UserProfile,
   IcpInsightResponse,
+  DiscoveryQuestionItem,
 } from '@/types';
-import { isPlaceholder, countFinancialsReliability } from '@/lib/financialsReliability';
+import { isPlaceholder, countFinancialsReliability, getFinancialYearCols } from '@/lib/financialsReliability';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { getUiStrings } from '@/lib/i18n/uiStrings';
 
@@ -1713,6 +1714,43 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
   );
 }
 
+// 공유 링크(ShareContent.tsx) 전용 읽기 전용 버전 — IcpInsightTab과 달리 API를 직접
+// 호출하지 않는다(생성/재생성/별점 전부 없음). data.icpDiscoveryQuestions/icpOwnerLabel은
+// share.ts가 "소유자 본인이 생성한 결과"만 걸러서 미리 넣어준 값 — ICP 원문(icp_product 등)은
+// 서버 응답에 애초에 포함되지 않으므로 이 컴포넌트가 렌더링할 방법 자체가 없다.
+function SharedIcpQuestionsTab({ questions, ownerLabel, uiT }: {
+  questions: DiscoveryQuestionItem[] | null | undefined;
+  ownerLabel: string | null | undefined;
+  uiT: ReturnType<typeof getUiStrings>;
+}) {
+  if (!questions || questions.length === 0) {
+    return <p className="text-sm text-gray-500 py-16 text-center">{uiT.icpInsight.sharedEmpty}</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-400">
+        {ownerLabel ? uiT.icpInsight.ownerLabelNamed(ownerLabel) : uiT.icpInsight.ownerLabelGeneric}
+      </p>
+      <SectionCard title={uiT.icpInsight.questionsTitle} dotColor="bg-amber-400">
+        <ul className="space-y-3">
+          {questions.map((item, i) => (
+            <li key={i} className="pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0">
+                  {uiT.icpInsight.sectionLabel[item.section] ?? item.section}
+                </span>
+                <p className="text-sm text-gray-800 leading-relaxed">{item.question}</p>
+              </div>
+              <SourcesList sources={item.sources} />
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
+    </div>
+  );
+}
+
 // ── V2 Tab: 전략 ──────────────────────────────────────────────────────────────
 
 const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | undefined }) {
@@ -1964,9 +2002,6 @@ function VirtualTable({
 
 // ── V2 Tab: 재무 ──────────────────────────────────────────────────────────────
 
-const IS_COLS_V2: Array<keyof Omit<FinancialsV2Row, 'item' | 'yoy'>> =
-  ['fy2021', 'fy2022', 'fy2023', 'fy2024', 'fy2025'];
-
 // 2026-08 프롬프트 영어 단일화 이후 신규 분석은 영어 item 라벨, 기존 캐시는 한국어 라벨을
 // 그대로 유지하므로 둘 다 매칭한다.
 const IS_BOLD_ITEMS = ['매출', '영업이익', '순이익', 'Revenue', 'Operating Income', 'Net Income'];
@@ -2055,6 +2090,21 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
   // 데이터 신뢰도 요약 — 이 탭에 표시되는 필드들 중 (추정) 배지 / 확인 필요(플레이스홀더) 값 카운트
   const { estimatedCount, unknownCount } = useMemo(() => countFinancialsReliability(f), [f]);
 
+  // 회사마다 실제로 보유한 회계연도만 컬럼으로 렌더링 — 고정 fy2021~fy2025/fy2023~fy2025
+  // 리터럴을 가정하지 않는다(신규 상장사는 짧은 이력만, 오래된 기업은 최대 5개년).
+  const isYearCols = useMemo(
+    () => Array.from(new Set(f.income_statement.flatMap(getFinancialYearCols))).sort(),
+    [f.income_statement],
+  );
+  const bsYearCols = useMemo(
+    () => Array.from(new Set(f.balance_sheet.flatMap(getFinancialYearCols))).sort(),
+    [f.balance_sheet],
+  );
+  // 마지막 직전 연도(=가장 최근으로 확정된 회계연도)를 강조 — 최신 연도는 (추정)일 수 있어
+  // 기존에도 항상 최신이 아니라 그 직전 연도를 강조해왔다(예전 고정 5칸 땐 fy2024 강조).
+  const isHighlightCol = isYearCols.length >= 2 ? isYearCols[isYearCols.length - 2] : isYearCols[0];
+  const bsHighlightCol = bsYearCols.length >= 2 ? bsYearCols[bsYearCols.length - 2] : bsYearCols[0];
+
   return (
     <div className="space-y-4">
       <KeyBulletsBlock bullets={f.key_bullets} />
@@ -2112,14 +2162,14 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
         <SectionCard title="손익계산서 (I/S)" dotColor="bg-blue-400">
           <VirtualTable
             rows={f.income_statement}
-            colTemplate={`minmax(100px,1.5fr) repeat(${IS_COLS_V2.length},1fr) 80px`}
+            colTemplate={`minmax(100px,1.5fr) repeat(${isYearCols.length},1fr) 80px`}
             minWidth={520}
             maxVisible={10}
             header={
               <>
                 <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
-                {IS_COLS_V2.map(col => (
-                  <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
+                {isYearCols.map(col => (
+                  <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === isHighlightCol ? 'text-gray-600' : 'text-gray-400'}`}>
                     {col.replace('fy', 'FY')}
                   </span>
                 ))}
@@ -2131,8 +2181,8 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
               return (
                 <>
                   <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
-                  {IS_COLS_V2.map(col => (
-                    <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === 'fy2024' ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
+                  {isYearCols.map(col => (
+                    <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === isHighlightCol ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
                       <FinancialValue text={row[col] ?? '—'} dataSource={dataSource} />
                     </span>
                   ))}
@@ -2151,14 +2201,14 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
             <SectionCard title="재무상태표 (B/S)" dotColor="bg-indigo-400">
               <VirtualTable
                 rows={f.balance_sheet}
-                colTemplate="minmax(130px,1.5fr) 1fr 1fr 1fr"
+                colTemplate={`minmax(130px,1.5fr) repeat(${bsYearCols.length},1fr)`}
                 minWidth={380}
                 maxVisible={10}
                 header={
                   <>
                     <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
-                    {(['fy2023', 'fy2024', 'fy2025'] as const).map(col => (
-                      <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === 'fy2024' ? 'text-gray-600' : 'text-gray-400'}`}>
+                    {bsYearCols.map(col => (
+                      <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === bsHighlightCol ? 'text-gray-600' : 'text-gray-400'}`}>
                         {col.replace('fy', 'FY')}
                       </span>
                     ))}
@@ -2169,9 +2219,11 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                   return (
                     <>
                       <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
-                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2023 ?? '—'} dataSource={dataSource} /></span>
-                      <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}><FinancialValue text={row.fy2024 ?? '—'} dataSource={dataSource} /></span>
-                      <span className="py-2.5 px-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap"><FinancialValue text={row.fy2025 ?? '—'} dataSource={dataSource} /></span>
+                      {bsYearCols.map(col => (
+                        <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === bsHighlightCol ? 'font-semibold text-gray-800' : isBold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                          <FinancialValue text={row[col] ?? '—'} dataSource={dataSource} />
+                        </span>
+                      ))}
                     </>
                   );
                 }}
@@ -2910,15 +2962,19 @@ function strategyToMd(st: StrategyV2, sources: Source[] | undefined): string {
 }
 
 function financialsToMd(f: FinancialsV2, sources: Source[] | undefined): string {
-  const isRows = f.income_statement.filter(r => IS_COLS_V2.some(c => r[c]));
-  const bsRows = f.balance_sheet.filter(r => r.fy2023 || r.fy2024 || r.fy2025);
+  const isYearCols = Array.from(new Set(f.income_statement.flatMap(getFinancialYearCols))).sort();
+  const bsYearCols = Array.from(new Set(f.balance_sheet.flatMap(getFinancialYearCols))).sort();
+  const isRows = f.income_statement.filter(r => isYearCols.some(c => r[c]));
+  const bsRows = f.balance_sheet.filter(r => bsYearCols.some(c => r[c]));
+  const isHeaderLabels = isYearCols.map(c => c.replace('fy', 'FY'));
+  const bsHeaderLabels = bsYearCols.map(c => c.replace('fy', 'FY'));
   const body = mdJoin([
     f.key_bullets?.length ? `**핵심 요약**\n${mdList(f.key_bullets)}` : '',
-    isRows.length ? `**손익계산서 (I/S)**\n| 항목 | FY2021 | FY2022 | FY2023 | FY2024 | FY2025 | YoY |\n|---|---|---|---|---|---|---|\n${
-      isRows.map(r => `| ${r.item} | ${r.fy2021 ?? '—'} | ${r.fy2022 ?? '—'} | ${r.fy2023 ?? '—'} | ${r.fy2024 ?? '—'} | ${r.fy2025 ?? '—'} | ${r.yoy ?? '—'} |`).join('\n')
+    isRows.length ? `**손익계산서 (I/S)**\n| 항목 | ${isHeaderLabels.join(' | ')} | YoY |\n|---|${isHeaderLabels.map(() => '---').join('|')}|---|\n${
+      isRows.map(r => `| ${r.item} | ${isYearCols.map(c => r[c] ?? '—').join(' | ')} | ${r.yoy ?? '—'} |`).join('\n')
     }` : '',
-    bsRows.length ? `**재무상태표 (B/S)**\n| 항목 | FY2023 | FY2024 | FY2025 |\n|---|---|---|---|\n${
-      bsRows.map(r => `| ${r.item} | ${r.fy2023 ?? '—'} | ${r.fy2024 ?? '—'} | ${r.fy2025 ?? '—'} |`).join('\n')
+    bsRows.length ? `**재무상태표 (B/S)**\n| 항목 | ${bsHeaderLabels.join(' | ')} |\n|---|${bsHeaderLabels.map(() => '---').join('|')}|\n${
+      bsRows.map(r => `| ${r.item} | ${bsYearCols.map(c => r[c] ?? '—').join(' | ')} |`).join('\n')
     }` : '',
     (f.cash_flow.operating || f.cash_flow.fcf) ? `**현금흐름**\n${mdList([
       f.cash_flow.operating ? `Operating CF: ${f.cash_flow.operating}` : '',
@@ -3090,7 +3146,7 @@ function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV
 // 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
 const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
 
-function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosisStart, isPremium, activeGroup }: {
+function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosisStart, isPremium, activeGroup, isShareView }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
@@ -3103,6 +3159,10 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
   // 무엇을 골랐는지 — 지정되면 그 그룹의 탭만 필터링해서 보여준다. undefined면(ShareContent
   // 등 기존 호출부) 기존처럼 두 그룹 다 표시 — 하위호환, 새 사이드바 컴포넌트 안 만듦.
   activeGroup?: 'company' | 'pain';
+  // 공유 링크 전용(ShareContent.tsx, 2026-08-15) — ICP 인사이트 탭을 인터랙티브 생성/재생성/
+  // 별점 위젯이 있는 IcpInsightTab 대신, data.icpDiscoveryQuestions(소유자가 이미 생성해둔
+  // 결과, 서버가 미리 필터링해서 줌)만 읽기 전용으로 보여주는 SharedIcpQuestionsTab로 바꾼다.
+  isShareView?: boolean;
 }) {
   const { user, session, signInWithGoogle } = useAuth();
   const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
@@ -3349,15 +3409,19 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
         )}
         {/* ICP 인사이트: 다른 온디맨드 탭과 달리 analyses 행에 결과를 저장하지 않고
             컴포넌트 자체 상태 + 별도 icp_insights 테이블로 관리 — batchDone/painDiagnosisStarted
-            게이트를 거치지 않고 IcpInsightTab이 클릭→로딩→결과를 전부 자체적으로 처리한다. */}
+            게이트를 거치지 않고 IcpInsightTab이 클릭→로딩→결과를 전부 자체적으로 처리한다.
+            공유 뷰(isShareView)는 인터랙티브 생성/재생성/별점 위젯 없이 서버가 이미 골라준
+            소유자의 결과만 읽기 전용으로 보여준다(SharedIcpQuestionsTab, 2026-08-15). */}
         {tab === 'icp_insight' && (
-          <IcpInsightTab
-            analysisId={data.id}
-            companyName={data.companyName}
-            session={session}
-            signInWithGoogle={signInWithGoogle}
-            uiT={uiT}
-          />
+          isShareView
+            ? <SharedIcpQuestionsTab questions={data.icpDiscoveryQuestions} ownerLabel={data.icpOwnerLabel} uiT={uiT} />
+            : <IcpInsightTab
+                analysisId={data.id}
+                companyName={data.companyName}
+                session={session}
+                signInWithGoogle={signInWithGoogle}
+                uiT={uiT}
+              />
         )}
         {tab === 'value_chain' && (
           (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :

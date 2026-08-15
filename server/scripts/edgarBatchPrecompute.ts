@@ -40,7 +40,10 @@ async function fetchEdgar(url: string, attempt = 0): Promise<any | null> {
   }
 }
 
-// 10-K 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 5개년.
+// 10-K/20-F 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 5개년.
+// server/src/lib/edgar.ts의 extractAnnualSeries와 동일 폼 필터(10-K + 20-F) — 이 스크립트는
+// 별도 실행 컨텍스트라 로직이 복제돼 있는데, 여기만 20-F가 빠져 있어 외국 민간발행인 기업이
+// 월간 배치 캐시에서는 최신 데이터를 놓칠 수 있었다(2026-08-15 발견, 라이브 조회 경로와 불일치).
 function extractAnnual(
   units: Array<{ form: string; fp?: string; fy?: number; end: string; val: number }> | undefined,
 ): Array<{ year: string; val: number }> {
@@ -48,7 +51,7 @@ function extractAnnual(
 
   const byYear = new Map<string, { val: number; end: string }>();
   for (const u of units) {
-    if (u.form !== '10-K') continue;
+    if (!['10-K', '20-F'].includes(u.form)) continue;
     if (u.fp && u.fp !== 'FY') continue;
     if (u.val == null) continue;
     const fy = u.fy ? String(u.fy) : u.end?.slice(0, 4);
@@ -177,9 +180,6 @@ export async function processCompany(
   const niResult = pickConceptWithConflict(g, 'NetIncomeLoss', 'ProfitLoss');
   const niData   = niResult.series;
   const oiData   = pickConcept(g, 'OperatingIncomeLoss');
-  // EBITDA 다년도 서버 조립용(Operating Income + Depreciation) — 2026-08-13 이전엔 이 배치
-  // 스크립트가 D&A concept 자체를 조회하지 않아 EBITDA가 항상 "확인 필요"였음.
-  const daData   = pickConcept(g, 'DepreciationDepletionAndAmortization', 'DepreciationAndAmortization');
   // GrossProfit/Cash — server/src/lib/edgar.ts의 pickConceptSeries에는 이미 있던 후보인데
   // 이 배치 스크립트(별도 실행 컨텍스트라 로직이 복제돼 있음)엔 통째로 빠져있었음(2026-08
   // 발견 — MSFT 등 EDGAR 전체 기업의 매출총이익/현금성자산이 항상 "확인 필요"로 비던 원인).
@@ -226,7 +226,6 @@ export async function processCompany(
   const operatingCF     = align(opCFData);
   const investingCF     = align(invCFData);
   const financingCF     = align(finCFData);
-  const depreciation    = align(daData);
 
   const rawEdgar = {
     ticker,
@@ -243,7 +242,6 @@ export async function processCompany(
     operatingCF,
     investingCF,
     financingCF,
-    depreciation,
     fiscalYears,
     filedAt: new Date().toISOString(),
     source: 'EDGAR',

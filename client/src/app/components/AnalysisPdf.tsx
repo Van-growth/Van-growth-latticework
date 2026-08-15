@@ -27,7 +27,7 @@ import type {
   Source,
   AnalysisSources,
 } from '@/types';
-import { countFinancialsReliability } from '@/lib/financialsReliability';
+import { countFinancialsReliability, getFinancialYearCols } from '@/lib/financialsReliability';
 import type { Language } from '@/app/context/LanguageContext';
 
 // Absolute URL required: react-pdf fetches fonts via URL at render time,
@@ -624,6 +624,16 @@ function CoverPage({ data, shareUrl, language, t }: { data: AnalysisDetail; shar
         <Text style={s.coverMeta}>{t('밸류체인 위치', 'Value Chain Position')}: {v2.value_chain_position}</Text>
       )}
       <Text style={s.coverMeta}>{t('분석 일자', 'Analysis Date')}: {date}</Text>
+      {/* ICP 인사이트 탭 결과가 있을 때만(소유자가 직접 생성한 경우) 헤더 문구 한 줄만 추가 —
+          ICP 원문(제품/타겟산업/타겟직무)이나 discovery_questions 목록 자체는 PDF에 넣지 않는다
+          (2026-08-15, 공유 링크와 달리 PDF는 문구만 유지하기로 결정). */}
+      {data.icpDiscoveryQuestions && data.icpDiscoveryQuestions.length > 0 && (
+        <Text style={s.coverMeta}>
+          {data.icpOwnerLabel
+            ? t(`이 분석은 ${data.icpOwnerLabel}님의 ICP 기준으로 생성됨`, `Generated based on ${data.icpOwnerLabel}'s ICP`)
+            : t('이 분석은 작성자의 ICP 기준으로 생성됨', "Generated based on the author's ICP")}
+        </Text>
+      )}
       {v2?.oneLiner && (
         <>
           <Divider />
@@ -1200,10 +1210,10 @@ function StrategySection({ v, t }: { v: StrategyV2; t: TFn }) {
 
 function IncomeTable({ rows, t }: { rows: FinancialsV2Row[]; t: TFn }) {
   if (!rows?.length) return null;
-  const sample = rows[0] ?? {};
-  const years = (['fy2021', 'fy2022', 'fy2023', 'fy2024', 'fy2025'] as const)
-    .filter(y => y in sample && sample[y] != null);
-  const hasYoy = 'yoy' in sample && rows.some(r => r.yoy);
+  // 회사마다 실제로 보유한 회계연도만 컬럼으로 렌더링 — 전 행의 fy{year} 키를 합쳐서 판단
+  // (특정 행 하나만 보면 그 항목이 구조적으로 없는 회사인 경우 컬럼 자체가 누락될 수 있음).
+  const years = Array.from(new Set(rows.flatMap(getFinancialYearCols))).sort();
+  const hasYoy = rows.some(r => r.yoy);
 
   return (
     <View style={s.table}>
@@ -1229,9 +1239,7 @@ function IncomeTable({ rows, t }: { rows: FinancialsV2Row[]; t: TFn }) {
 
 function BSTable({ rows, t }: { rows: FinancialsV2BSRow[]; t: TFn }) {
   if (!rows?.length) return null;
-  const sample = rows[0] ?? {};
-  const years = (['fy2023', 'fy2024', 'fy2025'] as const)
-    .filter(y => y in sample && sample[y] != null);
+  const years = Array.from(new Set(rows.flatMap(getFinancialYearCols))).sort();
 
   return (
     <View style={s.table}>

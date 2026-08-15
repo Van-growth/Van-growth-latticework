@@ -42,11 +42,14 @@ function formatKrw(raw: string | undefined): string | undefined {
   return `${n}원`;
 }
 
-// analyze.ts/AnalysisCard.tsx의 IS_COLS(2021~2025)와 동일한 목표 연도 범위. edgar.ts/dart.ts가
+// financialsTableBuilder.ts의 MAX_IS_YEARS(5개년)와 동일한 목표 연도 범위. edgar.ts/dart.ts가
 // 최대 5개년을 요청해도 그 회사 자체에 해당 연도 재무제표가 없으면(설립/상장 이전, 그 해 미공시 등)
 // 원천 응답에서 해당 연도가 통째로 빠짐 — 이 빈 연도를 Claude에게 명시하지 않으면 "조회 실패"로
 // 오인해 "확인 필요"로 반환함(2026-07-09 Apple/라이콤 FY2021 공백 사고).
-const TARGET_FISCAL_YEARS = ['2021', '2022', '2023', '2024', '2025'];
+// 리터럴 하드코딩 대신 "오늘 기준 최근 5개년"으로 매번 계산 — 예전엔 해가 바뀌어도 이 배열을
+// 수동으로 갱신해줘야 했고, 갱신을 놓치면 최신 회계연도가 이 창 어디에도 안 걸려 조용히
+// "빠진 연도"로 오분류될 위험이 있었다(2026-08-15 발견).
+const TARGET_FISCAL_YEARS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 4 + i));
 
 // 실제로 인접한 두 연도 모두 값이 확인되는 경우만 "YoY 1회"로 센다 — 중간에 빈 연도가
 // 끼어 있으면(예: FY2023/FY2025는 있는데 FY2024가 없음) 진짜 연속 YoY가 아니므로 제외.
@@ -211,7 +214,6 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
       row('Operating Inc.', ef.operatingIncome,   fi?.operatingIncome)
         ?? structurallyAbsentNote('Operating Inc.', e.rawSeries, 'operatingIncome'),
       row('Net Income',     ef.netIncome,         fi?.netIncome),
-      row('EBITDA',         ef.ebitda,            fi?.ebitda),
     ];
     r.filter(Boolean).forEach(l => lines.push(l!));
     // 순이익 concept이 NetIncomeLoss/ProfitLoss 중 하나로 선택됐는데 같은 연도에 두 태그 값이

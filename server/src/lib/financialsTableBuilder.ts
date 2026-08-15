@@ -10,21 +10,23 @@
 import { EdgarRawSeries } from './edgar';
 import { DartRawSeries } from './dart';
 
+// fy{year} 컬럼은 회사마다 보유 연도 수·범위가 다르다(신규 상장사는 짧고, 오래된 기업은
+// 최대 5개) — 고정된 fy2021~fy2025 리터럴 대신 인덱스 시그니처로 가변 연도를 수용한다.
 export interface FinancialsRowLike {
   item: string;
-  fy2021?: string;
-  fy2022?: string;
-  fy2023?: string;
-  fy2024?: string;
-  fy2025?: string;
   yoy?: string;
+  [yearKey: string]: string | undefined;
 }
 
 export interface BalanceSheetRowLike {
   item: string;
-  fy2023?: string;
-  fy2024?: string;
-  fy2025?: string;
+  [yearKey: string]: string | undefined;
+}
+
+// income_statement/balance_sheet 행에 실제로 존재하는 fy{year} 키만 오름차순으로 추출 —
+// claude.ts의 Rule 4/5, golden-set 체크 등 이 행 shape을 소비하는 곳에서 재사용.
+export function getRowYearCols(row: Record<string, string | undefined>): string[] {
+  return Object.keys(row).filter(k => /^fy\d{4}$/.test(k)).sort();
 }
 
 const MARKERS: Record<'ko' | 'en', { notDisclosed: string; notApplicable: string }> = {
@@ -32,8 +34,10 @@ const MARKERS: Record<'ko' | 'en', { notDisclosed: string; notApplicable: string
   ko: { notDisclosed: '확인 필요', notApplicable: '해당없음' },
 };
 
-const IS_COLS = ['2021', '2022', '2023', '2024', '2025'] as const;
-const BS_COLS = ['2023', '2024', '2025'] as const;
+// 고정된 연도 리터럴 대신 "최근 몇 개년까지 보여줄지"만 정책으로 유지 — 실제 컬럼(연도)은
+// 회사가 가진 rawSeries.fiscalYears에서 그대로 가져온다(신규 상장사는 자연히 더 적게 나옴).
+const MAX_IS_YEARS = 5;
+const MAX_BS_YEARS = 3;
 
 function fmtUsd(v: number): string {
   const sign = v < 0 ? '-' : '';
@@ -57,7 +61,6 @@ interface SeriesInput {
   grossProfit: (number | null)[];
   operatingIncome: (number | null)[];
   netIncome: (number | null)[];
-  depreciation: (number | null)[]; // DART는 항상 전부 null(concept 자체 없음)
   assets: (number | null)[];
   liabilities: (number | null)[];
   equity: (number | null)[];
@@ -82,7 +85,6 @@ function toSeriesInput(rawEdgar: EdgarRawSeries | null, rawDart: DartRawSeries |
       grossProfit: fallback(rawEdgar.grossProfit, n),
       operatingIncome: fallback(rawEdgar.operatingIncome, n),
       netIncome: fallback(rawEdgar.netIncome, n),
-      depreciation: fallback(rawEdgar.depreciation, n),
       assets: fallback(rawEdgar.assets, n),
       liabilities: fallback(rawEdgar.liabilities, n),
       equity: fallback(rawEdgar.equity, n),
@@ -98,7 +100,6 @@ function toSeriesInput(rawEdgar: EdgarRawSeries | null, rawDart: DartRawSeries |
     grossProfit: Array(n).fill(null),   // DART는 매출총이익 concept 자체를 안 가져옴
     operatingIncome: fallback(dart.operatingIncome, n),
     netIncome: fallback(dart.netIncome, n),
-    depreciation: Array(n).fill(null),  // DART는 감가상각 concept 자체를 안 가져옴 — EBITDA 계산 불가
     assets: fallback(dart.assets, n),
     liabilities: fallback(dart.liabilities, n),
     equity: fallback(dart.equity, n),
@@ -110,19 +111,21 @@ function isStructurallyAbsent(vals: (number | null)[]): boolean {
   return vals.length > 0 && vals.every(v => v == null);
 }
 
+// cols는 이제 "찾아야 할 연도 후보"가 아니라 s.fiscalYears 자체에서 앞쪽 maxYears개를 그대로
+// 쓴다 — fiscalYears는 항상 실존하는 연도만 담고 있으므로(신규 상장사는 짧게, extractAnnualSeries
+// 참고) 이전처럼 "그 연도가 없으면 undefined로 뭉갠다" 분기 자체가 필요 없어졌다. 회사가 존재했지만
+// 그 항목을 공시하지 않은 경우(예: Ford 매출총이익)만 "해당없음"/"확인 필요"로 구분해 표시한다.
 function buildRow(
   item: string,
   vals: (number | null)[],
   s: SeriesInput,
   lang: 'ko' | 'en',
-  cols: readonly string[],
+  maxYears: number,
 ): Record<string, string | undefined> {
   const m = MARKERS[lang];
   const absent = isStructurallyAbsent(vals);
   const row: Record<string, string | undefined> = { item };
-  cols.forEach(yr => {
-    const idx = s.fiscalYears.indexOf(yr);
-    if (idx < 0) { row[`fy${yr}`] = undefined; return; }
+  s.fiscalYears.slice(0, maxYears).forEach((yr, idx) => {
     const v = vals[idx];
     row[`fy${yr}`] = v != null ? s.fmt(v) : (absent ? m.notApplicable : m.notDisclosed);
   });
@@ -151,24 +154,17 @@ export function buildIncomeStatementRows(
   if (!s || s.fiscalYears.length === 0) return null;
 
   const t = (ko: string, en: string) => (language === 'ko' ? ko : en);
-  // EBITDA = Operating Income + Depreciation — 둘 다 확인된 연도만 계산, 하나라도 없으면 그 해는 null
-  const ebitda = s.fiscalYears.map((_, i) => {
-    const oi = s.operatingIncome[i], da = s.depreciation[i];
-    return (oi != null && da != null) ? oi + da : null;
-  });
 
-  const revRow = buildRow(t('매출', 'Revenue'), s.revenue, s, language, IS_COLS);
-  const gpRow  = buildRow(t('매출총이익', 'Gross Profit'), s.grossProfit, s, language, IS_COLS);
-  const oiRow  = buildRow(t('영업이익', 'Operating Income'), s.operatingIncome, s, language, IS_COLS);
-  const niRow  = buildRow(t('순이익', 'Net Income'), s.netIncome, s, language, IS_COLS);
-  const ebRow  = buildRow('EBITDA', ebitda, s, language, IS_COLS);
+  const revRow = buildRow(t('매출', 'Revenue'), s.revenue, s, language, MAX_IS_YEARS);
+  const gpRow  = buildRow(t('매출총이익', 'Gross Profit'), s.grossProfit, s, language, MAX_IS_YEARS);
+  const oiRow  = buildRow(t('영업이익', 'Operating Income'), s.operatingIncome, s, language, MAX_IS_YEARS);
+  const niRow  = buildRow(t('순이익', 'Net Income'), s.netIncome, s, language, MAX_IS_YEARS);
 
   return [
     { ...revRow, yoy: computeYoy(s.revenue, s.fiscalYears) } as FinancialsRowLike,
     { ...gpRow,  yoy: computeYoy(s.grossProfit, s.fiscalYears) } as FinancialsRowLike,
     { ...oiRow,  yoy: computeYoy(s.operatingIncome, s.fiscalYears) } as FinancialsRowLike,
     { ...niRow,  yoy: computeYoy(s.netIncome, s.fiscalYears) } as FinancialsRowLike,
-    { ...ebRow,  yoy: computeYoy(ebitda, s.fiscalYears) } as FinancialsRowLike,
   ];
 }
 
@@ -182,8 +178,8 @@ export function buildBalanceSheetRows(
 
   const t = (ko: string, en: string) => (language === 'ko' ? ko : en);
   return [
-    buildRow(t('총자산', 'Total Assets'), s.assets, s, language, BS_COLS) as unknown as BalanceSheetRowLike,
-    buildRow(t('총부채', 'Total Liabilities'), s.liabilities, s, language, BS_COLS) as unknown as BalanceSheetRowLike,
-    buildRow(t('자본총계', "Shareholders' Equity"), s.equity, s, language, BS_COLS) as unknown as BalanceSheetRowLike,
+    buildRow(t('총자산', 'Total Assets'), s.assets, s, language, MAX_BS_YEARS) as unknown as BalanceSheetRowLike,
+    buildRow(t('총부채', 'Total Liabilities'), s.liabilities, s, language, MAX_BS_YEARS) as unknown as BalanceSheetRowLike,
+    buildRow(t('자본총계', "Shareholders' Equity"), s.equity, s, language, MAX_BS_YEARS) as unknown as BalanceSheetRowLike,
   ];
 }

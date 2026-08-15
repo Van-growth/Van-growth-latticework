@@ -8,7 +8,7 @@ import type { IndustryBenchmarkResult, CompetitorRevenueRanking } from '../servi
 import type { DiscoveryQuestionCandidate } from './discoveryQuestions';
 import type { EdgarRawSeries } from './edgar';
 import type { DartRawSeries } from './dart';
-import { buildIncomeStatementRows, buildBalanceSheetRows } from './financialsTableBuilder';
+import { buildIncomeStatementRows, buildBalanceSheetRows, getRowYearCols } from './financialsTableBuilder';
 
 dotenv.config();
 
@@ -260,21 +260,17 @@ export interface StrategyV2 {
   sources: SectionSource[];
 }
 
+// fy{year} 컬럼은 회사마다 보유 연도 수·범위가 다르다(신규 상장사는 짧고, 오래된 기업은
+// 최대 5개) — 고정된 fy2021~fy2025 리터럴 대신 인덱스 시그니처로 가변 연도를 수용한다.
 export interface FinancialsV2Row {
   item: string;
-  fy2021?: string;
-  fy2022?: string;
-  fy2023?: string;
-  fy2024?: string;
-  fy2025?: string;
   yoy?: string;
+  [yearKey: string]: string | undefined;
 }
 
 export interface FinancialsV2BSRow {
   item: string;
-  fy2023?: string;
-  fy2024?: string;
-  fy2025?: string;
+  [yearKey: string]: string | undefined;
 }
 
 // SEC 산업 벤치마크 막대비교(2026-08-12) — server/src/lib/secIndustryBenchmark.ts가 회사 자신의
@@ -783,9 +779,9 @@ strategy_coherence is the only field in this schema written as full paragraph pr
 ten_year_durability: 2-4 short bullets, one distinct point per bullet (e.g. one bullet per structural tailwind/headwind, not a running paragraph). If a bullet draws on a source, put the [n] marker at the very end of that bullet. Any URL confirmed via web search must go in sources[].url.`,
 
   financials_v2: `Output only a JSON object matching this schema:
-{"income_statement":[{"item":"Revenue","fy2021":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2022":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'","yoy":"▲N% or ▼N% or —"},{"item":"Gross Profit","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Operating Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Net Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"EBITDA","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"Cash & Equivalents","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'"},{"item":"Total Assets","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Liabilities","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Equity","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"disclosed figure or 'Not disclosed'","investing":"disclosed figure or 'Not disclosed'","financing":"disclosed figure or 'Not disclosed'","fcf":"disclosed figure or 'figure (estimated)' or 'Not disclosed'","notes":"anything notable, or an empty string"},"key_risks":["Risk, 1 line, max 5"],"outlook":{"shortTerm":"Short-term outlook (3-6 months) — include a symbol: ○ positive / △ neutral / ▼ negative","midLongTerm":"Mid/long-term outlook (1-3 years) — include a symbol: ○ positive / △ neutral / ▼ negative","keyRisks":["Key risk, 1 line, max 3"]},"key_bullets":["The financial metric and trend most worth flagging, 8 words or fewer","Core state of profitability and cash flow, 8 words or fewer","The single biggest risk in the financial structure, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
+{"income_statement":[{"item":"Revenue","fy2021":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2022":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'","yoy":"▲N% or ▼N% or —"},{"item":"Gross Profit","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Operating Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Net Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"Cash & Equivalents","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'"},{"item":"Total Assets","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Liabilities","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Equity","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"disclosed figure or 'Not disclosed'","investing":"disclosed figure or 'Not disclosed'","financing":"disclosed figure or 'Not disclosed'","fcf":"disclosed figure or 'figure (estimated)' or 'Not disclosed'","notes":"anything notable, or an empty string"},"key_risks":["Risk, 1 line, max 5"],"outlook":{"shortTerm":"Short-term outlook (3-6 months) — include a symbol: ○ positive / △ neutral / ▼ negative","midLongTerm":"Mid/long-term outlook (1-3 years) — include a symbol: ○ positive / △ neutral / ▼ negative","keyRisks":["Key risk, 1 line, max 3"]},"key_bullets":["The financial metric and trend most worth flagging, 8 words or fewer","Core state of profitability and cash flow, 8 words or fewer","The single biggest risk in the financial structure, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (income statement trend, cash flow, key risks, outlook). Phrase each as something you're curious to ask, never a stated fact or number. Bad: "Operating margin dropped 4 points this year." Good: "What's driving the margin compression — is it a deliberate investment phase or cost pressure?" No investor language (no valuation/P/E/ROE framing). Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one. (Note: industry-benchmark deviations are handled separately by the server after this call — don't try to reference them here.)
-income_statement/balance_sheet: never leave a cell blank — if there's no disclosed figure, it must be 'Not disclosed'. Exception: if the context's [Years missing from source data] section explicitly marks a given year as having no data (the source filing has no financial statement at all for that year), label that year 'Not applicable' instead of 'Not disclosed' — "Not disclosed" means "we looked but couldn't confirm it," "Not applicable" means "that year's data doesn't exist in the first place." Keep the distinction. Estimated values must always use the 'number (estimated)' format.
+income_statement/balance_sheet: never leave a cell blank — if there's no disclosed figure, it must be 'Not disclosed'. Exception: if the context's [Years missing from source data] section explicitly marks a given year as having no data (the source filing has no financial statement at all for that year), label that year 'Not applicable' instead of 'Not disclosed' — "Not disclosed" means "we looked but couldn't confirm it," "Not applicable" means "that year's data doesn't exist in the first place." Keep the distinction. Estimated values must always use the 'number (estimated)' format. Do not add an EBITDA row — it is intentionally excluded (D&A tagging isn't consistent enough across companies to compute it reliably). Gross Profit must be the figure as directly disclosed/tagged by the company — never derive it yourself as Revenue minus Cost of Revenue; if it isn't directly disclosed, that's 'Not disclosed' or 'Not applicable', not a calculation.
 Tag key figures with [n] source markers.
 outlook rules: base it on the financial data. No baseless optimism. shortTerm/midLongTerm must always be prefixed with a ○/△/▼ symbol.`,
 
@@ -1254,8 +1250,7 @@ export async function analyzeCompany(
             if (pct && parseFloat(pct[1]) >= 900) {
               const isNoData = (v: string | undefined) =>
                 !v || NO_DATA_MARKERS.includes(v);
-              const yr = (['fy2025', 'fy2024', 'fy2023', 'fy2022', 'fy2021'] as const)
-                .find(y => !isNoData(row[y]));
+              const yr = getRowYearCols(row).reverse().find(y => !isNoData(row[y]));
               if (yr && !row[yr]!.includes('추정') && !row[yr]!.includes('estimated')) {
                 row[yr] = row[yr] + ' ' + PLACEHOLDER_MARKERS[language].estimated;
                 console.warn(`[quality-gate] financials ${row.item} YoY ${row.yoy} → ${yr} ${PLACEHOLDER_MARKERS[language].estimated} 강제 적용`);
@@ -1278,9 +1273,13 @@ export async function analyzeCompany(
           const isNoData = (v: string | undefined) => !v || NO_DATA_MARKERS.includes(v);
           const revenueRow = f.income_statement.find((row: FinancialsV2Row) => /revenue|매출/i.test(row.item));
           if (revenueRow) {
-            const cols = ['fy2021', 'fy2022', 'fy2023', 'fy2024', 'fy2025'] as const;
+            // getRowYearCols는 회사가 실제로 보유한 연도만 오름차순으로 반환(고정 리터럴 아님) —
+            // 다만 값이 정말 인접한 연도인지(중간에 빈 해가 끼어있지 않은지)는 별도로 확인한다.
+            const cols = getRowYearCols(revenueRow);
             let adjacentYoY = 0;
             for (let i = 0; i < cols.length - 1; i++) {
+              const y0 = Number(cols[i].slice(2)), y1 = Number(cols[i + 1].slice(2));
+              if (y1 - y0 !== 1) continue;
               if (!isNoData(revenueRow[cols[i]]) && !isNoData(revenueRow[cols[i + 1]])) adjacentYoY++;
             }
             if (adjacentYoY <= 1) {
@@ -1327,9 +1326,7 @@ export async function analyzeCompany(
     console.warn(`[golden-set] summary.company에 기업명 없음 (got: "${result.summary_v2.company}")`);
   }
   const hasRealFinancials = result.financials_v2.income_statement.some(row =>
-    (['fy2021', 'fy2022', 'fy2023', 'fy2024', 'fy2025'] as const).some(
-      y => row[y] && !NO_DATA_MARKERS.includes(row[y]!)
-    )
+    getRowYearCols(row).some(y => row[y] && !NO_DATA_MARKERS.includes(row[y]!))
   );
   if (!hasRealFinancials) {
     console.warn(`[golden-set] financials 실제 수치 없음`);

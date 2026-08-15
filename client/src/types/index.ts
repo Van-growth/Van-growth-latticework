@@ -369,21 +369,18 @@ export interface StrategyV2 {
   sources?: Source[];
 }
 
+// fy{year} 컬럼은 회사마다 보유 연도 수·범위가 다르다(신규 상장사는 짧고, 오래된 기업은
+// 최대 5개) — 고정된 fy2021~fy2025 리터럴 대신 인덱스 시그니처로 가변 연도를 수용한다.
+// 실제 렌더링 시 어느 fy{year} 키가 존재하는지는 getFinancialYearCols()로 조회한다.
 export interface FinancialsV2Row {
   item: string;
-  fy2021?: string;
-  fy2022?: string;
-  fy2023?: string;
-  fy2024?: string;
-  fy2025?: string;
   yoy?: string;
+  [yearKey: string]: string | undefined;
 }
 
 export interface FinancialsV2BSRow {
   item: string;
-  fy2023?: string;
-  fy2024?: string;
-  fy2025?: string;
+  [yearKey: string]: string | undefined;
 }
 
 export interface FinancialsV2 {
@@ -526,6 +523,7 @@ export interface UserProfile {
   icp_product: string | null;
   icp_target_industry: string | null;
   icp_target_role: string | null;
+  nickname: string | null;
 }
 
 // ICP 맞춤형 인사이트 탭 — POST /api/analyze/:id/icp-insight 응답 (2026-08-15 개편:
@@ -605,6 +603,13 @@ export interface AnalysisDetail {
   is_shared?: boolean;
   share_token?: string | null;
   valuechainPlayers: ValueChainPlayer[];
+  // 공유 뷰 전용(GET /api/share/:token만 채움, GET /api/analyses/:id는 이 키 자체를 안 보냄) —
+  // 소유자가 직접 생성한 discovery_questions만, ICP 원문(icp_product 등)은 서버가 절대 포함
+  // 안 함(2026-08-15). 소유자가 ICP 탭을 생성한 적 없으면 null.
+  icpDiscoveryQuestions?: DiscoveryQuestionItem[] | null;
+  // 소유자 표시 라벨 — profiles.nickname 미입력이면 null(이메일은 어떤 형태로도 노출 안 함,
+  // 이 경우 프론트가 일반 문구로 대체).
+  icpOwnerLabel?: string | null;
 }
 
 export interface AnalyzeResponse extends AnalysisDetail {

@@ -292,10 +292,10 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
   );
   if (fyrs.length === 0) return null;
 
-  // income_statement/balance_sheet는 financialsTableBuilder.ts의 공용 함수로 조립(Gross
-  // Profit/EBITDA 포함, Not applicable/Not disclosed 구분, YoY까지 서버가 결정론적으로 계산) —
-  // batch3 최종 병합(claude.ts) 시점의 override와 동일한 함수를 재사용해 fin_preview와 최종
-  // 결과가 항상 일치하도록 한다.
+  // income_statement/balance_sheet는 financialsTableBuilder.ts의 공용 함수로 조립(Gross Profit은
+  // EDGAR/DART 원본 태그값만 사용, EBITDA는 표시하지 않음 — 재무 파생 지표 처리 원칙 참고. Not
+  // applicable/Not disclosed 구분, YoY까지 서버가 결정론적으로 계산) — batch3 최종 병합(claude.ts)
+  // 시점의 override와 동일한 함수를 재사용해 fin_preview와 최종 결과가 항상 일치하도록 한다.
   const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language);
   const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language);
 
