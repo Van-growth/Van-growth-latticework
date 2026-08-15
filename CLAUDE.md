@@ -641,6 +641,27 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
    뻔했음을 실측으로 확인. `financialsTableBuilder.ts` 등에서 회사가 실제로 보유한
    연도만 동적으로 렌더링하도록 전환(2026-08-15) — **V1 스키마로 캐시된 기존 분석은 이
    수정이 소급 적용되지 않음, 재분석해야 반영됨.**
+6. **EDGAR/DART 둘 다 없는 기업은 financials_v2 자체를 생성하지 않는다("작업 D",
+   2026-08-16 구현 — Northwell Health(비상장 비영리 헬스시스템) 실측에서 촉발).** 위
+   1~5번은 "공식 공시가 있는 기업"을 전제로 한 규칙인데, `overrideFinancialsTable()`은
+   raw EDGAR/DART가 둘 다 없으면 그냥 `f`(Claude가 web_search만으로 자유서술한 결과)를
+   그대로 반환하고 있었다 — Northwell 실측: `data_source='web_search'`인데도 손익계산서/
+   재무상태표에 각 4개 행이 채워져 있었고 현금흐름 `notes`엔 "[3]"/"[4]" 각주까지 붙은
+   그럴듯한 서사가 들어있었음(전부 웹서치 추정, 공식 F/S 아님). 재무 파생 지표 처리
+   원칙의 "F/S에 없는 값은 그 항목 자체를 안 보여준다"를 재무제표 전체가 없는 경우까지
+   확장 적용 — `fetchFinancialContext()`의 `source==='web_search'`(rawEdgar/rawDart 둘 다
+   없음)이면 `callSection<FinancialsV2>()` Claude 호출 자체를 건너뛰고 완전히 빈
+   `FinancialsV2`(`emptyFinancialsV2()`, `claude.ts`)를 반환한다 — 생성 중단이지 사후
+   필터링이 아니므로 불필요한 Claude 호출 비용도 같이 없앤다. 3개 경로(배치3/
+   `refreshFinancials()`/`reanalyzeSingleSection('financials_v2')`) 전부 동일 적용, 프론트는
+   `data.dataSource !== 'edgar' && !== 'dart'`를 재무 탭 렌더 게이트로 사용해 "재분석을
+   시도해보세요"(생성 실패, 헛수고 아님)와 "SEC/DART에 공식 재무제표를 공시하지 않음"(재분석해도
+   달라지지 않음)을 별개 문구로 구분한다(`EmptySectionState` 재사용, `financialsNoOfficialData`
+   신규 — 상세는 위 "프론트 진행 상태 표시 원칙" 참고). 다른 섹션(요약/전략/경쟁사 등)은
+   원래도 웹서치 서술이 설계 의도라 이 변경은 financials_v2 전용, 그대로 유지.
+   **기존 캐시는 소급 적용 안 됨** — 이번 세션에서 실제로 재현/발견한 Northwell Health
+   레코드 1건만 수동 재생성으로 즉시 복구(재무 탭 4/4행 → 0/0), 나머지 web_search 소스
+   기존 캐시는 재분석 시 자연 해소(V1→V2 스키마 전환 등 기존 패턴과 동일).
 
 ### 콘텐츠 포맷 원칙 (2026-08-12 신설)
 필드 성격별로 서술 방식을 고정한다 — 전부 문단으로 몰아쓰지 않는다:
@@ -1359,6 +1380,20 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   `sectionGeneratingSuffixShort`(신규, "최대 1~2분" — BATCH_TIMEOUT 75s/
   DISCOVERY_QUESTION_TIMEOUT 90s 기준), pain 진단(산업역사·기술역사)만 기존
   `sectionGeneratingSuffix`("최대 10분", PAIN_DIAGNOSIS_TIMEOUT 기준) 그대로 사용.
+- [x] "작업 D" — EDGAR/DART 둘 다 없는 기업의 financials_v2 웹서치 자유서술 폴백 제거 +
+  ICP 인사이트 스트리밍 중 404 수정 (2026-08-16, Northwell Health 실측) — 상세는 위 "재무
+  파생 지표 처리 원칙" 6번 및 Quality Gate 원칙 섹션 "ICP 인사이트 스트리밍 중 404 조사"
+  참고. 요약: (1) `fetchFinancialContext()`가 `source==='web_search'`(EDGAR/DART 둘 다
+  미공시)를 반환하면 배치3/`refreshFinancials()`/`reanalyzeSingleSection('financials_v2')`
+  세 경로 전부 Claude 호출 자체를 건너뛰고 빈 `FinancialsV2`(`emptyFinancialsV2()`) 반환 —
+  Northwell Health 실측으로 확인된 "웹서치만으로 4행짜리 손익계산서를 그럴듯하게 자유서술"
+  사고 근본 차단. 프론트는 `dataSource!=='edgar'&&!=='dart'`일 때 전용 빈 상태 문구
+  (`financialsNoOfficialData`, 재분석 CTA 없음)를 보여주고, 상단 데이터소스 배지도
+  "웹 검색 기반"→"SEC/DART 데이터 없음"으로 변경. (2) ICP 인사이트는 스트리밍 중
+  `data.id`가 계속 빈 문자열이라(서버 `analyses` 행은 batch1 완료 시 이미 존재하는데도)
+  생성 시도가 항상 404로 실패하던 걸 확인 — id 플러밍을 고쳐 스트리밍 중에도 생성되게
+  하는 대신, 후보 풀 품질을 위해 "분석 완료 후에만 이용 가능"으로 명확히 게이트(생성
+  버튼 → 안내 문구로 교체).
 
 ## Security Principles (SSOT)
 
@@ -1894,6 +1929,40 @@ Claude Sonnet 5 JSON 파싱 실패)의 세 번째 확인 사례. Ford 리포트�
   `discovery_question_curation` 하나에만 적용해 효과를 관찰한 뒤, `callSection()` 확대 여부는
   별도 세션에서 판단하기로 함(사용자 명시적 보류 결정, 2026-08-15).
 
+**ICP 인사이트 스트리밍 중 404 조사(2026-08-16, Northwell Health 배치 2/4 실측) — 위 422와는
+완전히 다른 원인, Claude 호출과 무관한 순수 클라이언트 id 플러밍 버그였음.** 분석이 아직
+스트리밍 중일 때 "ICP 인사이트 생성"을 누르면 `POST /api/analyze/:id/icp-insight`가 404를
+반환 — 코드 확인 결과 `analyze.ts`의 `if (!analysis) res.status(404)...`는 `analysisId`로
+`analyses` 행을 못 찾을 때만 발동하는데, `analyses` 행 자체는 batch1(요약) 완료 시점에 이미
+INSERT돼 있음(`if (batchNum === 1) { ... .insert(...) ... }`) — 즉 "아직 레코드가 없어서"가
+아니었다. 진짜 원인은 `HomeContent.tsx`의 `emptyBase(name)`가 `id: ''`로 초기화하는데,
+스트리밍 도중 각 `'batch'` SSE 이벤트가 실어보내는 `payload.analysisId`는 `analysisIdRef`라는
+**별도 ref에만** 저장되고 `displayData`/`streamingRef.current`(실제 화면에 렌더링되는
+`AnalysisDetail`, `IcpInsightTab`이 `analysisId={data.id}`로 받는 바로 그 값)에는 전혀
+반영되지 않는다는 것 — `data.id`는 최종 `'done'` 이벤트가 도착해 `setResult(merged)`로
+통째로 교체될 때까지 스트리밍 내내 빈 문자열로 남아있다. 그 결과 스트리밍 중 ICP 생성을
+시도하면 어느 배치 진행률에서 눌러도(2/4든 3/4든) 항상 `POST /api/analyze//icp-insight`
+(빈 id)로 요청이 나가 100% 재현되는 구조적 문제였음 — "배치 2/4에서만" 재현되는 게
+아니라 스트리밍 구간 전체에서 재현됨. 프론트가 `!res.ok`면 서버 에러 바디를 읽지도 않고
+고정 문구(`uiT.icpInsight.failed`)만 보여줘서, 유저 입장에선 진짜 원인(아직 이용 불가)이
+아니라 "생성이 실패했다"로 보였던 것도 확인.
+- **판단**: id 플러밍을 고쳐서 스트리밍 중에도 ICP 생성을 "일단 되게" 만드는 방향은 채택하지
+  않음 — 설령 id가 조기에 채워지더라도, 배치가 덜 끝난 시점엔 `discovery_questions` 후보
+  풀 자체가 적거나 비어 있어(각 섹션이 완료돼야 그 섹션의 후보가 채워짐) 품질 낮은/빈 결과가
+  나올 수 있다. `industry_history_v2`/`tech_evolution_v2`가 이미 "명시적 트리거 전까지 생성
+  자체를 막는다"는 동일한 설계 원칙을 쓰고 있어(위 "Pain 진단" 섹션), ICP도 "분석 완료 후에만
+  이용 가능"으로 명확히 게이트하는 쪽이 일관성 있는 선택.
+- **조치**: `IcpInsightTab`(`AnalysisCard.tsx`)이 `!analysisId`(스트리밍 중 신호, 근본 원인과
+  동일한 값을 그대로 재사용 — 새 상태 추가 없음)면 "생성" 버튼 대신 안내 문구만 보여주도록
+  분기 추가(`uiT.icpInsight.notYetAvailable`, 신규 문자열). `handleGenerate()`에도 방어적으로
+  `if (!analysisId) return` 가드 추가(버튼이 숨겨지므로 이중 방어 성격). 서버 쪽 404 메시지
+  자체는 안 고침 — 레코드가 진짜로 없는 경우(삭제된 분석 등)엔 여전히 정확한 응답이라 그대로
+  둠, 문제는 클라이언트가 애초에 그 요청을 보내지 않게 막는 것.
+- **검증**: `curateDiscoveryQuestions()`를 Northwell Health의 실제(완료된) `analyses` 레코드로
+  직접 호출 — 27개 후보 중 5개 정상 선별 확인(정상 완료 후엔 문제없이 동작). 스트리밍 중
+  빈 id로 서버에 요청이 가는 경로 자체는 코드 분석으로 확정(브라우저 자동화 도구가 이 세션에
+  없어 실제 클릭 재현은 못 함 — 코드 리뷰로 갈음, 기존 세션들과 동일한 한계).
+
 ### 프론트 진행 상태 표시 원칙 (2026-08-02 추가 — 체크마크/온디맨드 트리거 통합 버그 수정 계기)
 - 탭 완료 체크마크(✓)는 배치 번호(progress 이벤트)를 대리 신호로 쓰지 않는다 — 온디맨드
   섹션(배치에 속하지 않고 탭을 열 때 별도 생성되는 섹션, 예: industry_history_v2/
@@ -2308,4 +2377,10 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
   `SectionGenerating`(스피너+예상 소요시간 텍스트) 하나로 통일. ETA는 트리거별 서버
   타임아웃 기준 2종(짧은 배치/재분석/ICP용, 긴 pain 진단용)으로 분리. 상세는 위 "완료"
   백로그 참고. |
+| v2.9.2 | 2026-08-16 — "작업 D": EDGAR/DART 둘 다 없는 기업(비상장/비영리 등)의
+  financials_v2 웹서치 자유서술 폴백 완전 제거(Northwell Health 실측 — 4행짜리 가짜
+  손익계산서/재무상태표 발견) + ICP 인사이트를 분석 스트리밍 중엔 시도할 수 없도록 명확히
+  게이트(id 플러밍 버그로 항상 404 나던 문제, "생성" 버튼 → "분석 완료 후 이용 가능"
+  안내로 교체). 상세는 위 "재무 파생 지표 처리 원칙"/"완료" 백로그/Quality Gate 원칙
+  섹션 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |
