@@ -1113,6 +1113,19 @@ async function gatherFinancialResearch(companyName: string): Promise<string> {
   );
 }
 
+// EDGAR/DART 원본 데이터가 아예 없는 기업(비상장/비영리 등, fetchFinancialContext()의
+// source==='web_search') 전용 — financials_v2 자체를 Claude에게 생성시키지 않고 완전히 빈
+// 상태로 반환한다(2026-08-16, "작업 D" — Northwell Health 실측: dataSource=web_search인데도
+// Claude가 웹서치만으로 4개 행짜리 손익계산서/재무상태표를 자유서술해 마치 공식 재무제표처럼
+// 보이는 사고 확인). 재무 파생 지표 처리 원칙(CLAUDE.md)의 "F/S에 없는 값은 그 항목 자체를
+// 안 보여준다"를 재무제표 전체가 없는 경우까지 확장 — 다른 섹션(요약/전략/경쟁사 등)은
+// 원래도 웹서치 서술이 설계라 이 함수 범위 밖(financials_v2 전용). DEFAULT_ANALYSIS_DATA는
+// 모듈 전역 싱글톤이라 참조를 그대로 반환하면 하위 로직(attachSecBenchmarkToFinancials 등)이
+// 필드를 직접 mutate할 때 요청 간 오염 위험이 있어 매번 새 객체로 복제해 반환한다.
+function emptyFinancialsV2(): FinancialsV2 {
+  return structuredClone(DEFAULT_ANALYSIS_DATA.financials_v2);
+}
+
 // income_statement/balance_sheet를 EDGAR/DART 원본으로 덮어쓴다 — Claude가 다년도 표를
 // 텍스트로 다시 서술하다 일부 연도를 놓치는 실행별 비결정성 문제(2026-08-13 Ford FY2021/2022
 // 공백 사고) 대응. raw 데이터가 아예 없으면(web_search 전용 소스 등) 원본 그대로 둔다 —
@@ -1134,11 +1147,14 @@ function overrideFinancialsTable(
 }
 
 export async function refreshFinancials(companyName: string, language: Language = 'en'): Promise<FinancialsV2> {
-  const [{ contextText, rawEdgar, rawDart }, researchText] = await Promise.all([
-    fetchFinancialContext(companyName),
-    gatherFinancialResearch(companyName),
-  ]);
+  // fetchFinancialContext를 먼저 기다린 뒤(직렬화, 기존 병렬 대비 소폭 지연) raw 데이터
+  // 유무를 판단 — 없으면 gatherFinancialResearch(웹서치)/callSection(Claude) 자체를 아예
+  // 건너뛴다. 작업 D(2026-08-16) — 병렬로 두면 이미 시작된 웹서치를 취소할 수 없어 "생성은
+  // 스킵하지만 검색 비용은 이미 씀"이 되므로 순서를 바꿈.
+  const { contextText, rawEdgar, rawDart } = await fetchFinancialContext(companyName);
+  if (!rawEdgar && !rawDart) return emptyFinancialsV2();
 
+  const researchText = await gatherFinancialResearch(companyName);
   const context = [
     `Company: ${companyName}`,
     contextText ? `\n[Disclosed data — prioritize these figures]\n${contextText}` : null,
@@ -1253,7 +1269,9 @@ export async function analyzeCompany(
       () => [
         callSection<ValueChainV2>(sharedContext, 'value_chain_v2', language),
         callSection<StrategyV2>(sharedContext, 'strategy_v2', language),
-        cachedFin ? Promise.resolve(cachedFin) : callSection<FinancialsV2>(sharedContext, 'financials_v2', language),
+        cachedFin ? Promise.resolve(cachedFin) :
+          (!opts?.rawEdgar && !opts?.rawDart) ? Promise.resolve(emptyFinancialsV2()) :
+          callSection<FinancialsV2>(sharedContext, 'financials_v2', language),
       ],
       ([vc, s, f]) => {
         // Rule 4: 재무 수치 전년 대비 10배 이상 변동 → (추정) 뱃지 강제 적용
@@ -1379,6 +1397,11 @@ export async function reanalyzeSingleSection(
 ): Promise<any> {
   if (sectionKey === 'founder_v2') {
     return callFounderSection(companyName, language);
+  }
+  // 작업 D(2026-08-16) — EDGAR/DART 원본이 아예 없는 기업의 "재무 이 섹션 다시 분석"은
+  // Claude 호출 자체를 건너뛴다(웹서치 자유서술 재발 방지, batch3/refreshFinancials와 동일 정책).
+  if (sectionKey === 'financials_v2' && rawFinancials && !rawFinancials.rawEdgar && !rawFinancials.rawDart) {
+    return emptyFinancialsV2();
   }
   const [research1, research2] = await Promise.all([
     gatherResearch1(companyName),
