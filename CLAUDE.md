@@ -1349,6 +1349,16 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   재시도를 확대할지는 이번 단일 케이스 효과를 지켜본 뒤 별도 결정으로 보류. 상세는 Quality
   Gate 원칙 섹션 "Ford Motor value_chain_v2 빈 콘텐츠 + ICP 인사이트 422 조사" 및 "프론트
   진행 상태 표시 원칙" 참고.
+- [x] 섹션 로딩 UI 스켈레톤 shimmer → 스피너+예상 소요시간 텍스트로 통일 (2026-08-15) —
+  산업역사/기술역사 탭만 `SectionGenerating`(스피너+ETA)을 쓰고 나머지 8개 배치 섹션+
+  성장 시나리오+ICP 인사이트는 `SummarySkeleton`/`CardsSkeleton`/`TableSkeleton`/
+  `FounderSkeleton` 4종 shimmer를 제각각 쓰던 불일치를 해소. 4개 스켈레톤 컴포넌트와
+  공용 `Sk` 헬퍼, `.skeleton`/`@keyframes shimmer` CSS 전부 삭제(대체 후 완전히 미사용
+  확인) — 전 섹션이 `SectionGenerating` 하나로 통일. ETA 문구는 트리거별 실제 서버
+  타임아웃에 맞춰 2종 유지: 배치 스트리밍/탭별 재분석/ICP 인사이트는
+  `sectionGeneratingSuffixShort`(신규, "최대 1~2분" — BATCH_TIMEOUT 75s/
+  DISCOVERY_QUESTION_TIMEOUT 90s 기준), pain 진단(산업역사·기술역사)만 기존
+  `sectionGeneratingSuffix`("최대 10분", PAIN_DIAGNOSIS_TIMEOUT 기준) 그대로 사용.
 
 ## Security Principles (SSOT)
 
@@ -2294,4 +2304,8 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
   가드 추가 + `curateDiscoveryQuestions()` 1회 재시도(ICP 인사이트 422 완화, 같은 실패 클래스).
   상세는 Quality Gate 원칙 섹션 "Ford Motor value_chain_v2 빈 콘텐츠 + ICP 인사이트 422 조사"
   및 "프론트 진행 상태 표시 원칙" 참고. |
+| v2.9.1 | 2026-08-15 — 섹션 로딩 UI를 스켈레톤 shimmer(섹션마다 제각각 4종) →
+  `SectionGenerating`(스피너+예상 소요시간 텍스트) 하나로 통일. ETA는 트리거별 서버
+  타임아웃 기준 2종(짧은 배치/재분석/ICP용, 긴 pain 진단용)으로 분리. 상세는 위 "완료"
+  백로그 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |
