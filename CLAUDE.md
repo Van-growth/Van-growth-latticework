@@ -1116,6 +1116,23 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
     커버리지 없음. 목표 기준(30~40%)에 크게 미달해 보류.
   - **재검토 조건**: 대형 기업이 표준적으로 쓰는 ATS(Workday/iCIMS 등) 공개 API 접근
     방법이 확인되면 그때 재고려.
+  - **2026-08-15 재검증(같은 날, 2차 시도) — 회사 자체 커리어 페이지(company.com/careers)
+    직접 스크래핑도 실패, 재보류 확정**: 동일 30개 샘플로 회사 도메인의 커리어 페이지를
+    정적 fetch로 직접 확인. 1차 자동 판정(직무명 패턴 키워드 매칭)은 7/30(23%)이 "스크래핑
+    가능"으로 나왔으나, 사람이 직접 문맥을 대조하니 **7개 중 5개가 오탐**으로 드러남 —
+    NVIDIA("Desktop Manager"), FICO("Falcon Fraud Manager")는 채용공고가 아니라 **자사
+    제품명**이었고, HubSpot("Lead Management Software")도 제품/기능명, Palo Alto
+    Networks는 실제 공고가 아니라 **직원 인터뷰 콘텐츠**(직함만 텍스트에 등장)였음 —
+    지난번 Greenhouse 조사의 "ma"/"crm" 슬러그 오탐과 같은 계열의 함정. 실제로 진짜 채용
+    공고로 확인된 건 **UnitedHealth**(카테고리별 공고 수 필터 UI, 개별 공고 아님)와
+    **Etsy**(개별 공고명+지역까지 정적 HTML에 포함, 유일하게 명확한 성공 사례) 단 2건 —
+    검증 후 실질 커버리지 **2/30(6.7%)**. 추가로 Schema.org `JobPosting` 구조화 데이터
+    (검색엔진용 표준 마크업, 있으면 페이지가 JS 렌더링이어도 파싱 가능) 유무를 30개 전부
+    별도 확인했는데 **0/30 — 단 한 곳도 커리어 랜딩 페이지에 이 마크업을 안 씀**. 나머지는
+    JS 렌더링 SPA 셸(14/30, 47%) 또는 봇 차단(5/30, 17% — Tesla/Meta/J&J/ServiceNow/
+    DoorDash가 403/400 즉시 차단) 또는 Greenhouse/Lever가 아닌 다른 3rd-party ATS
+    임베드(4/30, 13% — Workday/Phenom 등, 결국 그 ATS를 별도로 봐야 함). **Greenhouse/
+    Lever API 방식(13.3%)보다도 낮은 커버리지** — "회사 자체 페이지" 방식도 기각.
 
 ### ✅ 완료
 - [x] 창업자 탭 추가
@@ -1321,6 +1338,17 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   설명만), 재무 연도 컬럼 고정 fy2021~fy2025 → 회사별 동적 렌더링. 상세는 Architecture 섹션
   "Ford 세그먼트 매출 비중 오류 조사 → 재무제표 표시 원칙 5가지 확정 + revenue_lines 신설"
   및 위 "재무 파생 지표 처리 원칙" 참고.
+- [x] 탭 체크마크/렌더 게이트를 실제 콘텐츠 신호 기준으로 재작성 + ICP 인사이트 422 완화용
+  1회 재시도 (2026-08-15) — Ford value_chain_v2가 체크마크는 떴는데 빈 화면으로 보이는 버그
+  조사에서 촉발. `hasTabData()`가 `!!data.X`(객체 존재)만 보던 걸 서버 Quality Gate의
+  `SECTION_CONTENT_SIGNALS`와 같은 계열의 필드 단위 콘텐츠 신호로 재작성, 배치 생성 8개
+  섹션(value_chain 포함)의 탭 콘텐츠 렌더도 같은 함수로 게이트해 빈 placeholder면
+  `EmptySectionState`(재분석 CTA)를 보여주도록 통일. `curateDiscoveryQuestions()`(ICP
+  인사이트 큐레이션)도 같은 계열의 간헐적 Claude JSON 파싱 실패로 422가 날 수 있다고 보고
+  1회 재시도 추가, `DISCOVERY_QUESTION_TIMEOUT` 60s→90s. `callSection()` 8개 섹션 전체로
+  재시도를 확대할지는 이번 단일 케이스 효과를 지켜본 뒤 별도 결정으로 보류. 상세는 Quality
+  Gate 원칙 섹션 "Ford Motor value_chain_v2 빈 콘텐츠 + ICP 인사이트 422 조사" 및 "프론트
+  진행 상태 표시 원칙" 참고.
 
 ## Security Principles (SSOT)
 
@@ -1824,13 +1852,60 @@ JSON이 깨지는 별개의 미해결 메커니즘**이 실재함을 보여줘 "
 `extractJson()` 파싱 실패 시 `server/debug-logs/parse-failures/`에 저장되는 원문 전체
 (정확한 JSON 문법 오류 위치 확인, `.gitignore` 처리됨 — 커밋 안 됨).
 
+**Ford Motor `value_chain_v2` 빈 콘텐츠 + ICP 인사이트 422 조사 → `discovery_question_curation`
+1회 재시도 추가(2026-08-15)** — 위 NVIDIA strategy_v2/Amprius 사례와 동일 계열(간헐적·비결정적
+Claude Sonnet 5 JSON 파싱 실패)의 세 번째 확인 사례. Ford 리포트에서 밸류체인 탭이 체크마크는
+떴는데 빈 화면으로 보인다는 신고를 조사한 결과: DB엔 `value_chain_v2`가 `null`이 아니라
+`DEFAULT_ANALYSIS_DATA`의 빈 placeholder로 저장돼 있었음(같은 배치의 형제 섹션은 전부 정상) —
+`callSection()`이 그 실행에서만 단독으로 JSON 파싱에 실패한 것으로 확정. 재현 시도(같은 코드,
+같은 입력으로 `value_chain_v2`만 3회 재실행) 3/3 전부 성공해 온디맨드로는 재현되지 않는
+간헐적 실패임을 확인 — 코드 버그가 아니라 모델 응답 자체의 변동성. 같은 세션에서 "ICP 인사이트
+생성 시 422 응답" 신고도 함께 조사했는데, 처음엔 "value_chain_v2가 비어서 discovery_questions
+후보가 부족해 422가 난다"는 인과관계가 의심됐으나 **반증됨** — Ford의 최신 분석은 value_chain_v2가
+0개 후보를 내도 나머지 8개 소스에서 총 24개 후보를 모으고(`collectDiscoveryQuestionCandidates()`),
+`curateDiscoveryQuestions()`(claude.ts)는 애초에 후보가 0개여도 `null`이 아니라 빈 배열을
+반환하도록 짜여 있어(`if (candidates.length === 0) return [];`) 후보 부족으로는 422 분기
+(`analyze.ts`의 `if (!curated) res.status(422)...`) 자체에 도달할 방법이 없다. 두 버그는
+인과관계로 연결된 게 아니라 **같은 계열의 독립된 두 증상**(`callSection()`이 value_chain_v2에서
+한 번, `curateDiscoveryQuestions()`의 자체 Claude 호출이 별도로 한 번) — Ford 24후보 + NVIDIA
+(구버전 캐시, 후보 1개)로 각각 재현 시도 총 8/8 성공, 422 자체는 재현 안 됨(원인 확정은 코드
+분석으로, 재현은 "정상 동작함"만 확인).
+- **조치 1 — 체크마크/렌더 게이트 수정**: 바로 아래 "프론트 진행 상태 표시 원칙" 섹션 참고.
+- **조치 2 — `curateDiscoveryQuestions()` 1회 재시도 추가**: JSON 파싱 실패(`extractJson()`이
+  `selected` 배열을 못 찾음) 또는 API 호출 자체 예외 시, 곧바로 `null`을 반환해 422로
+  이어지는 대신 같은 프롬프트로 1회 더 시도한 뒤에도 실패하면 그때 `null`. `DISCOVERY_QUESTION_TIMEOUT`
+  (`analyze.ts`)도 60s→90s로 상향 — 재시도 포함 전체를 감싸는 타임아웃이라, 늘리지 않으면
+  정상적인 2회차 시도가 이 타임아웃에 먼저 걸려 커스텀 재시도가 무의미해질 위험이 있었음
+  (실측 Ford 24후보 기준 1회 호출 11~17s, 2회 합쳐도 90s에 크게 못 미침). Ford 실제 DB 레코드도
+  이 조사 중 `value_chain_v2`를 재생성해 복구함(`layers` 0→5).
+- **조치 확대는 보류 — `callSection()`(8개 배치 섹션 전체) 재시도는 이번엔 안 넣음**: 같은
+  간헐적 실패 클래스가 다른 섹션(NVIDIA strategy_v2 등)에서도 관측된 만큼 재시도가 도움이 될
+  가능성은 높지만, 8개 섹션 전체에 적용하면 실패 시 비용/시간이 최대 2배로 늘어난다 — 이번엔
+  `discovery_question_curation` 하나에만 적용해 효과를 관찰한 뒤, `callSection()` 확대 여부는
+  별도 세션에서 판단하기로 함(사용자 명시적 보류 결정, 2026-08-15).
+
 ### 프론트 진행 상태 표시 원칙 (2026-08-02 추가 — 체크마크/온디맨드 트리거 통합 버그 수정 계기)
-- 탭 완료 체크마크(✓)는 반드시 "그 탭 데이터가 프론트 state에 실제로 존재하는가"만으로
-  판정한다 — 배치 번호(progress 이벤트)를 대리 신호로 쓰지 않는다. 온디맨드 섹션(배치에
-  속하지 않고 탭을 열 때 별도 생성되는 섹션, 예: industry_history_v2/tech_evolution_v2)이
-  생기면 배치 번호 매핑은 그 시점부터 stale해지는데 코드에는 남아있기 쉬워, 아직 생성되지도
-  않은 탭에 ✓가 뜨는 사고로 이어진다(`client/src/app/components/AnalysisCard.tsx`의
-  `hasTabData` — 예전 `TAB_BATCH` 배치번호 매핑 버그 참고).
+- 탭 완료 체크마크(✓)는 배치 번호(progress 이벤트)를 대리 신호로 쓰지 않는다 — 온디맨드
+  섹션(배치에 속하지 않고 탭을 열 때 별도 생성되는 섹션, 예: industry_history_v2/
+  tech_evolution_v2)이 생기면 배치 번호 매핑은 그 시점부터 stale해지는데 코드에는 남아있기
+  쉬워, 아직 생성되지도 않은 탭에 ✓가 뜨는 사고로 이어진다(`client/src/app/components/
+  AnalysisCard.tsx`의 `hasTabData` — 예전 `TAB_BATCH` 배치번호 매핑 버그 참고).
+- **(2026-08-15 정정)** "그 탭 데이터가 프론트 state에 실제로 존재하는가"(`!!data.X`, 객체
+  존재 여부)만으로는 부족하다는 게 드러났다 — `callSection()`이 그 실행에서만 간헐적으로
+  JSON 파싱에 실패하면 서버가 `DEFAULT_ANALYSIS_DATA`의 빈 placeholder 객체(모든 배열/문자열이
+  비었을 뿐 객체 자체는 존재)로 대체해 저장하는데, 이 경우도 `!!`는 true라 체크마크는 뜨고
+  탭 콘텐츠도 "생성됨"으로 렌더링되지만 실제로는 빈 화면이었다(Ford Motor `value_chain_v2`
+  실측 — 형제 섹션은 전부 정상, 이 섹션만 그 실행에서 단독으로 실패해 저장됨. 재현 시도
+  3/3 성공으로 간헐적·비결정적임을 확인, `DEFAULT_ANALYSIS_DATA` 병합 자체는 정상 동작).
+  `hasTabData`를 "필드 단위 콘텐츠 신호"(서버 Quality Gate의 `SECTION_CONTENT_SIGNALS`와
+  같은 계열 — 각 섹션이 실제로 렌더링하는 배열/텍스트 필드가 하나라도 채워져 있는지) 기준으로
+  재작성해 체크마크와 탭 콘텐츠 렌더 게이트(`data.X ? (hasTabData(...) ? <V2Tab/> :
+  <EmptySectionState/>) : <legacy fallback/>`)가 같은 판정을 공유하도록 통일 — value_chain_v2
+  포함 배치 생성 8개 섹션(summary/business_model/competitors/cross_industry_nudge/value_chain/
+  strategy/financials/founder) 전부 적용, `EmptySectionState`는 "이 섹션은 생성에 실패했습니다.
+  재분석을 시도해보세요" + 재분석 버튼을 보여준다(읽기 전용 화면은 버튼 자동 숨김). 온디맨드
+  섹션(industry_history_v2/tech_evolution_v2)은 애초에 실패 시 명시적 `null`을 쓰고 placeholder를
+  저장하지 않는 설계라 이 문제 자체가 없어 대상에서 제외(위 "Pain 진단" 섹션 참고).
 - prop에서 파생된 로컬 state(`useState(prop)`)는 prop이 이후 갱신돼도 자동 재동기화되지
   않는다 — 스트리밍처럼 같은 필드가 여러 단계(프리뷰 → 확정본)로 갱신되는 경우 반드시
   `useEffect(() => setLocal(prop), [prop])`로 재동기화할 것(`financialsV2Local` 버그 참고).
@@ -2213,4 +2288,10 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
   비중이 탭마다 12%/7%로 다르게 나오던 사고(정답 7.09%)를 근본 해결. 상세는 위 Architecture
   섹션 "Ford 세그먼트 매출 비중 오류 조사 → 재무제표 표시 원칙 5가지 확정 + revenue_lines
   신설" 및 "재무 파생 지표 처리 원칙" 참고. |
+| v2.9.0 | 2026-08-15 — 탭 체크마크/렌더 게이트를 "필드 객체 존재"에서 "실제 콘텐츠 신호"
+  기준으로 재작성(간헐적 `callSection()` JSON 파싱 실패 시 빈 placeholder에도 ✓가 뜨던 버그,
+  Ford value_chain_v2 실측) + 배치 생성 8개 섹션에 `EmptySectionState`(재분석 CTA 포함) 렌더
+  가드 추가 + `curateDiscoveryQuestions()` 1회 재시도(ICP 인사이트 422 완화, 같은 실패 클래스).
+  상세는 Quality Gate 원칙 섹션 "Ford Motor value_chain_v2 빈 콘텐츠 + ICP 인사이트 422 조사"
+  및 "프론트 진행 상태 표시 원칙" 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |
