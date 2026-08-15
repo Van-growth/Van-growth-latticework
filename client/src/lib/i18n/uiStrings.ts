@@ -58,9 +58,20 @@ interface UiStringDict {
     reanalyze: string;
     reanalyzeNew: string;
     topTabCompany: string;
-    topTabPain: string;
-    topTabAeSkills: string;
-    aeSkillsFreeBadge: string;
+    topTabIndustry: string;
+    topTabRecent: string;
+    topTabFavorites: string;
+    recentEmptyState: string;
+    favoritesEmptyState: string;
+    purposeSectionTitle: string;
+    purposeMa: string;
+    purposeInvestment: string;
+    purposePartnership: string;
+    purposeCustomer: string;
+    purposeOther: string;
+    purposeDetailPlaceholder: string;
+    progressCardSources: string;
+    progressCardPainDiagnosis: string;
     scanMessages: string[];
     finishingUp: (company: string) => string;
     firstLookupHint: string;
@@ -70,9 +81,6 @@ interface UiStringDict {
     shareRevoked: string;
     shareRevokeFailed: string;
     loadResultFailed: string;
-    painInfoMissing: string;
-    painStarted: string;
-    painFailed: string;
     connectionUnstable: string;
     analysisError: string;
     serverUnreachable: string;
@@ -84,12 +92,6 @@ interface UiStringDict {
     freeTrialRequestedAtLine: (requestedAt: string) => string;
     freeTrialUsageLine: (used: number, limit: number) => string;
     freeTrialLastCompanyLine: (company: string) => string;
-    nudgeIndustry: string;
-    nudgeFinancials: string;
-    nudgeCompetitors: string;
-    nudgeStrategy: string;
-    nudgeFounder: string;
-    nudgeAnalyzing: string;
     nudgeComplete: string;
     heroTitle: string;
     heroSubtitle: string;
@@ -111,6 +113,21 @@ interface UiStringDict {
     share: string;
     creatingShare: string;
   };
+  industryView: {
+    subtitle: string;
+    loading: string;
+    loadError: string;
+    industryCompanyCount: (n: number) => string;
+    back: string;
+    companyLoading: string;
+    companyEmpty: string;
+    comingSoon: string;
+    columnRank: string;
+    columnCompany: string;
+    columnTicker: string;
+    columnRevenue: string;
+    columnFiscalYear: string;
+  };
   tabs: {
     summary: { label: string; tooltip: string };
     value_chain: { label: string; tooltip: string };
@@ -128,14 +145,11 @@ interface UiStringDict {
   tabGroups: { company: string; pain: string };
   actions: {
     reanalyzeSection: string;
-    startPainDiagnosis: string;
     copyAll: string;
     copyTab: string;
     copyTabShort: string;
     copied: string;
-    sectionGeneratingSuffix: string;
     sectionGeneratingSuffixShort: string;
-    painDiagnosisIntro: string;
     sectionFailedEmpty: string;
     // 재무제표 자체가 없는 기업(EDGAR/DART 둘 다 미공시, 예: 비상장/비영리) 전용 — 재분석해도
     // 달라지지 않으므로 sectionFailedEmpty와 별개 문구(재분석 CTA 없음, 2026-08-16 작업 D).
@@ -245,10 +259,21 @@ const ko: UiStringDict = {
     viewNow: '바로 보기',
     reanalyze: '재분석하기',
     reanalyzeNew: '새로 분석하기',
-    topTabCompany: 'Company Intelligence',
-    topTabPain: 'Pain Diagnosis',
-    topTabAeSkills: 'AE Skills',
-    aeSkillsFreeBadge: '무료',
+    topTabCompany: '기업분석',
+    topTabIndustry: '산업별 보기',
+    topTabRecent: '최근 조회',
+    topTabFavorites: '즐겨찾기',
+    recentEmptyState: '최근 조회 기능은 준비 중이에요.',
+    favoritesEmptyState: '즐겨찾기 기능은 준비 중이에요.',
+    purposeSectionTitle: '분석 목적',
+    purposeMa: '인수합병',
+    purposeInvestment: '투자',
+    purposePartnership: '파트너십',
+    purposeCustomer: '고객',
+    purposeOther: '기타',
+    purposeDetailPlaceholder: '예: OO가 인수할 수 있는 OO 분야 회사를 찾아, fit과 재무 건전성을 파악하기 위함',
+    progressCardSources: '출처',
+    progressCardPainDiagnosis: 'Pain Diagnosis',
     scanMessages: [
       'SEC 공시 문서 분석 중...',
       '10-K 497페이지 정독 중...',
@@ -266,9 +291,6 @@ const ko: UiStringDict = {
     shareRevoked: '공유가 해제되었습니다.',
     shareRevokeFailed: '공유 해제 실패',
     loadResultFailed: '분석 결과를 불러오지 못했습니다.',
-    painInfoMissing: '분석 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.',
-    painStarted: 'pain 진단을 시작했어요 — 최대 10분 정도 걸릴 수 있어요.',
-    painFailed: 'pain 진단 생성에 실패했어요. 다시 시도해주세요.',
     connectionUnstable: '연결이 불안정해 분석 완료를 확인하지 못했어요. 잠시 후 히스토리에서 다시 확인해주세요.',
     analysisError: '분석 중 오류가 발생했습니다.',
     serverUnreachable: '서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.',
@@ -280,12 +302,6 @@ const ko: UiStringDict = {
     freeTrialRequestedAtLine: (requestedAt: string) => `요청 일시: ${requestedAt}`,
     freeTrialUsageLine: (used: number, limit: number) => `사용한 무료 분석 횟수: ${used}/${limit}`,
     freeTrialLastCompanyLine: (company: string) => `마지막 검색 시도 기업: ${company}`,
-    nudgeIndustry: '산업분석',
-    nudgeFinancials: '재무',
-    nudgeCompetitors: '경쟁사',
-    nudgeStrategy: '전략',
-    nudgeFounder: '창업자',
-    nudgeAnalyzing: '분석 중',
     nudgeComplete: '분석 완료',
     heroTitle: '기업 심층 분석',
     heroSubtitle: '산업역사, 기술변화, 밸류체인, BM, 재무를 한번에',
@@ -307,6 +323,21 @@ const ko: UiStringDict = {
     share: '공유',
     creatingShare: '생성 중...',
   },
+  industryView: {
+    subtitle: 'SIC 업종별 매출 상위 기업을 확인할 수 있어요 (EDGAR 배치 데이터 기준).',
+    loading: '산업 목록을 불러오는 중...',
+    loadError: '산업 목록을 불러오지 못했습니다.',
+    industryCompanyCount: (n: number) => `${n}개 기업`,
+    back: '← 산업 목록으로',
+    companyLoading: '기업 목록을 불러오는 중...',
+    companyEmpty: '아직 데이터가 준비된 기업이 없어요.',
+    comingSoon: '준비 중',
+    columnRank: '순위',
+    columnCompany: '기업',
+    columnTicker: '티커',
+    columnRevenue: '매출',
+    columnFiscalYear: '회계연도',
+  },
   tabs: {
     summary:              { label: '요약',         tooltip: '이 회사가 뭐 하는 곳인지 한눈에 확인할 수 있어요' },
     value_chain:          { label: '밸류체인',     tooltip: '이 회사가 산업 내 어디에 위치하는지 확인할 수 있어요' },
@@ -324,14 +355,11 @@ const ko: UiStringDict = {
   tabGroups: { company: '기업분석', pain: 'pain 진단' },
   actions: {
     reanalyzeSection: '↻ 이 섹션 다시 분석',
-    startPainDiagnosis: 'pain 진단 시작',
     copyAll: '전체 복사',
     copyTab: '이 탭 복사',
     copyTabShort: '탭 복사',
     copied: '복사됨',
-    sectionGeneratingSuffix: ' 생성 중... (최대 10분 정도 소요될 수 있어요)',
     sectionGeneratingSuffixShort: ' 생성 중... (최대 1~2분 정도 소요될 수 있어요)',
-    painDiagnosisIntro: '산업 역사와 기술 변화를 함께 진단해요.\n약 7~10분 소요될 수 있어요.',
     sectionFailedEmpty: '이 섹션은 생성에 실패했습니다. 재분석을 시도해보세요.',
     financialsNoOfficialData: '이 기업은 SEC(EDGAR)나 DART에 공식 재무제표를 공시하지 않아 재무 데이터를 제공할 수 없어요.',
   },
@@ -447,10 +475,21 @@ const en: UiStringDict = {
     viewNow: 'View now',
     reanalyze: 'Re-analyze',
     reanalyzeNew: 'Start new analysis',
-    topTabCompany: 'Company Intelligence',
-    topTabPain: 'Pain Diagnosis',
-    topTabAeSkills: 'AE Skills',
-    aeSkillsFreeBadge: 'Free',
+    topTabCompany: 'Company Analysis',
+    topTabIndustry: 'By Industry',
+    topTabRecent: 'Recent',
+    topTabFavorites: 'Favorites',
+    recentEmptyState: 'Recent view is coming soon.',
+    favoritesEmptyState: 'Favorites is coming soon.',
+    purposeSectionTitle: 'Purpose of this analysis',
+    purposeMa: 'M&A',
+    purposeInvestment: 'Investment',
+    purposePartnership: 'Partnership',
+    purposeCustomer: 'Customer',
+    purposeOther: 'Other',
+    purposeDetailPlaceholder: 'e.g. Finding acquisition targets in the OO space for OO, to assess fit and financial health',
+    progressCardSources: 'Sources',
+    progressCardPainDiagnosis: 'Pain Diagnosis',
     scanMessages: [
       'Analyzing SEC filings...',
       'Reading through the 10-K...',
@@ -468,9 +507,6 @@ const en: UiStringDict = {
     shareRevoked: 'Sharing turned off.',
     shareRevokeFailed: 'Failed to turn off sharing',
     loadResultFailed: 'Failed to load the analysis result.',
-    painInfoMissing: "We haven't loaded the analysis yet — please try again in a moment.",
-    painStarted: 'Pain diagnosis started — this can take up to 10 minutes.',
-    painFailed: 'Pain diagnosis failed to generate. Please try again.',
     connectionUnstable: "Your connection was unstable, so we couldn't confirm the analysis finished. Check your history in a bit.",
     analysisError: 'Something went wrong during analysis.',
     serverUnreachable: "Can't reach the server. Please check that it's running.",
@@ -482,12 +518,6 @@ const en: UiStringDict = {
     freeTrialRequestedAtLine: (requestedAt: string) => `Requested at: ${requestedAt}`,
     freeTrialUsageLine: (used: number, limit: number) => `Free analyses used: ${used}/${limit}`,
     freeTrialLastCompanyLine: (company: string) => `Last company searched: ${company}`,
-    nudgeIndustry: 'Industry',
-    nudgeFinancials: 'Financials',
-    nudgeCompetitors: 'Competitors',
-    nudgeStrategy: 'Strategy',
-    nudgeFounder: 'Founder',
-    nudgeAnalyzing: 'Analyzing',
     nudgeComplete: 'Analysis complete',
     heroTitle: 'Deep company analysis',
     heroSubtitle: 'Industry history, tech shifts, value chain, business model, and financials — all in one place',
@@ -509,6 +539,21 @@ const en: UiStringDict = {
     share: 'Share',
     creatingShare: 'Creating...',
   },
+  industryView: {
+    subtitle: 'See top companies by revenue within each SIC industry (based on EDGAR batch data).',
+    loading: 'Loading industry list...',
+    loadError: 'Failed to load the industry list.',
+    industryCompanyCount: (n: number) => `${n} companies`,
+    back: '← Back to industries',
+    companyLoading: 'Loading companies...',
+    companyEmpty: 'No companies with ready data yet.',
+    comingSoon: 'Coming soon',
+    columnRank: 'Rank',
+    columnCompany: 'Company',
+    columnTicker: 'Ticker',
+    columnRevenue: 'Revenue',
+    columnFiscalYear: 'Fiscal Year',
+  },
   tabs: {
     summary:              { label: 'Summary',         tooltip: 'See at a glance what this company does' },
     value_chain:          { label: 'Value Chain',     tooltip: 'See where this company sits in its industry value chain' },
@@ -526,14 +571,11 @@ const en: UiStringDict = {
   tabGroups: { company: 'Company Intel', pain: 'Pain Diagnosis' },
   actions: {
     reanalyzeSection: '↻ Re-analyze this section',
-    startPainDiagnosis: 'Start pain diagnosis',
     copyAll: 'Copy all',
     copyTab: 'Copy this tab',
     copyTabShort: 'Copy tab',
     copied: 'Copied',
-    sectionGeneratingSuffix: ' generating... (can take up to 10 minutes)',
     sectionGeneratingSuffixShort: ' generating... (can take up to 1-2 minutes)',
-    painDiagnosisIntro: 'We diagnose industry history and tech evolution together.\nThis can take about 7-10 minutes.',
     sectionFailedEmpty: 'This section failed to generate. Try re-analyzing it.',
     financialsNoOfficialData: "This company doesn't file official financials with SEC (EDGAR) or DART, so financial data isn't available.",
   },

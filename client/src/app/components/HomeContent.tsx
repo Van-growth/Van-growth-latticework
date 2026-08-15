@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, FormEvent, KeyboardEvent } from '
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
-import AeSkillsView from './AeSkillsView';
+import IndustryView from './IndustryView';
 import LoginPromptModal from './LoginPromptModal';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
@@ -26,17 +26,22 @@ const API_URL = (() => {
 // 못 살리므로, 로그인 후 마운트 시 이 키를 읽어 자동으로 resolve를 이어간다.
 const PENDING_SELECTION_KEY = 'pending_company_selection';
 
-// 최상위 3단 탭 (2026-08) — 기존 좌측 사이드바 2그룹(기업분석/pain 진단)을 감싸는 wrapper.
-// 사이드바 로직 자체는 새로 안 만들고 AnalysisCard.tsx의 activeGroup prop으로 필터링만
-// 한다. AE Skills는 검색/로그인 플로우와 완전히 분리된 별도 뷰 — 로그인 게이트 없음
-// (기존 검색 실행 등 특정 액션에만 로그인 체크가 걸려있고, 페이지 진입 자체엔 게이트가
-// 없으므로 이 탭은 그 어떤 인증 로직도 거치지 않아 자연히 무인증 접근이 된다).
-type TopTabKey = 'company' | 'pain' | 'ae_skills';
+// 최상위 4탭 (2026-08-16 — 기존 Company Intelligence/Pain Diagnosis/AE Skills 3탭 대체).
+// Pain Diagnosis가 배치5로 승격되어 자동 생성되므로 별도 최상위 모드가 필요 없어졌다 —
+// "기업분석" 탭이 기존 검색+리포트 플로우를 그대로 이어받는다(사이드바는 activeGroup 없이
+// company+pain 두 그룹을 항상 함께 보여줌). AE Skills는 이번 스코프에서 내비게이션
+// 진입점만 빠지고 컴포넌트(AeSkillsView.tsx)는 코드에 남아있다. 산업별 보기/최근 조회/
+// 즐겨찾기 중 산업별 보기만 실제 데이터 연동, 나머지 둘은 빈 상태 스텁.
+type TopTabKey = 'company' | 'industry' | 'recent' | 'favorites';
 const TOP_TABS: { key: TopTabKey }[] = [
   { key: 'company' },
-  { key: 'pain' },
-  { key: 'ae_skills' },
+  { key: 'industry' },
+  { key: 'recent' },
+  { key: 'favorites' },
 ];
+
+const PURPOSE_CATEGORIES = ['ma', 'investment', 'partnership', 'customer', 'other'] as const;
+type PurposeCategory = (typeof PURPOSE_CATEGORIES)[number];
 
 function daysAgo(iso: string | null): number {
   if (!iso) return 0;
@@ -145,6 +150,9 @@ export default function HomeContent() {
   // 새로고침 시 항상 Company Intelligence로 리셋(URL에 반영 안 함 — 2026-08 결정).
   const [topTab, setTopTab] = useState<TopTabKey>('company');
   const [companyName, setCompanyName] = useState('');
+  // 분석 요청마다 매번 입력받는 목적 — 온보딩 저장값 아님, 요청 시점 body에만 실린다.
+  const [purposeCategory, setPurposeCategory] = useState<PurposeCategory | null>(null);
+  const [purposeDetail, setPurposeDetail] = useState('');
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   // 2글자 이상 입력 후 typeahead가 0건으로 실제 응답한 상태 — 관리자 전용 "직접 입력"
@@ -318,7 +326,7 @@ export default function HomeContent() {
       .then((data: AnalysisDetail) => {
         setResult(data);
         setAnalysisData(data);
-        setCompletedBatches(new Set([1, 2, 3, 4, 6, 40]));
+        setCompletedBatches(new Set([1, 2, 3, 4, 5, 6, 40]));
         loadedIdRef.current = urlId;
       })
       .catch(() => setError(t.loadResultFailed))
@@ -385,58 +393,6 @@ export default function HomeContent() {
     }
   }
 
-  // "pain 진단 시작" 버튼 — industry_history_v2 + tech_evolution_v2를 POST
-  // /api/analyze/:id/pain-diagnosis 한 번의 요청으로 동시 생성한다(2026-08, 기존 탭별
-  // 개별 자동생성 방식 대체). reanalyzingTabs에 'industry'/'tech' 둘 다 추가해서
-  // AnalysisCard의 기존 isReanalyzing('industry' | 'tech') 판정 로직을 그대로 재사용 —
-  // 새 로딩 state를 따로 만들지 않는다.
-  async function handlePainDiagnosisStart() {
-    const targetId = analysisIdRef.current ?? result?.id;
-    const targetName = result?.companyName || companyName.trim();
-    // 이 두 케이스는 버튼 클릭 즉시 조용히 no-op되던 지점 — AnalysisCard의 painDiagnosisStarted
-    // 로컬 state는 이미 true로 바뀐 채라, 아무 안내 없이 리턴하면 "방금 실패했다"는 오해를
-    // 주기 쉽다(2026-08-12 발견). 토스트로 명시적 피드백을 준다.
-    if (!targetId || !targetName) {
-      showToast(t.painInfoMissing);
-      return;
-    }
-    if (!session) { signInWithGoogle(); return; }
-    setReanalyzingTabs(prev => new Set([...prev, 'industry', 'tech']));
-    showToast(t.painStarted);
-    try {
-      const resp = await fetch(`${API_URL}/api/analyze/${targetId}/pain-diagnosis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(null, session.access_token) },
-        body: JSON.stringify({ companyName: targetName }),
-      });
-      if (resp.ok) {
-        const { industry_history_v2, tech_evolution_v2 } = await resp.json();
-        streamingRef.current = {
-          ...(streamingRef.current ?? emptyBase(targetName)),
-          ...(industry_history_v2 ? { industry_history_v2 } : {}),
-          ...(tech_evolution_v2 ? { tech_evolution_v2 } : {}),
-        };
-        setDisplayData({ ...streamingRef.current });
-        if (result) {
-          const updated = {
-            ...result,
-            ...(industry_history_v2 ? { industry_history_v2 } : {}),
-            ...(tech_evolution_v2 ? { tech_evolution_v2 } : {}),
-          };
-          setResult(updated);
-          setAnalysisData(updated);
-        }
-      } else {
-        showToast(t.painFailed);
-      }
-    } catch (err) {
-      console.error('[pain-diagnosis]', err);
-      showToast(t.painFailed);
-    } finally {
-      setReanalyzingTabs(prev => { const s = new Set(prev); s.delete('industry'); s.delete('tech'); return s; });
-    }
-  }
-
   // 배치별로 즉시 DB 저장되는 기존 구조를 그대로 활용 — 이미 있는 GET /api/analyses/:id로
   // 현재까지 완료된 배치를 가져와 화면 상태에 병합한다. 완료 여부(b1~b5 모두 참)를 반환.
   async function fetchAndMergeStatus(analysisId: string, name: string): Promise<boolean> {
@@ -454,16 +410,18 @@ export default function HomeContent() {
     const b2 = !!(data.business_model_v2 && data.competitors_v2 && data.cross_industry_nudge_v1);
     const b3 = !!(data.value_chain_v2 && data.strategy_v2 && data.financials_v2);
     const b4 = !!data.founder_v2;
-    const allDone = b1 && b2 && b3 && b4;
+    const b5 = !!(data.industry_history_v2 && data.tech_evolution_v2);
+    const allDone = b1 && b2 && b3 && b4 && b5;
 
     const next = new Set<number>([-1]);
     if (b1) next.add(1);
     if (b2) next.add(2);
     if (b3) { next.add(3); next.add(40); }
     if (b4) next.add(4);
+    if (b5) next.add(5);
     if (data.growth_scenario_v2) next.add(6);
     setCompletedBatches(prev => new Set([...prev, ...next]));
-    setProgress({ completed: [b1, b2, b3, b4].filter(Boolean).length, total: 4 });
+    setProgress({ completed: [b1, b2, b3, b4, b5].filter(Boolean).length, total: 5 });
 
     if (allDone && !analysisDoneRef.current) {
       analysisDoneRef.current = true;
@@ -471,7 +429,7 @@ export default function HomeContent() {
       loadedIdRef.current = data.id;
       setResult(data);
       setAnalysisData(data);
-      setCompletedBatches(new Set([-1, 1, 2, 3, 4, 6, 40]));
+      setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40]));
       if (data.id) router.replace(`/?id=${data.id}`);
       refreshUsage();
     }
@@ -522,7 +480,11 @@ export default function HomeContent() {
           'Content-Type': 'application/json',
           ...buildAuthHeaders(clientId, session?.access_token),
         },
-        body: JSON.stringify({ companyName: name, forceRefresh, companyId, language }),
+        body: JSON.stringify({
+          companyName: name, forceRefresh, companyId, language,
+          purposeCategory: purposeCategory ?? undefined,
+          purposeDetail: purposeDetail.trim() || undefined,
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -591,23 +553,18 @@ export default function HomeContent() {
               setProgress({ completed: payload.completed, total: payload.total });
 
             } else if (eventType === 'done') {
-              const normalized = normalizeResponse(payload as AnalyzeResponse);
-              // industry_history_v2/tech_evolution_v2는 온디맨드라 서버의 analyzeCompany()
-              // 자체는 이 값을 모르고 항상 null로 채워 보낸다 — 스트리밍 도중 유저가 그 탭을
-              // 열어 별도 /api/analyze/reanalyze 호출로 이미 받아둔 데이터가 있다면(streamingRef
-              // 에 반영돼 있음), 최종 'done' 페이로드의 null로 덮어써서 사라지는 걸 막는다.
-              const merged: AnalysisDetail = {
-                ...normalized,
-                industry_history_v2: normalized.industry_history_v2 ?? streamingRef.current?.industry_history_v2 ?? undefined,
-                tech_evolution_v2:   normalized.tech_evolution_v2   ?? streamingRef.current?.tech_evolution_v2   ?? undefined,
-              };
+              // industry_history_v2/tech_evolution_v2(Pain Diagnosis)는 2026-08-16부터
+              // 배치5로 서버 analyzeCompany()가 직접 채우므로, 다른 섹션과 동일하게
+              // normalized 값을 그대로 신뢰한다(구 온디맨드 시절의 streamingRef 폴백 병합
+              // 특례는 더 이상 필요 없음).
+              const merged: AnalysisDetail = normalizeResponse(payload as AnalyzeResponse);
               analysisDoneRef.current = true;
               setIsCached(payload.cached === true);
               loadedIdRef.current = merged.id;
               setResult(merged);
               setAnalysisData(merged);
               streamingRef.current = merged;
-              setCompletedBatches(new Set([-1, 1, 2, 3, 4, 6, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
+              setCompletedBatches(new Set([-1, 1, 2, 3, 4, 5, 6, 40])); // keep -1 so isStreaming stays true → tab ✓ icons persist
               if (merged.id) router.replace(`/?id=${merged.id}`);
               refreshUsage();
               trackEvent('report_generated', { companyName: merged.companyName, cached: payload.cached === true });
@@ -747,6 +704,16 @@ export default function HomeContent() {
     }
   }
 
+  // 산업별 보기 탭에서 회사 클릭 → 기업분석 탭으로 전환하고 기존 typeahead 클릭과
+  // 동일한 resolve 플로우를 그대로 재사용(신규 분석 플로우 안 만듦).
+  function handleSelectIndustryCompany(company: { cik: string; name: string; ticker: string | null }) {
+    setTopTab('company');
+    handleSelectSuggestion({
+      name: company.name,
+      listings: [{ source: 'EDGAR', identifier: company.cik, ticker: company.ticker }],
+    });
+  }
+
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (!showDropdown || suggestions.length === 0) return;
     if (e.key === 'ArrowDown') {
@@ -769,16 +736,24 @@ export default function HomeContent() {
   const phase1 = loading && completedBatches.has(-1) && !completedBatches.has(1);
   const showCard = result ?? (loading && completedBatches.has(1) ? (displayData ?? emptyBase(companyName.trim())) : null);
 
-  // Nudge banner: visible during streaming after batch 1 completes
+  // 실행 상태 카드: 9개 섹션 + Pain Diagnosis(industry_history+tech_evolution 통합 1장) —
+  // batch1 완료 후 스트리밍 중 노출. 배치5(Pain Diagnosis)는 다른 섹션과 병렬 실행되지만
+  // 시각적으로만 구분해서 차별화 기능임을 표시한다(강조 테두리, 아래 렌더 참고).
   const isStreaming = completedBatches.has(-1);
-  const nudgeItems = [
-    { label: t.nudgeIndustry,    done: completedBatches.has(2) },
-    { label: t.nudgeFinancials,  done: completedBatches.has(40) || completedBatches.has(3) },
-    { label: t.nudgeCompetitors, done: completedBatches.has(2) },
-    { label: t.nudgeStrategy,    done: completedBatches.has(3) },
-    { label: t.nudgeFounder,     done: completedBatches.has(4) },
+  const tabsT = getUiStrings(language).tabs;
+  const progressCards = [
+    { key: 'summary',              label: tabsT.summary.label,              done: completedBatches.has(1) },
+    { key: 'business_model',       label: tabsT.business_model.label,       done: completedBatches.has(2) },
+    { key: 'competitors',          label: tabsT.competitors.label,          done: completedBatches.has(2) },
+    { key: 'cross_industry_nudge', label: tabsT.cross_industry_nudge.label, done: completedBatches.has(2) },
+    { key: 'value_chain',          label: tabsT.value_chain.label,          done: completedBatches.has(3) },
+    { key: 'strategy',             label: tabsT.strategy.label,             done: completedBatches.has(3) },
+    { key: 'financials',           label: tabsT.financials.label,           done: completedBatches.has(40) || completedBatches.has(3) },
+    { key: 'founder',              label: tabsT.founder.label,              done: completedBatches.has(4) },
+    { key: 'sources',              label: t.progressCardSources,            done: completedBatches.has(4) },
+    { key: 'pain_diagnosis',       label: t.progressCardPainDiagnosis,      done: completedBatches.has(5), isPain: true },
   ];
-  const allNudgeDone = nudgeItems.every(it => it.done);
+  const allNudgeDone = progressCards.every(it => it.done);
   const showNudge = isStreaming && completedBatches.has(1) && !nudgeDismissed;
 
   // Reset dismissed state when a new analysis begins, auto-dismiss 3s after all done
@@ -794,38 +769,40 @@ export default function HomeContent() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* 최상위 3단 탭 (2026-08) — Company Intelligence/Pain Diagnosis는 기존 좌측
-          사이드바 2그룹을 감싸는 wrapper일 뿐(사이드바 로직은 AnalysisCard.tsx의
-          activeGroup prop 필터링 재사용, 새로 안 만듦). AE Skills는 검색/AnalysisCard를
-          통째로 숨기고 완전히 다른 뷰(AeSkillsView)로 교체 — 로그인 게이트 없음. */}
+      {/* 최상위 4탭 (2026-08-16) — 기업분석만 실제 검색+리포트 플로우, 산업별 보기는
+          IndustryView 연동, 최근 조회/즐겨찾기는 빈 상태 스텁(요청사항 스코프). */}
       <div className="flex justify-center gap-1 mb-8">
         {TOP_TABS.map(tab => {
           const active = topTab === tab.key;
-          const label = tab.key === 'company' ? t.topTabCompany : tab.key === 'pain' ? t.topTabPain : t.topTabAeSkills;
+          const label = tab.key === 'company' ? t.topTabCompany
+            : tab.key === 'industry' ? t.topTabIndustry
+            : tab.key === 'recent' ? t.topTabRecent
+            : t.topTabFavorites;
           return (
             <button
               key={tab.key}
               type="button"
               onClick={() => setTopTab(tab.key)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
                 active ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-gray-700'
               }`}
             >
               {label}
-              {tab.key === 'ae_skills' && (
-                <span className={`text-[9px] font-bold rounded px-1 py-[1px] leading-none ${
-                  active ? 'bg-white/20 text-white' : 'text-emerald-600 bg-emerald-50 border border-emerald-200'
-                }`}>
-                  {t.aeSkillsFreeBadge}
-                </span>
-              )}
             </button>
           );
         })}
       </div>
 
-      {topTab === 'ae_skills' ? (
-        <AeSkillsView />
+      {topTab === 'industry' ? (
+        <IndustryView onSelectCompany={handleSelectIndustryCompany} />
+      ) : topTab === 'recent' ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-16 text-center text-gray-400 text-sm">
+          {t.recentEmptyState}
+        </div>
+      ) : topTab === 'favorites' ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-16 text-center text-gray-400 text-sm">
+          {t.favoritesEmptyState}
+        </div>
       ) : (
       <>
       {/* Hero */}
@@ -906,6 +883,41 @@ export default function HomeContent() {
         </div>
       </form>
 
+      {/* 목적 입력 — 분석 요청마다 매번 입력받는다(온보딩 저장값 아님). 각 섹션 프롬프트
+          컨텍스트에 해석 레이어로만 주입(주입 배관만, 톤 분기 로직은 다음 단계). */}
+      <div className="max-w-2xl mx-auto mb-8">
+        <p className="text-xs font-medium text-gray-500 mb-2">{t.purposeSectionTitle}</p>
+        <div className="flex flex-wrap gap-2 mb-3" role="radiogroup" aria-label={t.purposeSectionTitle}>
+          {PURPOSE_CATEGORIES.map(cat => {
+            const label = { ma: t.purposeMa, investment: t.purposeInvestment, partnership: t.purposePartnership, customer: t.purposeCustomer, other: t.purposeOther }[cat];
+            const active = purposeCategory === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={loading}
+                onClick={() => setPurposeCategory(prev => prev === cat ? null : cat)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors disabled:opacity-50 ${
+                  active ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <textarea
+          value={purposeDetail}
+          onChange={e => setPurposeDetail(e.target.value)}
+          disabled={loading}
+          placeholder={t.purposeDetailPlaceholder}
+          rows={2}
+          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm text-gray-900 placeholder-gray-400 resize-none disabled:opacity-50"
+        />
+      </div>
+
       {/* 캐시 있음 — 서버 응답(resolveResult.cached)에 따라서만 보여짐, 유저가 고르는 토글 아님 */}
       {selectedCompany && resolveResult?.cached && !loading && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-4 mb-6 max-w-2xl mx-auto">
@@ -962,6 +974,51 @@ export default function HomeContent() {
               style={{ width: `${Math.round((progress.completed / progress.total) * 100)}%` }}
             />
           </div>
+        </div>
+      )}
+
+      {/* 실행 상태 카드 그리드 — 9개 섹션 + Pain Diagnosis 1장(대기/진행중/완료). 배치1
+          완료 후 스트리밍 중에만 노출, 전부 완료되면 기존 넛지 배너와 동일하게 3초 후
+          자동으로 사라진다(nudgeDismissed 재사용). Pain Diagnosis 카드만 앰버 강조 테두리로
+          차별화 기능임을 표시. */}
+      {showNudge && (
+        <div className="max-w-2xl mx-auto mb-6">
+          {allNudgeDone ? (
+            <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-2">
+              <span className="anim-fadein inline-block">✓</span>
+              {t.nudgeComplete}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {progressCards.map(card => {
+                const isWaiting    = !completedBatches.has(1) && card.key !== 'summary';
+                const isInProgress = !card.done && !isWaiting;
+                return (
+                  <div
+                    key={card.key}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 text-center transition-colors duration-300 ${
+                      card.isPain
+                        ? `ring-1 ${card.done ? 'ring-amber-300 bg-amber-50 border-amber-200' : 'ring-amber-200 bg-amber-50/40 border-amber-100'}`
+                        : card.done ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100'
+                    }`}
+                  >
+                    {card.done ? (
+                      <span className="anim-fadein text-emerald-500 text-xs font-bold leading-none">✓</span>
+                    ) : isInProgress ? (
+                      <span className="w-2.5 h-2.5 border border-current text-gray-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="flex gap-[2px]" aria-hidden>
+                        {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-medium leading-tight ${card.done ? 'text-emerald-700' : 'text-gray-500'}`}>
+                      {card.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1070,43 +1127,12 @@ export default function HomeContent() {
             </div>
           )}
 
-          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} onPainDiagnosisStart={handlePainDiagnosisStart} isPremium={usage?.isPremium ?? false} activeGroup={topTab} />
+          {/* Pain Diagnosis가 배치5로 자동 생성되므로 별도 activeGroup 필터링 없이
+              기업분석/pain 진단 두 그룹을 사이드바에 항상 함께 보여준다. */}
+          <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} isPremium={usage?.isPremium ?? false} />
         </div>
       )}
 
-      {/* Nudge banner — fixed bottom, appears in phase 2 while streaming */}
-      {showNudge && (
-        <div className="fixed bottom-0 inset-x-0 z-40 flex justify-center pb-3 px-4 pointer-events-none">
-          <div className={`pointer-events-auto flex items-center gap-3 shadow-lg border rounded-full px-4 py-2 transition-all duration-500 text-[11px] ${
-            allNudgeDone
-              ? 'bg-emerald-50 border-emerald-200'
-              : 'bg-white/95 backdrop-blur-sm border-gray-200'
-          }`}>
-            {allNudgeDone ? (
-              <span className="font-medium text-emerald-700 flex items-center gap-1.5">
-                <span className="anim-fadein inline-block">✓</span>
-                {t.nudgeComplete}
-              </span>
-            ) : (
-              <>
-                <span className="text-gray-400 shrink-0 font-medium">{t.nudgeAnalyzing}</span>
-                <span className="w-px h-3 bg-gray-200 shrink-0" />
-                <div className="flex items-center gap-2.5">
-                  {nudgeItems.map(item => (
-                    <span key={item.label} className={`flex items-center gap-0.5 transition-colors duration-300 ${item.done ? 'text-emerald-600' : 'text-gray-400'}`}>
-                      {item.done
-                        ? <span className="anim-fadein inline-block font-bold mr-0.5">✓</span>
-                        : <span className="w-1 h-1 rounded-full bg-current opacity-50 mr-0.5 animate-pulse" />
-                      }
-                      {item.label}
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
       </>
       )}
 

@@ -3168,14 +3168,10 @@ export function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: Fina
 // 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
 const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
 
-function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosisStart, isPremium, activeGroup, isShareView }: {
+function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, activeGroup, isShareView }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
-  // "pain 진단 시작" 버튼 전용 — industry_history_v2/tech_evolution_v2를 한 번에 생성
-  // (2026-08, POST /api/analyze/:id/pain-diagnosis). onReanalyze와 별도 prop인 이유:
-  // onReanalyze는 섹션 하나만 재생성하는 범용 경로라 두 섹션 동시 생성을 표현할 수 없다.
-  onPainDiagnosisStart?: () => void;
   isPremium?: boolean;
   // 최상위 3단 탭(2026-08, HomeContent.tsx)이 "Company Intelligence"/"Pain Diagnosis" 중
   // 무엇을 골랐는지 — 지정되면 그 그룹의 탭만 필터링해서 보여준다. undefined면(ShareContent
@@ -3228,19 +3224,9 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
     setTab(prev => TABS.find(t => t.key === prev)?.group === activeGroup ? prev : firstTabOfGroup(activeGroup));
   }, [activeGroup]);
 
-  // industry_history_v2/tech_evolution_v2는 탭을 여는 것만으로 더 이상 자동 생성되지
-  // 않는다(2026-08 — 예전엔 탭 오픈 시 자동 트리거였으나, "pain 진단 시작" 버튼 클릭이
-  // 유일한 트리거로 바뀜). painDiagnosisStarted는 이번 화면 방문에서 버튼을 눌렀는지만
-  // 추적 — 누른 뒤에도 데이터가 없으면(실패) CTA 대신 기존 "↻ 다시 분석" 폴백을 보여준다.
-  const [painDiagnosisStarted, setPainDiagnosisStarted] = useState(false);
-  const handlePainDiagnosisClick = () => {
-    setPainDiagnosisStarted(true);
-    onPainDiagnosisStart?.();
-  };
-
   // ICP 인사이트 결과 — IcpInsightTab은 다른 탭과 달리 데이터를 상위 data prop이 아니라
-  // 이 상태에서만 받는다. painDiagnosisStarted와 동일한 이유로 여기(AnalysisCardInner,
-  // 탭 전환에도 언마운트 안 됨)에 둔다 — IcpInsightTab 자체는 탭 전환마다 언마운트/재마운트
+  // 이 상태에서만 받는다. 탭 전환에도 언마운트 안 되는 여기(AnalysisCardInner)에 둔다 —
+  // IcpInsightTab 자체는 탭 전환마다 언마운트/재마운트
   // 되지만(다른 모든 탭과 동일한 조건부 렌더링 패턴), 값 자체는 여기 살아있어 복원된다.
   // (2026-08-15, "ICP 인사이트 탭 재진입 시 결과 소실" 버그 수정 — 원인은 컴포넌트
   // 자체 로컬 state였고, 서버는 이미 icp_fingerprint로 정상 캐시하고 있었음.)
@@ -3434,11 +3420,10 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('tech') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
         )}
-        {/* ICP 인사이트: 다른 온디맨드 탭과 달리 analyses 행에 결과를 저장하지 않고
-            별도 icp_insights 테이블로 관리 — batchDone/painDiagnosisStarted 게이트를
-            거치지 않고 IcpInsightTab이 클릭→로딩→결과를 전부 자체적으로 처리한다. 결과
-            자체(icpInsightResult/icpInsightStatus)는 painDiagnosisStarted와 동일하게
-            AnalysisCardInner에 끌어올려져 있다 — 탭 전환마다 IcpInsightTab은 다른 모든
+        {/* ICP 인사이트: 다른 배치 섹션과 달리 analyses 행에 결과를 저장하지 않고
+            별도 icp_insights 테이블로 관리 — batchDone 게이트를 거치지 않고 IcpInsightTab이
+            클릭→로딩→결과를 전부 자체적으로 처리한다. 결과 자체(icpInsightResult/
+            icpInsightStatus)는 AnalysisCardInner에 끌어올려져 있다 — 탭 전환마다 IcpInsightTab은 다른 모든
             탭처럼 언마운트/재마운트되지만, 값은 여기 살아있어 재생성 없이 복원된다.
             공유 뷰(isShareView)는 인터랙티브 생성/재생성/별점 위젯 없이 서버가 이미 골라준
             소유자의 결과만 읽기 전용으로 보여준다(SharedIcpQuestionsTab, 2026-08-15). */}
