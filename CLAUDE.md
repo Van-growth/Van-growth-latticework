@@ -9,175 +9,68 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-16 (2026-08-15 세션에서 이어짐, 자정 넘겨 계속)
-**커밋**: 오늘 세션 전체 push 완료 — `21714f4`(gitignore 커스텀 커맨드) → `ed5432a`/`0994ddc`
-(재무 5원칙+revenue_lines) → `aa86686`/`a33dafe`/`08f79bd`(ICP i18n/상태끌어올리기/공유링크
-ICP 노출) → `c0273cf`/`f3c9364`/`0b96c1a`(체크마크 실콘텐츠 판정+ICP 재시도) →
-`75788d4`/`12a6a29`(로딩 UI 통일) → `cbf7977`/`3f75c64`/`b30a911`(작업 D+ICP 스트리밍 게이트).
-**Render 배포**: 미확인 — push는 전부 완료됐으나 배포 트리거 여부 확인할 수단(Render API
-토큰/MCP)이 이 세션에 없음, Render 대시보드에서 직접 확인 필요
+**날짜**: 2026-08-16
+**커밋**: `a83e61c`(백엔드 배치5+purpose 배관), `6866422`(프론트 4탭/목적입력/산업별보기/
+진행카드) — 이번 세션 push는 아직 안 함.
+**Render 배포**: 미확인 — 이번 세션 push 없음.
 
 ### 완료
-
-**1. 재무 데이터 신뢰성 5원칙 확정 + 구현 (Ford Motor Co 세그먼트 매출 비중 오류에서 촉발)**
-Ford PDF에서 세그먼트 매출 비중이 두 섹션(summary_v2 12% vs business_model_v2 7%)에서
-다르게 나옴 → 10-K 원문 대조로 7.09%가 정답 확인 → 두 섹션 모두 raw 세그먼트 데이터 없이
-Claude가 웹서치 스니펫으로 자유서술 추정하고 있었던 게 원인. **상위 원칙**: 1min의 모든
-재무 수치는 공식 F/S(EDGAR 원본 공시)에 실제로 존재하는 값만 표시 — 계산·추정·재구성 없이,
-F/S에 없는 값은 항목 자체를 안 보여준다. 하위 5원칙 전부 구현 완료:
-1. EBITDA 미표시 — D&A 소스 불안정, 계산값 신뢰 불가
-2. 매출총이익은 F/S 원본 태그만 — 역산 안 함, 없으면 "해당없음"
-3. 매출 세그먼트 라인은 F/S에 실제 나뉜 대로만 — R.htm 파싱 신규 구현(FilingSummary.xml →
-   R.htm, XBRL axis/member 기반). Ford/Apple/NVIDIA/TSM/Toyota 5개사 실측 검증(Ford
-   92.9%/7.1%가 원문과 정확히 일치). 단위 배율 자동보정, ShortName 매칭 실패 시 안전
-   폴백(null) 확인. `revenue_share`(구 웹서치 추정) 완전 제거.
-4. 10-K/20-F만 사용 — 라이브 경로는 이미 만족, 배치 경로(edgarBatchPrecompute.ts) 20-F
-   누락 발견해 통일
-5. FY 라벨은 회사 표기 그대로 + 연도 컬럼 동적화 — 고정 5칸(fy2021~fy2025) 하드코딩 제거,
-   `s.fiscalYears` 기반 동적 처리. **이 작업 중 NVIDIA FY2026이 고정 5칸에 걸려 실제로
-   드롭되고 있던 버그를 발견해 해소**(막연한 예방이 아니라 실제 진행 중이던 문제였음)
-상세는 CLAUDE.md "재무 파생 지표 처리 원칙" 섹션 참고.
-- **참고— FCF는 아직 미착수**: 같은 원칙(CapEx 소스 불안정성)이 FCF에도 적용될 수 있다는
-  논의가 있었으나, 이 세션 코드베이스에는 반영되지 않음 — `cash_flow.fcf`/
-  `unit_economics.fcf_margin` 둘 다 여전히 활성 표시 중, 관련 커밋도 없음. EBITDA와
-  동일하게 제거할지는 다음 세션에서 별도 판단 필요(자동으로 "완료"된 게 아님, 확인 필요).
-
-**2. "완료 플래그 vs 실제 콘텐츠 존재" 버그 클래스 발견 및 수정 (Ford value_chain_v2에서 촉발)**
-Ford 밸류체인 탭에 체크마크(완료 표시)는 떴는데 본문이 비어있다는 신고 → `hasTabData()`가
-`!!data.X`(null 여부)만 체크하는데, `callSection()`이 간헐적으로 JSON 파싱에 실패해도
-서버 병합 로직이 `DEFAULT_ANALYSIS_DATA`의 빈 placeholder로 항상 채워 non-null을
-만들어버림 — 배치 생성 8개 섹션(summary/value_chain/business_model/competitors/
-cross_industry_nudge/strategy/financials/founder) 전부에 구조적으로 잠재해 있던 버그.
-- `hasTabData()`를 섹션별 실제 콘텐츠 신호(배열 길이 등) 기반으로 전환, 콘텐츠 없으면
-  공용 `EmptySectionState`(재분석 유도 버튼)로 렌더 게이트 — Ford value_chain_v2 재분석으로
-  정상화 확인(layers 0→5).
-- **연관 조사**: 같은 세션에서 "ICP 인사이트 생성 시 422" 신고도 조사 — value_chain_v2가
-  비어서 discovery_questions 후보가 부족해 422가 난다는 인과관계는 **반증됨**(Ford는
-  value_chain 0개 후보여도 나머지 8개 소스에서 총 24개 확보, `curateDiscoveryQuestions()`는
-  후보 0개여도 애초에 `null`이 아니라 빈 배열 반환). 두 버그는 인과관계가 아니라 같은
-  계열의 독립된 두 증상(Sonnet 5의 간헐적 JSON 파싱 실패 — NVIDIA strategy_v2, J&J
-  strategy_v2/nudge에 이은 세 번째 확인 사례)으로 확정.
-- `curateDiscoveryQuestions()` 1회 재시도 추가(같은 실패 클래스 완화), 타임아웃 60→90초
-  (실측 11~17초/call 기준 여유 확보). `callSection()` 8개 섹션 전체로 재시도 확대는 이번
-  단일 케이스 효과를 지켜본 뒤 별도 판단하기로 보류(비용 2배 우려).
-상세는 CLAUDE.md Quality Gate 원칙 섹션 "Ford Motor value_chain_v2 빈 콘텐츠 + ICP
-인사이트 422 조사" 및 "프론트 진행 상태 표시 원칙" 참고.
-
-**3. 섹션 로딩 UI 스켈레톤 → 스피너+예상 소요시간 텍스트로 통일**
-산업역사/기술역사 탭만 `SectionGenerating`(스피너+ETA)을 쓰고 나머지 8개 배치 섹션+성장
-시나리오+ICP 인사이트는 `SummarySkeleton`/`CardsSkeleton`/`TableSkeleton`/`FounderSkeleton`
-4종 shimmer를 제각각 쓰던 불일치 해소. 4개 스켈레톤 컴포넌트+공용 `Sk` 헬퍼+`.skeleton`/
-`@keyframes shimmer` CSS 전부 삭제, 전 섹션이 `SectionGenerating` 하나로 통일. ETA 문구는
-트리거별 실제 서버 타임아웃 기준 2종 유지(짧은 배치/재분석/ICP용 "최대 1~2분", 긴 pain
-진단용 "최대 10분"). 상세는 위 "완료" 백로그 참고.
-
-**4. "작업 D" — EDGAR/DART 둘 다 없는 기업의 financials_v2 웹서치 자유서술 폴백 제거
-(Northwell Health 실측에서 촉발)**
-`overrideFinancialsTable()`은 raw 데이터가 없으면 Claude 결과를 "그대로 두는" 방어 로직만
-있었고, 애초에 Claude가 웹서치만으로 재무제표를 자유서술하는 것 자체는 막지 못하고 있었음
-— Northwell Health(비상장 비영리 헬스시스템) 실측: `data_source='web_search'`인데도
-손익계산서/재무상태표 각 4행이 채워져 있었고, 현금흐름 `notes`엔 "[3]"/"[4]" 각주까지 붙은
-그럴듯한 서사가 있었음(전부 웹검색 추정, 공식 F/S 아님).
-- `fetchFinancialContext()`가 `source==='web_search'`(EDGAR/DART 둘 다 없음)를 반환하면
-  financials_v2를 만드는 3개 경로(배치3/`refreshFinancials()`/
-  `reanalyzeSingleSection('financials_v2')`) 전부 Claude 호출 자체를 건너뛰고 완전히 빈
-  `FinancialsV2`(`emptyFinancialsV2()`)를 반환하도록 변경 — 생성 후 필터링이 아니라 생성
-  자체를 막아 API 비용도 절약.
-- 프론트: `dataSource!=='edgar'&&!=='dart'`면 재무 탭에 전용 빈 상태(재분석 CTA 없음 —
-  재시도해도 달라지지 않으므로) 표시. 상단 데이터소스 배지도 "웹 검색 기반" →
-  "SEC/DART 데이터 없음"으로 변경.
-- **검증 완료**: Northwell Health 직접 재분석 — 스킵 로직 1ms 완료(Claude 미호출) 확인,
-  실제 DB 레코드도 4/4행(가짜 데이터) → 0/0행(정직한 빈 상태)로 복구 확인.
-상세는 CLAUDE.md "재무 파생 지표 처리 원칙" 6번 및 Quality Gate 원칙 섹션 참고.
-
-**5. ICP 인사이트 스트리밍 중 404 조사 + 게이트 추가 (Northwell Health 배치 진행 중 실측)**
-분석이 아직 스트리밍 중일 때 "ICP 인사이트 생성"을 누르면 항상 404 — 422와는 무관한 별개의
-순수 클라이언트 버그였음. `analyses` 행 자체는 batch1(요약) 완료 시점에 이미 INSERT돼
-있는데, `HomeContent.tsx`의 `emptyBase(name)`가 `id:''`로 초기화한 뒤 스트리밍 도중 각
-배치가 보내는 실제 id는 `analysisIdRef`라는 별도 ref에만 저장되고 화면에 렌더링되는
-`data.id`(=`IcpInsightTab`이 받는 `analysisId`)에는 반영되지 않아, 스트리밍 구간 전체에서
-100% 재현되는 구조였음("배치 2/4에서만"이 아니었음).
-- **판단**: id 플러밍만 고쳐 스트리밍 중에도 "일단 되게" 만들지는 않기로 함 — 배치가 덜
-  끝난 시점엔 discovery_questions 후보 풀이 적어 품질 낮은 결과가 나올 수 있고,
-  industry_history_v2/tech_evolution_v2도 이미 "명시적 트리거 전까지 생성 차단" 원칙을
-  쓰고 있어 일관성 있는 선택. 넛지/산업역사/기술역사 탭까지 포함해 그룹 전체를 막을
-  필요는 없음 — ICP 탭만으로 충분(사용자 확인).
-- `IcpInsightTab`이 `!analysisId`면 "생성" 버튼 대신 "분석이 완료되면 이용할 수 있어요"
-  안내로 교체, `handleGenerate()`에도 방어적 가드 추가.
-- **검증 완료**: 완료된 Northwell Health 레코드(27개 후보)로 `curateDiscoveryQuestions()`
-  직접 호출 — 5개 정상 선별 확인.
-상세는 CLAUDE.md Quality Gate 원칙 섹션 "ICP 인사이트 스트리밍 중 404 조사" 참고.
-
-**6. 공유 링크/PDF ICP 노출 범위 확정 — Task A (마이그레이션 적용 완료, 커밋 `08f79bd`)**
-공유 링크/PDF는 discovery_questions 결과만 노출, ICP 원문(제품/타겟산업/타겟직무)은 노출
-안 함(소유자 영업 정보 보호). `icp_insights.created_by`/`profiles.nickname` 마이그레이션
-2건 Supabase CLI로 prod 적용 완료(MCP OAuth 막혀 CLI 경로로 우회, 상세는 "Supabase MCP
-마이그레이션 워크플로우" 섹션 참고). `share.ts`/`AnalysisCard.tsx`(`isShareView`,
-`SharedIcpQuestionsTab`)/`AnalysisPdf.tsx`/`ProfileForm.tsx` 전부 구현+배포 완료.
+- Purpose 입력 배관: `analyses.purpose_category`/`purpose_detail` 신설(TEXT+CHECK, prod
+  적용 완료) + `analyzeCompany()`/`reanalyzeSingleSection()` 컨텍스트에 주입, 검색화면에
+  목적 선택+상세 입력 UI. 톤 분기 로직은 다음 단계.
+- Pain Diagnosis 배치5 승격: 구 "pain 진단 시작" 버튼/전용 엔드포인트
+  (`POST /:id/pain-diagnosis`) 삭제, industry_history_v2/tech_evolution_v2가 9개 섹션과
+  동일하게 분석 시작 즉시 병렬 실행(180초 전용 타임아웃). `analyzeCompany()` 직접 호출로
+  실측 검증(배치 도착 순서 `[1,3,5,2,4]`, 정상 병렬 확인).
+- 최상위 탭 3→4개 재구성: Company Intelligence/Pain Diagnosis/AE Skills →
+  기업분석/산업별 보기/최근 조회/즐겨찾기. AE Skills는 진입점만 제거, 컴포넌트는 코드에 남김.
+- 신규 산업별 보기: `GET /api/industries`, `GET /api/industries/:sicCode/companies` —
+  `cik_master.sic_code`+`financial_cache.raw_edgar`(EDGAR 전용, 신규 매핑테이블/배치 없음)
+  재사용, `IndustryView.tsx` 신규. 서버 직접 curl로 실데이터 검증(반도체 SIC Top10 매출
+  내림차순 정확).
+- 실행 상태 카드 그리드: 기존 5항목 넛지 필 → 9섹션+Pain Diagnosis(앰버 강조) 10카드로
+  일반화, `hasTabData()` export해서 재사용.
+- CLAUDE.md 아키텍처 문서(분석 배치 구조/Pain 진단/UI원칙/DB schema/버전히스토리) 갱신.
+- 서버+클라이언트 `tsc --noEmit` 전 구간 클린.
 
 ### 남음
-- **구글 로그인 + 온보딩 설문 실사용 검증이 이 세션의 최대 병목** — Task A(공유 링크 ICP
-  노출)는 코드/마이그레이션 다 완료됐지만, 실제 구글 로그인이 안 돼 있어 서로 다른 두 유저로
-  ICP 소유자 라벨이 정확히 갈리는지 등 실사용 검증을 못 함. 관리자 대시보드(유저 관리)도
-  설계만 완료, 착수 전 — 로그인 도입이 선행돼야 이어짐.
-- **FCF도 EBITDA와 동일 원칙으로 제거할지 판단 필요** — 위 1번 참고, 이번 세션엔 반영 안 됨.
-- **공유 링크 로딩 이슈**(`/share/C2ud9AuX`, Northwell Health) — 다른 세션에서 발견, 이
-  세션에서는 재현/조사 못 함(web_fetch로 "불러오는 중..."에서 멈춘다는 보고만 있음). 실제
-  브라우저로 재확인 필요, 클라이언트 사이드 렌더링 특성 때문인지 진짜 버그인지 미판별.
-- **discovery_questions 노출 방식 재검토** — 다른 세션에서 나온 제안, 이 세션에서는 다루지
-  않음. 현재 2단계 구조(섹션당 3~5개 후보 → ICP 기준 3~5개로 최종 큐레이션)에서, 2단계
-  필터링을 없애고 1단계 후보 풀 전체(9개 섹션分, 약 20~40개)를 화면/PDF에 그대로 노출하는
-  방향 검토 중이라고 함 — "질문 많으면 숙제검사 느낌"이라는 기존 VOC 원칙이 "미팅에서
-  실제 던지는 질문 수"에 대한 것이었지 "참고용 목록 개수"와는 다른 맥락일 수 있어 재검토
-  필요하다는 취지. 다음 세션에서 정식으로 착수 여부 판단.
-- `latticework-daily-cron`(Render 대시보드) 삭제 — 코드 참조 없음 확인됨, 대시보드에서
-  직접 삭제하기로 했으나 처리 여부 미확인.
-- **NVIDIA/Johnson & Johnson 재무 일관성 재검증** — 이전 Handoff부터 이월. EBITDA는
-  완전히 제거돼 원래 이 검증을 촉발했던 우려는 해소됨 — 남은 의미는 매출/매출총이익/
-  영업이익/순이익 4개 항목의 실행별 결정론성 재확인뿐(`server/scripts/
-  testEdgarReanalysisConsistency.ts` 재사용)
-- 창업자탭 legacy 기업 / 탭이동시 취소버그 / 재방문시 결과 유지 — 3건 전부 착수 전
-  (이전 Handoff부터 이월, "로딩 UI 스피너 통일"은 이번 세션에서 완료돼 목록에서 제외)
-- **언어 토글 마스터 계정 전환** / **비상장 기업 검색 실제 동작 테스트** — 이전 Handoff부터
-  이월, 진행 상황 미확인
-- (이월) CLAUDE.md 문서화 3건(재현성 방어 원칙/핵심 포지셔닝+검증 테스트 설계) — 계속
-  미해결(콘텐츠 포맷 원칙 신규 규칙은 이번 세션들에서 실질적으로 계속 갱신 중이라 제외)
-- (이월) dev/ops 서버 분리(Render) — 계속 이월 중
-- (이월) Reddit r/Sales_Professionals 반응 확인/답글, AE 인터뷰 추가 진행 — 별도 세션(GTM)
-- Job posting/채용 트렌드 기능은 완전 보류 확정(Greenhouse/Lever 13.3%, 회사 자체 크롤링
-  6.7% 모두 목표 50% 미달) — 재검토 조건은 백로그에 명시돼 있으니 별도 액션 불필요.
+- **오늘 만든 UI(목적입력/4탭/산업별보기/진행카드)의 실제 브라우저 시각 검증** — 이번
+  세션에 브라우저 자동화 도구가 없어 코드리뷰+서버 API 직접호출로만 확인함 — 다음 세션
+- 구글 로그인 + 온보딩 설문 실사용 검증 — 여러 세션째 최대 병목, 이번 세션 미착수
+- FCF도 EBITDA와 동일 원칙으로 제거할지 판단 — 이번 세션 미반영
+- 공유 링크 로딩 이슈(`/share/C2ud9AuX`) 실제 브라우저 재확인 — 이월
+- discovery_questions 노출 개수 확장(2단계 필터링 제거) 착수 여부 판단 — 이월
+- `latticework-daily-cron`(Render 대시보드) 삭제 처리 여부 확인 — 이월
+- NVIDIA/Johnson & Johnson 재무 실행별 결정론성 재검증
+  (`server/scripts/testEdgarReanalysisConsistency.ts`) — 이월
+- 창업자탭 legacy 기업 / 탭이동시 취소버그 / 재방문시 결과 유지 3건 — 이월, 착수 전
+- 언어 토글 마스터 계정 전환 / 비상장 기업 검색 실제 동작 테스트 — 이월
+- CLAUDE.md 문서화 3건(재현성 방어 원칙/핵심 포지셔닝+검증 테스트 설계) — 이월
+- dev/ops 서버 분리(Render) — 이월
+- Reddit GTM 반응 확인/AE 인터뷰 추가 진행 — 별도 세션(GTM)
+- Job posting/채용 트렌드 기능은 보류 확정(재검토 조건 백로그 명시) — 액션 불필요
 
 ### 발견 (미처리)
-- **⚠️ Render 대시보드에 `render.yaml` 밖에서 만들어진 인프라가 있을 수 있음** — 이전
-  세션에 `latticework-daily-cron`이 이미 삭제된 라우트를 계속 호출하고 있던 사고 사례
-  참고(Security Principles 실전 발견 이력 17번). 라우트를 "안 쓰인다"고 판단해 제거할
-  때는 항상 대시보드도 같이 확인할 것.
-- (이월) NVIDIA strategy_v2가 `stop_reason=end_turn`(정상 종료)인데도 JSON이 깨지는 원인
-  자체는 여전히 미특정 — 다만 같은 계열의 실패가 이번 세션에서 2건 더 확인됨(Ford
-  value_chain_v2, discovery_question_curation), 재발 시 `callSection()` FAIL 로그의
-  stop_reason/output_tokens + `extractJson()`의 `server/debug-logs/parse-failures/`
-  원문 덤프로 확인할 것
-- (이월) 회사명 캐시 키 분절 버그 — 재작업 금지 대상, 상세는 git log 참고
-- (이월) Quality Gate 재현성 체크 설계 미정으로 구현 보류
-- (이월) SEC 링크 유효성 자동 검증 — 스코프 밖 보류
-- `layout.tsx`의 `<html lang="en">`과 metadata title/description이 서버 컴포넌트라
-  localStorage 기반 언어 선호값을 SSR 시점에 반영 못 함 — a11y상 사소한 부정확, 의도적 보류
-- AnalysisCard.tsx 탭 내부 콘텐츠 일부(섹션 타이틀·배지·버튼)는 의도적으로 미번역 — 탭
-  라벨/액션버튼/차트 범례만 다국어 적용, AE Skills 탭은 스텁이라 계속 한국어 고정
-- `DataSourceBadge`/`DATA_SOURCE_CONFIG`(재무 탭 상단 배지)가 하드코딩 한국어라 언어
-  토글이 적용 안 됨 — 작업 D 중 "SEC/DART 데이터 없음" 문구로 바꾸면서 재확인, 기존부터
-  있던 격차라 이번엔 범위 밖으로 두고 그대로 유지
-- PDF의 `pdftotext` 텍스트 추출이 한글 구간에서 깨짐(시각적 렌더링엔 영향 없음) — 별도 확인
-  필요
-- react-pdf 테이블 행에 `wrap={false}` 없음 — 표 행이 페이지 경계에서 잘릴 가능성 이론상
-  있음, 실측에선 미재현이나 표시만 해둠
+- golden-set `summary.company에 기업명 없음` 경고가 법인격 접미사가 붙은 companyName
+  (예: "Etsy Inc")에서 방향이 반대인 substring 체크(`summary_v2.company.includes
+  (companyName)`, "Etsy"가 "Etsy Inc"를 포함할 수 없음) 때문에 항상 오탐 — 이번 세션 직접
+  호출 테스트로 발견, `console.warn`만 찍고 흐름은 안 막아 낮은 우선순위, 이번 스코프에서
+  수정 안 함(`server/src/lib/claude.ts` golden-set 검증부)
+- Render 대시보드에 `render.yaml` 밖 인프라가 있을 수 있음(Security Principles 실전 발견
+  이력 17번) — 라우트 제거 시 항상 대시보드도 확인할 것
+- NVIDIA strategy_v2 `stop_reason=end_turn`인데 JSON 깨지는 원인 미특정 — 재발 시
+  `callSection()` FAIL 로그 + `server/debug-logs/parse-failures/` 확인
+- 회사명 캐시 키 분절 버그 — 재작업 금지 대상, 상세는 git log 참고
+- Quality Gate 재현성 체크 설계 미정으로 구현 보류
+- SEC 링크 유효성 자동 검증 — 스코프 밖 보류
+- `layout.tsx` `<html lang="en">`/metadata가 SSR이라 언어 선호값 미반영 — a11y 사소, 의도적 보류
+- AnalysisCard.tsx 탭 내부 콘텐츠 일부 의도적 미번역, AE Skills는 계속 한국어 고정
+- `DataSourceBadge` 하드코딩 한국어라 언어 토글 미적용 — 기존 격차, 범위 밖 유지
+- PDF `pdftotext` 한글 구간 깨짐(시각 렌더링엔 무영향) — 별도 확인 필요
+- react-pdf 테이블 행 `wrap={false}` 없음 — 페이지 경계 잘림 가능성, 실측 미재현
 
 ### 다음 세션 우선순위
-1. 공유 링크 로딩 이슈(`/share/C2ud9AuX`) 실제 브라우저로 재확인
-2. discovery_questions 노출 개수 확장(2단계 필터링 제거) 착수 여부 판단
-3. 구글 로그인 + 온보딩 착수 — Task A 실사용 검증과 관리자 대시보드가 여기 막혀 있음
-4. FCF 제거 여부 판단(EBITDA와 동일 원칙 적용할지)
-5. `latticework-daily-cron` Render 대시보드에서 삭제 확인
+1. 오늘 구현한 목적입력/4탭/산업별보기/진행카드 UI를 실제 브라우저로 시각 검증
 
 ## Vision & Mission
 
@@ -474,6 +367,16 @@ cd client && npm install && npm run dev
 
 **analyses**(추가 컬럼, 2026-08): `cross_industry_nudge_v1` (JSONB — 크로스인더스트리 넛지,
 2배치. 상세는 "Pain 진단" 섹션 참고)
+
+**analyses**(추가 컬럼, 2026-08-16): `purpose_category`(TEXT, nullable, CHECK
+`'ma'|'investment'|'partnership'|'customer'|'other'`), `purpose_detail`(TEXT, nullable) —
+분석 요청마다 매번 입력받는 목적(온보딩 저장값 아님). `financial_cache`/`analyses` 캐시 키에는
+포함되지 않고, 실제로 라이브 생성이 일어나는 요청(신규 분석/`forceRefresh`/부분캐시로 남은
+배치)에서만 각 섹션 프롬프트 컨텍스트에 `[User's stated purpose]` 블록으로 주입된다 — 순수
+컨텍스트 주입만(톤 분기 로직은 다음 단계 별도 설계). 풀캐시 히트 시에는 라이브 생성이 없어
+이번 요청의 purpose가 이미 저장된 콘텐츠를 소급 반영하지 않는다(알려진 한계, "주입 배관만"
+스코프). CHECK 제약은 `analyses.language`(20260812)와 동일한 TEXT+CHECK 컨벤션 재사용 —
+네이티브 `CREATE TYPE ... AS ENUM`은 이 프로젝트 마이그레이션 이력에 선례가 없어 안 씀.
 
 **analyses**(추가 컬럼, 2026-07-16): `created_by`(uuid, NULL 허용, FK→auth.users) — 이
 마이그레이션 이전 생성된 기존 행은 전부 NULL(생성자 미기록). `POST /api/analyses/:id/share`,
@@ -816,11 +719,22 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 탭별 핵심 먼저 표시 + 더 보기 구조
 - 국가 표시: 국기 이모지
 - 모바일 반응형 유지
-- 최상위 3단 탭 구조 (2026-08): Company Intelligence / Pain Diagnosis / AE Skills — 기존
-  좌측 사이드바 기업분석/pain 진단 2그룹은 각각 앞의 두 탭 안으로 편입(사이드바 로직 자체는
-  그대로, `AnalysisCard.tsx`의 `activeGroup` prop으로 필터링만 추가). AE Skills는 검색/로그인
-  플로우와 완전히 분리된 별도 뷰(카테고리 칩 + 카드 피드), 무료 뱃지 + 로그인 게이트 없음.
-  상단 탭 상태는 URL에 반영하지 않음 — 새로고침 시 Company Intelligence로 리셋.
+- **최상위 4탭 구조 (2026-08-16 재편 — 구 3탭 Company Intelligence/Pain Diagnosis/AE Skills
+  대체)**: 기업분석 / 산업별 보기 / 최근 조회 / 즐겨찾기. Pain Diagnosis가 배치5로 자동
+  병렬 실행되면서 별도 최상위 모드로 존재할 이유가 사라져 "기업분석" 탭이 기존 검색+리포트
+  플로우를 그대로 이어받는다(사이드바는 `activeGroup` prop 없이 기업분석/pain 진단 두 그룹을
+  항상 함께 보여줌 — `AnalysisCard.tsx`의 `TAB_GROUPS`/`activeGroup` 로직 자체는 남아있고
+  단지 호출부가 더 이상 값을 넘기지 않을 뿐, 새 컴포넌트 안 만듦). **산업별 보기**는 신규
+  `IndustryView.tsx` — `GET /api/industries`(SIC별 그룹+커버리지 카운트, `cik_master.
+  sic_code/sic_description` 재사용) → 선택 시 `GET /api/industries/:sicCode/companies?
+  limit=10`(financial_cache.raw_edgar 최신 매출 기준 내림차순, EDGAR 전용). Top 10만 실제
+  연동, 30/50/100은 UI만 있고 비활성 "준비 중" 뱃지(백엔드는 limit 1~100 전부 지원하지만
+  프론트가 의도적으로 10만 노출). 회사 클릭 시 기업분석 탭으로 전환 + 기존 typeahead
+  선택(`resolve`)과 동일한 플로우 재사용(신규 분석 플로우 안 만듦). **최근 조회/즐겨찾기**는
+  이번 스코프에서 로직 없는 빈 상태 문구만(별도 파일 안 만듦, HomeContent.tsx에 인라인).
+  AE Skills는 이번 스코프에서 내비게이션 진입점만 빠지고 컴포넌트(`AeSkillsView.tsx`)는
+  코드에 남아있음(향후 재배치는 별도 세션 판단). 상단 탭 상태는 URL에 반영하지 않음 —
+  새로고침 시 기업분석으로 리셋(기존 정책 유지).
 
 ### 언어 정책 (2026-08-12 재개정 — 다국어 토글 재도입, 솔루션 앱 전체 + PDF만 대상)
 - **배경**: 2026-08 초 "영어 단일 고정" 결정(바로 아래 이력 참고)을 한국 BD/전략 담당자
@@ -913,43 +827,54 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 재무 우선순위: EDGAR > DART > 웹추정 (미국 타겟 GTM 기준, 한미 병기는 하지 않음 —
   상세는 Data SSOT 기준 > 5번 참고)
 
-### 분석 배치 구조 (1차/2차/온디맨드/3차) — 2026-08 재편
-> 2026-08 이전엔 2/3/4/5 네 배치(총 5개, financials가 4배치·founder가 5배치 단독)였고
-> industry_history_v2/tech_evolution_v2는 "탭을 여는 순간 자동 생성"하는 온디맨드였다.
-> 이번 재편으로 (1) cross_industry_nudge_v1이 2배치에 신규 추가되고, (2) financials_v2가
-> 3배치로, founder_v2가 4배치로 이동해 동기 배치가 4개로 줄었고(진행바 분모도 5→4), (3)
-> industry_history_v2/tech_evolution_v2는 "탭 오픈 자동생성"에서 "pain 진단 시작" 버튼
-> 명시적 클릭 트리거로 바뀌면서 완전히 별도 엔드포인트로 분리됐다. 상세는 아래 "Pain 진단"
-> 섹션 참고.
+### 분석 배치 구조 (1차/2차/3차) — 2026-08-16 재편(배치5 승격)
+> 2026-08-16 이전엔 industry_history_v2/tech_evolution_v2(Pain Diagnosis)가 "pain 진단
+> 시작" 버튼을 눌러야만 별도 엔드포인트(`POST /api/analyze/:id/pain-diagnosis`, 10분
+> 타임아웃)로 생성되는 온디맨드였다. 이 게이팅을 완전히 제거하고 **배치5로 승격** — 다른
+> 9개 섹션과 함께 분석 시작 즉시 병렬 실행된다(`server/src/lib/claude.ts`의
+> `analyzeCompany()`, `Promise.all([runBatch(2,...), runBatch(3,...), runBatch(4,...),
+> runBatch(5,...)])`). 구 전용 엔드포인트는 삭제됨 — 실패 시 재시도는 기존
+> `POST /api/analyze/reanalyze`의 `'industry'`/`'tech'` 키로 그대로 커버(추가 구현 없음).
 - **1차** (목표 60초 이내, 완료 즉시 요약/재무 탭 렌더링):
   - 1배치 (병렬 1개): summary_v2
   - fin_preview: EDGAR/DART 캐시·라이브 raw 데이터로 재무 탭 즉시 프리뷰 (batch3 Claude 응답 이전)
-- **2차** (1차 이후 백그라운드로 계속 처리 — **2/3/4배치는 순차가 아니라 단 하나의
-  `Promise.all([runBatch(2,...), runBatch(3,...), runBatch(4,...)])`로 전부 동시에
-  시작됨**, `server/src/lib/claude.ts`의 `analyzeCompany()` 참고. 번호는 배치 식별용일 뿐
-  실행 순서와 무관 — 각 배치는 완료되는 즉시(그 배치 내부 Claude 호출들이 끝나는 순간)
-  개별적으로 SSE 전송 + DB 저장되므로, 실제 완료 순서는 그때그때 API 응답 속도에 따라
-  달라진다. 코드 주석에도 "financial_cache 히트 시 batch3(financials)가 가장 먼저
-  완료될 수 있음"이라고 이 비순차성이 명시돼 있음):
+- **2차** (1차 이후 백그라운드로 계속 처리 — **2/3/4/5배치는 순차가 아니라 단 하나의
+  `Promise.all(...)`로 전부 동시에 시작됨**. 번호는 배치 식별용일 뿐 실행 순서와 무관 —
+  각 배치는 완료되는 즉시(그 배치 내부 Claude 호출들이 끝나는 순간) 개별적으로 SSE 전송 +
+  DB 저장되므로, 실제 완료 순서는 그때그때 API 응답 속도에 따라 달라진다. 실측(Etsy Inc,
+  2026-08-16 직접 호출 검증): 도착 순서 `[1, 3, 5, 2, 4]` — 배치5가 배치2보다 먼저 끝나는 것도
+  정상):
   - 2배치 (병렬 3개): business_model_v2, competitors_v2, cross_industry_nudge_v1
   - 3배치 (병렬 3개): value_chain_v2, strategy_v2, financials_v2 (Rule 4 YoY 추정뱃지 로직도 이 배치 merge에 포함)
   - 4배치 (병렬 2개): founder_v2, sources
-- **온디맨드** ("pain 진단 시작" 버튼 클릭 트리거, 2026-08): industry_history_v2(산업역사),
-  tech_evolution_v2(기술변화) — 상세는 아래 "Pain 진단" 섹션 참고.
+  - **5배치** (병렬 2개, 2026-08-16 신규 — Pain Diagnosis): industry_history_v2(산업역사),
+    tech_evolution_v2(기술변화). 실측 소요시간(90~106초)이 다른 배치의 75초 타임아웃보다
+    길어 **이 배치만 별도 180초 타임아웃**(`runBatch`의 4번째 인자로 개별 타임아웃 지정 가능하도록
+    확장, 다른 배치는 기본값 75초 그대로).
 - **3차** (2차 전체 완료 후, revenue_history 3개년 이상 확보된 기업만):
   - 6배치: growth_scenario_v2 — 몬테카를로 매출 시뮬레이션 (순수 계산, 프리미엄 전용 탭)
 - 각 배치 완료 시 즉시 Supabase DB 저장 + SSE(`batch` 이벤트)로 프론트엔드 반영
 - 캐시 미스(EDGAR/DART 라이브 조회)로 1차가 60초를 넘길 수 있는 경우 `meta` 이벤트로
   `isFirstLookup: true` 전달 → 프론트에 "처음 조회하는 기업이라 조금 더 걸려요" 안내
-- 배치 타임아웃: 75초 (1~4배치만 — 온디맨드 pain 진단은 별도 10분 타임아웃, 아래 참고)
+- 배치 타임아웃: 75초(1~4배치), 180초(5배치만)
 - 배치 실패 시 해당 섹션만 "—" 표시, 나머지 계속 진행
-- 상단 진행바: "배치 N/4 완료" 표시 (6배치는 진행률 계산에서 제외 — 프리미엄 전용이라 대부분 유저에게 미노출)
+- 상단 진행바: "배치 N/5 완료" 표시(2026-08-16 분모 4→5로 변경, 배치5 반영). 6배치는 진행률
+  계산에서 제외(프리미엄 전용이라 대부분 유저에게 미노출)
+- **캐시 판정도 배치5 포함으로 확장**: `POST /stream`의 풀캐시 조건이
+  `b1 && b2 && b3 && b4 && b5`로 바뀌었다 — 배치5 승격 이전에 생성된 기존 `analyses` 행은
+  `industry_history_v2`/`tech_evolution_v2`가 없어 자동으로 "partial cache"로 떨어지고
+  배치5만 라이브로 채워진다(V1→V2 스키마 전환 때와 동일한 자연 백필 패턴, 별도 백필
+  스크립트 없음).
 
-### Pain 진단 (2026-08 신규)
+### Pain 진단 (2026-08 신규, 2026-08-16 자동 병렬 배치로 전환)
 사이드바를 "기업분석"(요약/밸류체인/비즈니스모델/경쟁사/전략/재무/창업자/성장시나리오)과
 "pain 진단"(넛지/산업역사/기술역사) 두 그룹으로 분리 — `client/src/app/components/
 AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 필드 추가).
 탭 바 UI는 그룹 라벨만 덧붙인 것이라 개별 탭 버튼(체크마크/스피너/tooltip)은 기존과 동일.
+**2026-08-16부터 최상위 탭이 activeGroup으로 이 두 그룹을 분리해서 보여주지 않는다** —
+검색 화면(`HomeContent.tsx`)이 4탭(기업분석/산업별 보기/최근 조회/즐겨찾기) 구조로 바뀌며
+`activeGroup` prop을 더 이상 넘기지 않아, 두 그룹이 사이드바에 항상 함께 표시된다(상세는
+"UI/UX 원칙" 섹션 참고).
 
 - **크로스인더스트리 넛지** (`cross_industry_nudge_v1`, 신규 탭 key `cross_industry_nudge`):
   2배치에서 business_model_v2/competitors_v2와 함께 즉시 생성 — 별도 트리거 불필요, 배치2
@@ -960,36 +885,24 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   분기 매출의 몇 %에 영향을 줄 수 있을까요?" 같은 형태만 허용, "매출의 15%를 위협"처럼
   단정하는 문장은 금지. 기존 🟢🟡⚪ 출처 뱃지 시스템(`SectionSource`, L1/L2/L3) 그대로 재사용 —
   새 뱃지 체계를 만들지 않음.
-- **산업역사/기술역사** (`industry_history_v2`/`tech_evolution_v2`): "pain 진단 시작" 버튼
-  클릭 1번으로 **둘을 동시에** 생성(신규 `POST /api/analyze/:id/pain-diagnosis`, body
-  `{ companyName }`, 로그인 필수·소유권 체크 없음 — `/reanalyze`와 동일한 공용 캐시 협업
-  설계). 내부적으로 기존 `reanalyzeSingleSection()`을 그대로 재사용(`Promise.all`로 두 섹션
-  병렬 호출) — 새 생성 로직을 만들지 않음. 두 섹션 각각 실측 90~106초 걸리는데 병렬로 돌려도
-  기존 75초 배치 타임아웃으로는 부족해 **전용 10분 타임아웃**(`PAIN_DIAGNOSIS_TIMEOUT`)을
-  따로 둠. 이미 둘 다 DB에 있으면(캐시) 재생성 없이 즉시 반환.
-  - **UI**: 클릭 전 두 탭 모두 "산업 역사와 기술 변화를 함께 진단해요. 약 7~10분 소요될 수
-    있어요." + "pain 진단 시작" 버튼(`PainDiagnosisStart` 컴포넌트) 노출. 클릭 후엔 두 탭
-    모두 `SectionGenerating` 스피너("최대 10분 정도 소요될 수 있어요") → 완료되는 대로 각자
-    표시(둘 사이 완료 순서 보장 없음, 기존 온디맨드와 동일한 특성). 실패 시(버튼을 이미
-    눌렀는데 여전히 데이터 없음) 기존 "↻ 다시 분석" 단일 섹션 재시도 링크로 폴백.
-  - **기존 "탭 오픈 시 자동생성" 방식은 완전히 제거됨** — `AnalysisCard.tsx`의
-    `autoGenTriggered` useEffect 삭제, `painDiagnosisStarted` 로컬 state로 대체(이번 화면
-    방문에서 버튼을 눌렀는지만 추적, CTA ↔ 실패 폴백 UI 분기용).
-  - 기존 `/api/analyze/reanalyze`(`section: 'industry'` / `'tech'`)는 그대로 살아있음 —
-    개별 섹션 하나만 재시도할 때(실패 폴백 링크)는 여전히 이 범용 엔드포인트를 사용, 새
-    전용 엔드포인트는 "처음 함께 생성"할 때만 쓰인다.
-- DB 컬럼(`industry_history_v2`/`tech_evolution_v2`)은 생성 전까지 `null` — "생성 실패"와
-  "아직 생성 안 함"을 구분하기 위해 빈 placeholder 객체 대신 명시적 null 사용(2배치/3배치
-  캐시 히트 판정에서도 이 두 필드는 제외됨). `cross_industry_nudge_v1`는 2배치 소속이라
-  다른 배치2 필드(business_model_v2 등)와 동일하게 항상 채워짐(실패 시 빈 placeholder
-  객체로 폴백, null 아님).
-- industry_history_v2와 tech_evolution_v2는 서로 완전히 독립된 별도 웹서치 요청(같은
-  버튼 클릭으로 동시에 시작은 하지만 내부적으로 별개 `reanalyzeSingleSection` 호출)이라
-  **둘 사이의 완료 순서 보장이 전혀 없음** — 실측(2026-08, MSFT/TSLA/NVDA 3개 기업):
-  industry_history_v2 평균 103.3s, tech_evolution_v2 평균 94.7s로 매번 tech_evolution이
-  약간 더 빠른 경향은 있지만(스키마상 타임라인 항목 수가 더 많아서로 추정) 절대적 선후
-  보장은 아님 — tech_evolution 탭이 industry_history보다 먼저 완료되는 건 버그가 아니라
-  설계상 정상 동작.
+- **산업역사/기술역사** (`industry_history_v2`/`tech_evolution_v2`, 2026-08-16부터 배치5):
+  다른 9개 섹션과 동일하게 분석 시작 즉시 자동 생성 — 구 "pain 진단 시작" 버튼/
+  `PainDiagnosisStart` 컴포넌트/`POST /api/analyze/:id/pain-diagnosis` 엔드포인트 전부
+  삭제됨. UI도 다른 8개 배치 섹션과 동일한 패턴으로 통일: `!batchDone(5) → SectionGenerating`,
+  완료 후 `hasTabData()` 신호가 있으면 실제 탭, 없으면(간헐적 생성 실패) `EmptySectionState`
+  (재분석 CTA, `POST /reanalyze`의 `'industry'`/`'tech'` 키 재사용). 별도 트리거 UI/전용
+  엔드포인트가 사라졌으므로 "이미 둘 다 있으면 재생성 스킵" 같은 특수 로직도 불필요 —
+  풀캐시 판정(`b5`)이 이미 그 역할을 한다.
+- DB 컬럼(`industry_history_v2`/`tech_evolution_v2`)은 여전히 `IndustryHistoryV2 | null`
+  타입이지만, 배치5가 실패해도 다른 섹션과 동일하게 `DEFAULT_ANALYSIS_DATA`의 빈 placeholder로
+  폴백한다(구 "null=아직 생성 안 됨" 특수 케이스는 제거 — 이제 표준 배치라 필요 없음).
+  `hasTabData()`가 필드 단위 콘텐츠 신호로 "완료됐지만 빈 placeholder"와 "실제 콘텐츠"를
+  구분한다(다른 8개 섹션과 동일한 Quality Gate 계열 판정).
+- industry_history_v2와 tech_evolution_v2는 서로 완전히 독립된 별도 Claude 호출(`callSection`)
+  이라 **둘 사이의 완료 순서 보장이 전혀 없음** — 실측(2026-08, MSFT/TSLA/NVDA 3개 기업, 구
+  온디맨드 시절): industry_history_v2 평균 103.3s, tech_evolution_v2 평균 94.7s. 배치5로
+  승격된 뒤에도(2026-08-16, Etsy Inc 실측) 이 특성은 동일 — 어느 쪽이 먼저 완료되는지는
+  버그가 아니라 설계상 정상 동작.
 
 ### 보안
 - RLS 전 테이블 적용 완료 (2026-07-03, 로그인 구현을 기다리지 않고 선적용 — 상세는 Security Principles 섹션 참고)
@@ -1377,7 +1290,9 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   동기 배치 5개→4개(진행바 분모도 5→4). 사이드바: `TABS`에 `group` 필드 추가, "기업분석"
   8탭 + "pain 진단" 3탭(넛지/산업역사/기술역사). industry_history_v2/tech_evolution_v2의
   "탭 오픈 시 자동생성"은 완전히 제거되고 "pain 진단 시작" 버튼 명시적 클릭으로 대체.
-- [x] 최상위 3단 탭 구조 (2026-08) — Company Intelligence/Pain Diagnosis/AE Skills.
+- [x] 최상위 3단 탭 구조 (2026-08) — **2026-08-16에 4탭(기업분석/산업별 보기/최근 조회/
+  즐겨찾기) 구조로 대체됨, 아래 "완료" 최신 항목 참고. 이 항목은 당시 구현 기록으로만 유지.**
+  Company Intelligence/Pain Diagnosis/AE Skills.
   `HomeContent.tsx`에 `topTab` state(URL 미반영, 새로고침 시 Company Intelligence로 리셋)
   신규, 상단 탭 바 렌더링. Company Intelligence/Pain Diagnosis는 기존 검색+`AnalysisCard`
   플로우를 그대로 두고 `activeGroup` prop(`AnalysisCard.tsx` 신규)만 전달해 좌측 사이드바를
@@ -1457,6 +1372,35 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   생성 시도가 항상 404로 실패하던 걸 확인 — id 플러밍을 고쳐 스트리밍 중에도 생성되게
   하는 대신, 후보 풀 품질을 위해 "분석 완료 후에만 이용 가능"으로 명확히 게이트(생성
   버튼 → 안내 문구로 교체).
+- [x] Purpose 입력 + Pain Diagnosis 자동 병렬화(배치5) + 상단 4탭 재구성 + 산업별 보기
+  (2026-08-16) — 상세는 위 "분석 배치 구조"/"Pain 진단"/DB schema(`analyses` 추가 컬럼)/
+  "UI/UX 원칙" 섹션 참고. 요약: (1) `analyses.purpose_category`/`purpose_detail`(TEXT+CHECK,
+  매 요청 입력, financial_cache 캐시 키 미포함) 신설 + `analyzeCompany()`/
+  `reanalyzeSingleSection()` 컨텍스트에 `[User's stated purpose]` 블록으로 주입(주입 배관만,
+  톤 분기는 별도 단계). (2) industry_history_v2/tech_evolution_v2를 "pain 진단 시작" 버튼
+  온디맨드에서 배치5로 승격 — 9개 섹션과 동일하게 `Promise.all`로 병렬 실행(180초 전용
+  타임아웃), 구 `POST /api/analyze/:id/pain-diagnosis` 엔드포인트/`PainDiagnosisStart`
+  컴포넌트 삭제, 실패 재시도는 기존 `POST /reanalyze`의 `'industry'`/`'tech'` 키 재사용.
+  실측(Etsy Inc, `analyzeCompany()` 직접 호출) — 배치 도착 순서 `[1,3,5,2,4]`(병렬 확인),
+  industry_history_v2 6개 타임라인/tech_evolution_v2 5개 스테이지 정상 생성, purpose(M&A)가
+  `summary_v2.discovery_questions`에 딜 타이밍/포트폴리오 전략 관점으로 반영됨을 확인.
+  (3) 최상위 탭을 3탭(Company Intelligence/Pain Diagnosis/AE Skills)에서 4탭(기업분석/
+  산업별 보기/최근 조회/즐겨찾기)으로 재구성 — AE Skills는 내비게이션 진입점만 제거,
+  컴포넌트는 코드에 남김(사용자 확정 결정). (4) 신규 `GET /api/industries`/
+  `GET /api/industries/:sicCode/companies`(EDGAR 전용, DART 미참조) — `cik_master.sic_code/
+  sic_description`(신규 매핑 테이블 없음) + `edgarBatchPrecompute.ts`(Russell 1000 전체,
+  `BATCH_LIMIT=Infinity`, 월간 cron으로 이미 가동 중 — 배치 스크립트 신규 개발 불필요, 요청사항
+  체크리스트 확인 완료)가 채운 `financial_cache.raw_edgar` 최신 매출 기준 정렬. 신규
+  `IndustryView.tsx`가 SIC 목록→Top10 리스트→클릭 시 기업분석 탭 전환(기존 resolve 플로우
+  재사용) 렌더. 실측: `GET /api/industries` 57개 산업(제약 1위), `.../3674/companies`
+  (반도체) Intel→Micron→Broadcom→NVIDIA 순 정확히 매출 내림차순 확인. (5) 실행 상태 UI —
+  기존 5개 항목짜리 하단 플로팅 넛지 필을 9개 섹션+Pain Diagnosis 1장(앰버 강조 테두리로
+  차별화) 총 10개 카드 그리드로 일반화, `hasTabData()`(AnalysisCard.tsx에서 export 추가)
+  기반 대기/진행중/완료 3상태 재사용. **DART 코드/참조 신규 추가 없음, 브랜드명/프롬프트
+  톤 문구 변경 없음(요청사항 제약 준수 확인)**. 서버+클라이언트 `tsc --noEmit` 통과.
+  **브라우저 실사용 검증은 미완료** — 이 세션에 브라우저 자동화 도구가 없어 진행 상태
+  카드/목적 입력/산업별 보기 UI는 코드 리뷰 + 서버 직접 호출 검증으로 갈음(기존 세션들과
+  동일한 한계, Security Principles 참고).
 
 ## Security Principles (SSOT)
 
@@ -2446,4 +2390,11 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
   게이트(id 플러밍 버그로 항상 404 나던 문제, "생성" 버튼 → "분석 완료 후 이용 가능"
   안내로 교체). 상세는 위 "재무 파생 지표 처리 원칙"/"완료" 백로그/Quality Gate 원칙
   섹션 참고. |
+| v2.10.0 | 2026-08-16 — Purpose 입력(`analyses.purpose_category`/`purpose_detail`, 매 요청
+  단위, 섹션 프롬프트 해석 레이어로만 주입) + Pain Diagnosis 자동 병렬화(배치5 승격, 구
+  "pain 진단 시작" 버튼/전용 엔드포인트 삭제) + 최상위 탭 3→4개 재구성(Company Intelligence/
+  Pain Diagnosis/AE Skills → 기업분석/산업별 보기/최근 조회/즐겨찾기) + 신규 산업별 보기
+  (SIC 기준 매출 Top10, `cik_master`+`financial_cache` 재사용, EDGAR 전용) + 실행 상태 카드
+  그리드(9섹션+Pain Diagnosis). 상세는 "분석 배치 구조"/"Pain 진단"/"UI/UX 원칙"/"완료"
+  백로그 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |
