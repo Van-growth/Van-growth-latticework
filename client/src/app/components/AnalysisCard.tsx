@@ -2662,6 +2662,27 @@ function CardsSkeleton({ count = 3 }: { count?: number }) {
 // 평균 industry_history 103s/tech_evolution 95s) 걸림. "pain 진단 시작" 버튼(2026-08)은
 // 이 두 섹션을 동시에 병렬 생성하므로 서버 타임아웃도 10분으로 넉넉하게 잡아뒀다 — 안내
 // 없이 스피너만 있으면 실패한 것처럼 보여 "로딩만 계속 돈다"는 오인으로 이어지기 쉬움.
+// 배치 응답은 성공(callSection() OK)으로 왔지만 hasTabData()가 실제 콘텐츠를 못 찾은 경우
+// (간헐적 Claude JSON 파싱 실패로 DEFAULT_ANALYSIS_DATA 빈 placeholder가 저장된 케이스,
+// 2026-08-15 Ford value_chain_v2 실측) 전용 — data.X 자체가 없는 "생성 전"과는 다른 상태라
+// 기존 legacy 폴백 탭(ValueChainTab 등)으로 보내지 않고 별도의 명시적 실패 안내 + 재분석
+// CTA를 보여준다. onReanalyze가 없으면(히스토리/공유 등 읽기 전용 화면) 버튼 자체를 숨긴다.
+function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: string; onReanalyze?: () => void; reanalyzeLabel?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <p className="text-sm text-gray-500 max-w-xs leading-relaxed">{message}</p>
+      {onReanalyze && (
+        <button
+          onClick={onReanalyze}
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+        >
+          {reanalyzeLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SectionGenerating({ label, suffix }: { label: string; suffix: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
@@ -3151,22 +3172,60 @@ function firstTabOfGroup(group?: 'company' | 'pain'): TabKey {
   return (group ? TABS.find(t => t.group === group)?.key : undefined) ?? 'summary';
 }
 
-// 탭 바 체크마크(✓) 전용 — TAB_BATCH(위 주석 참고, 스켈레톤 표시용일 뿐 실제 완료 순서와
-// 무관)와는 완전히 별개 판정 경로다. 체크마크는 반드시 "그 탭 데이터가 실제로
-// 존재하는가"만으로 판정한다 — 예전엔 TAB_BATCH를 재사용해서 industry_history/
-// tech_evolution 탭이 아직 생성되지도 않았는데 배치2/3 완료 즉시 ✓가 뜨는 버그가 있었다.
+// 탭 바 체크마크(✓)와 탭 콘텐츠 렌더 게이트(V2Tab vs 빈 상태 UI)가 공유하는 단일 판정
+// 함수 — TAB_BATCH(위 주석 참고, 스켈레톤 표시용일 뿐 실제 완료 순서와 무관)와는 완전히
+// 별개 판정 경로다. 예전엔 "그 탭 필드 객체가 존재하는가"(`!!data.value_chain_v2`)만
+// 봤는데, `callSection()`이 그 실행에서만 JSON 파싱에 실패하면 서버가 DEFAULT_ANALYSIS_DATA의
+// 빈 placeholder 객체(모든 배열/문자열이 비어있을 뿐 객체 자체는 존재)로 조용히 대체해
+// 저장한다 — 이 경우도 `!!`는 true라서 체크마크는 뜨는데 실제 콘텐츠는 없는 버그가
+// 있었다(2026-08-15, Ford value_chain_v2 실측 — 형제 섹션은 정상, 이 섹션만 간헐적으로
+// 빈 채로 저장됨). 서버 Quality Gate(claude.ts의 SECTION_CONTENT_SIGNALS)와 같은 계열의
+// "필드 단위로 실제 콘텐츠가 있는가" 판정이지만, 서버는 "저장 전에 이 섹션을 통째로
+// 폐기할지"를 판단하는 반면 여기는 "이미 저장된 값이 실제 콘텐츠인지 빈 placeholder인지"를
+// 판단하는 다른 용도라 필드 선정은 각 V2Tab이 실제로 렌더링하는 필드에 맞춰 별도로 정의한다.
 function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV2 | undefined): boolean {
   switch (key) {
-    case 'summary':              return !!data.summary_v2;
-    case 'industry_history':     return !!data.industry_history_v2;
-    case 'tech_evolution':       return !!data.tech_evolution_v2;
-    case 'value_chain':          return !!data.value_chain_v2;
-    case 'business_model':       return !!data.business_model_v2;
-    case 'competitors':          return !!data.competitors_v2;
-    case 'cross_industry_nudge': return !!data.cross_industry_nudge_v1;
-    case 'strategy':             return !!data.strategy_v2;
-    case 'financials':           return !!financialsV2;
-    case 'founder':              return !!data.founder_v2;
+    case 'summary': {
+      const s = data.summary_v2;
+      return !!s && !!(s.oneLiner || s.products.length || s.key_metrics.length || s.key_bullets?.length);
+    }
+    case 'industry_history': {
+      const h = data.industry_history_v2;
+      return !!h && !!(h.timeline.length || h.why_durable.length || h.chasm_points.length || h.key_bullets?.length);
+    }
+    case 'tech_evolution': {
+      const t = data.tech_evolution_v2;
+      return !!t && !!(t.stages.length || t.current_stage?.label || t.next_inflection?.label || t.key_bullets?.length);
+    }
+    case 'value_chain': {
+      const vc = data.value_chain_v2;
+      return !!vc && !!(vc.layers.length || vc.value_flow.length || vc.key_bullets?.length);
+    }
+    case 'business_model': {
+      const bm = data.business_model_v2;
+      return !!bm && !!(bm.revenue_streams.length || bm.segments.length || bm.moat.length || bm.growth_motion_detail || bm.key_bullets?.length);
+    }
+    case 'competitors': {
+      const c = data.competitors_v2;
+      return !!c && !!(c.direct.length || c.indirect.length || c.substitutes.length || c.key_bullets?.length);
+    }
+    case 'cross_industry_nudge': {
+      const n = data.cross_industry_nudge_v1;
+      return !!n && !!(n.industry_pain?.title || n.cross_industry_example?.case_name || n.key_bullets?.length);
+    }
+    case 'strategy': {
+      const s = data.strategy_v2;
+      return !!s && !!(
+        s.strategy_coherence || s.corporate?.direction || s.business?.direction || s.financial?.direction ||
+        s.ten_year_durability?.length || s.key_bullets?.length
+      );
+    }
+    case 'financials':
+      return !!financialsV2 && !!(financialsV2.income_statement.length || financialsV2.balance_sheet.length || financialsV2.key_bullets?.length);
+    case 'founder': {
+      const f = data.founder_v2;
+      return !!f && !!(f.founders.length || f.career_trajectory.length || f.key_bullets?.length);
+    }
     case 'growth_scenario':      return !!data.growth_scenario_v2;
     // ICP 인사이트는 analyses 행이 아니라 별도 icp_insights 테이블/유저별 결과라
     // 탭 체크마크의 "배치 완료" 개념이 애초에 적용되지 않는다 — 항상 미체크.
@@ -3412,13 +3471,17 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
         {tab === 'summary' && (
           !batchDone(TAB_BATCH.summary) ? <SummarySkeleton /> :
           data.summary_v2
-            ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => startTransition(() => setTab(key as TabKey))} />
+            ? (hasTabData('summary', data, financialsV2Local)
+                ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => startTransition(() => setTab(key as TabKey))} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('summary') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <SummaryTab data={data} />
         )}
         {tab === 'cross_industry_nudge' && (
           (isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <CardsSkeleton count={2} /> :
           data.cross_industry_nudge_v1
-            ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
+            ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
+                ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('nudge')}<p className="text-sm text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>
         )}
         {/* industry_history/tech_evolution: 2026-08부터 배치와 무관 — "pain 진단 시작" 버튼
@@ -3474,43 +3537,55 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
         {tab === 'value_chain' && (
           (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :
           data.value_chain_v2
-            ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
+            ? (hasTabData('value_chain', data, financialsV2Local)
+                ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('value_chain') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('value_chain')}<ValueChainTab data={data} /></>
         )}
         {tab === 'business_model' && (
           (isReanalyzing('business_model') || !batchDone(TAB_BATCH.business_model)) ? <CardsSkeleton count={3} /> :
           data.business_model_v2
-            ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
+            ? (hasTabData('business_model', data, financialsV2Local)
+                ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('business_model') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('business_model')}<BusinessModelTab data={data} /></>
         )}
         {tab === 'competitors' && (
           (isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <CardsSkeleton count={4} /> :
           data.competitors_v2
-            ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} dataSource={data.dataSource} />
+            ? (hasTabData('competitors', data, financialsV2Local)
+                ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} dataSource={data.dataSource} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('competitors') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>
         )}
         {tab === 'strategy' && (
           (isReanalyzing('strategy') || !batchDone(TAB_BATCH.strategy)) ? <CardsSkeleton count={3} /> :
           data.strategy_v2
-            ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
+            ? (hasTabData('strategy', data, financialsV2Local)
+                ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('strategy') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('strategy')}<StrategyTab data={data} /></>
         )}
         {tab === 'financials' && (
           (isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <TableSkeleton rows={5} cols={7} /> :
           financialsV2Local
-            ? <FinancialsV2Tab
-                f={financialsV2Local}
-                sources={financialsV2Local.sources ?? data.sources?.financials}
-                onRefresh={handleRefreshFinancials}
-                isRefreshing={refreshingFinancials}
-                dataSource={data.dataSource}
-              />
+            ? (hasTabData('financials', data, financialsV2Local)
+                ? <FinancialsV2Tab
+                    f={financialsV2Local}
+                    sources={financialsV2Local.sources ?? data.sources?.financials}
+                    onRefresh={handleRefreshFinancials}
+                    isRefreshing={refreshingFinancials}
+                    dataSource={data.dataSource}
+                  />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('financials') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>
         )}
         {tab === 'founder' && (
           (isReanalyzing('founder') || !batchDone(TAB_BATCH.founder)) ? <FounderSkeleton /> :
           data.founder_v2
-            ? <FounderV2Tab f={data.founder_v2} />
+            ? (hasTabData('founder', data, financialsV2Local)
+                ? <FounderV2Tab f={data.founder_v2} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('founder') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('founder')}<p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>
         )}
         {tab === 'growth_scenario' && (

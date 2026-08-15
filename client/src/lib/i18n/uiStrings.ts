@@ -135,6 +135,7 @@ interface UiStringDict {
     copied: string;
     sectionGeneratingSuffix: string;
     painDiagnosisIntro: string;
+    sectionFailedEmpty: string;
   };
   benchmarkChart: {
     thisCompany: string;
@@ -323,6 +324,7 @@ const ko: UiStringDict = {
     copied: '복사됨',
     sectionGeneratingSuffix: ' 생성 중... (최대 10분 정도 소요될 수 있어요)',
     painDiagnosisIntro: '산업 역사와 기술 변화를 함께 진단해요.\n약 7~10분 소요될 수 있어요.',
+    sectionFailedEmpty: '이 섹션은 생성에 실패했습니다. 재분석을 시도해보세요.',
   },
   benchmarkChart: {
     thisCompany: '이 회사',
@@ -521,6 +523,7 @@ const en: UiStringDict = {
     copied: 'Copied',
     sectionGeneratingSuffix: ' generating... (can take up to 10 minutes)',
     painDiagnosisIntro: 'We diagnose industry history and tech evolution together.\nThis can take about 7-10 minutes.',
+    sectionFailedEmpty: 'This section failed to generate. Try re-analyzing it.',
   },
   benchmarkChart: {
     thisCompany: 'This company',
