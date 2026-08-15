@@ -1654,7 +1654,7 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
     setResult(prev => (prev ? { ...prev, rating, rating_comment: comment } : prev));
   }, [setResult]);
 
-  if (status === 'loading') return <CardsSkeleton count={3} />;
+  if (status === 'loading') return <SectionGenerating label={uiT.tabs.icp_insight.label} suffix={uiT.actions.sectionGeneratingSuffixShort} />;
 
   if (!result) {
     return (
@@ -2622,46 +2622,6 @@ function ShowMore({ children, label = '더 보기' }: { children: React.ReactNod
   );
 }
 
-// ── Skeleton components ───────────────────────────────────────────────────────
-
-function Sk({ w = 'w-full', h = 'h-4' }: { w?: string; h?: string }) {
-  return <div className={`skeleton ${w} ${h}`} />;
-}
-
-function SummarySkeleton() {
-  return (
-    <div className="space-y-4">
-      <Sk h="h-14" />
-      <div className="grid grid-cols-2 gap-2">
-        {[0,1,2,3].map(i => <Sk key={i} h="h-16" />)}
-      </div>
-      <Sk h="h-24" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Sk h="h-20" />
-        <Sk h="h-20" />
-      </div>
-    </div>
-  );
-}
-
-function CardsSkeleton({ count = 3 }: { count?: number }) {
-  return (
-    <div className="space-y-4">
-      <Sk h="h-14" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {Array.from({ length: count }).map((_, i) => <Sk key={i} h="h-32" />)}
-      </div>
-      <Sk h="h-20" />
-    </div>
-  );
-}
-
-// 온디맨드 섹션 생성 중 표시 — 배치 스트리밍 스켈레톤(CardsSkeleton 등)과 달리
-// "지금 이 요청으로 생성 중"임을 명시적으로 알림 (financials 새로고침과 동일한 패턴).
-// 예상 소요시간 안내 — 웹서치 2회 + Claude 생성이 포함돼 실제로 90~106초(3개 기업 실측
-// 평균 industry_history 103s/tech_evolution 95s) 걸림. "pain 진단 시작" 버튼(2026-08)은
-// 이 두 섹션을 동시에 병렬 생성하므로 서버 타임아웃도 10분으로 넉넉하게 잡아뒀다 — 안내
-// 없이 스피너만 있으면 실패한 것처럼 보여 "로딩만 계속 돈다"는 오인으로 이어지기 쉬움.
 // 배치 응답은 성공(callSection() OK)으로 왔지만 hasTabData()가 실제 콘텐츠를 못 찾은 경우
 // (간헐적 Claude JSON 파싱 실패로 DEFAULT_ANALYSIS_DATA 빈 placeholder가 저장된 케이스,
 // 2026-08-15 Ford value_chain_v2 실측) 전용 — data.X 자체가 없는 "생성 전"과는 다른 상태라
@@ -2683,6 +2643,17 @@ function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: 
   );
 }
 
+// 섹션 로딩 UI 공통 컴포넌트 — 배치 스트리밍(최초 생성)/탭별 재분석/온디맨드 생성(pain
+// 진단)/ICP 인사이트 생성 전부 이 하나로 통일한다(2026-08-15, "산업역사 탭만 스피너+예상
+// 소요시간, 나머지는 스켈레톤 shimmer"였던 불일치 해소 — 예전엔 SummarySkeleton/
+// CardsSkeleton/TableSkeleton/FounderSkeleton 4종이 섹션마다 제각각 있었으나 전부 이
+// 컴포넌트로 대체되어 삭제됨). 스켈레톤(콘텐츠 모양을 흉내낸 shimmer)과 달리 "지금 이
+// 요청으로 실제 생성 중"임을 명시적으로 알리고, suffix로 기대 대기시간을 안내해 "로딩만
+// 계속 돈다"는 오인을 방지한다(financials 새로고침 버튼과 동일한 철학). suffix는 트리거
+// 종류별 실측 소요시간에 맞춰 나눈다 — 배치 스트리밍/탭별 재분석/ICP 인사이트는 서버
+// 타임아웃이 각각 75s/90s대(BATCH_TIMEOUT/DISCOVERY_QUESTION_TIMEOUT)라
+// sectionGeneratingSuffixShort("최대 1~2분")를, pain 진단(산업역사·기술변화 동시 생성,
+// 10분 타임아웃, 실측 90~106초)만 기존 sectionGeneratingSuffix("최대 10분")를 그대로 쓴다.
 function SectionGenerating({ label, suffix }: { label: string; suffix: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
@@ -2707,47 +2678,6 @@ function PainDiagnosisStart({ onStart, intro, startLabel }: { onStart: () => voi
       >
         {startLabel}
       </button>
-    </div>
-  );
-}
-
-function TableSkeleton({ rows = 5, cols = 6 }: { rows?: number; cols?: number }) {
-  const tpl = `2fr ${Array(cols - 1).fill('1fr').join(' ')}`;
-  return (
-    <div className="space-y-4">
-      <Sk h="h-14" />
-      <div style={{ display: 'grid', gridTemplateColumns: tpl, gap: '8px' }}>
-        {Array.from({ length: cols }).map((_, i) => <Sk key={i} h="h-3" />)}
-      </div>
-      {Array.from({ length: rows }).map((_, r) => (
-        <div key={r} style={{ display: 'grid', gridTemplateColumns: tpl, gap: '8px' }}>
-          {Array.from({ length: cols }).map((_, i) => <Sk key={i} h="h-4" />)}
-        </div>
-      ))}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
-        {[0,1,2,3].map(i => <Sk key={i} h="h-16" />)}
-      </div>
-    </div>
-  );
-}
-
-function FounderSkeleton() {
-  return (
-    <div className="space-y-4">
-      <Sk h="h-14" />
-      <div className="grid grid-cols-2 gap-3">
-        <Sk h="h-24" />
-        <Sk h="h-24" />
-      </div>
-      {[0,1,2,3].map(i => (
-        <div key={i} className="flex gap-4">
-          <Sk w="w-10 shrink-0" h="h-10" />
-          <div className="flex-1 space-y-1.5 pt-1">
-            <Sk w="w-1/2" />
-            <Sk w="w-1/3" h="h-3" />
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -3142,7 +3072,7 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
-// 콘텐츠 패널의 초기 스켈레톤(CardsSkeleton/TableSkeleton 등) 표시 여부 판정 전용
+// 콘텐츠 패널의 초기 로딩 UI(SectionGenerating) 표시 여부 판정 전용
 // (아래 batchDone()에서만 사용). 탭 바 체크마크(✓)는 이 값을 안 쓰고 hasTabData()로
 // 판정한다 — 혼동 금지.
 //
@@ -3469,7 +3399,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
       {/* Tab content — only active tab is mounted */}
       <div className="p-5 bg-gray-50 min-h-[300px]">
         {tab === 'summary' && (
-          !batchDone(TAB_BATCH.summary) ? <SummarySkeleton /> :
+          !batchDone(TAB_BATCH.summary) ? <SectionGenerating label={uiT.tabs.summary.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.summary_v2
             ? (hasTabData('summary', data, financialsV2Local)
                 ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => startTransition(() => setTab(key as TabKey))} />
@@ -3477,7 +3407,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
             : <SummaryTab data={data} />
         )}
         {tab === 'cross_industry_nudge' && (
-          (isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <CardsSkeleton count={2} /> :
+          (isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <SectionGenerating label={uiT.tabs.cross_industry_nudge.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.cross_industry_nudge_v1
             ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
                 ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
@@ -3535,7 +3465,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
               />
         )}
         {tab === 'value_chain' && (
-          (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <CardsSkeleton count={4} /> :
+          (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <SectionGenerating label={uiT.tabs.value_chain.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.value_chain_v2
             ? (hasTabData('value_chain', data, financialsV2Local)
                 ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
@@ -3543,7 +3473,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
             : <>{reanalyzeBtn('value_chain')}<ValueChainTab data={data} /></>
         )}
         {tab === 'business_model' && (
-          (isReanalyzing('business_model') || !batchDone(TAB_BATCH.business_model)) ? <CardsSkeleton count={3} /> :
+          (isReanalyzing('business_model') || !batchDone(TAB_BATCH.business_model)) ? <SectionGenerating label={uiT.tabs.business_model.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.business_model_v2
             ? (hasTabData('business_model', data, financialsV2Local)
                 ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
@@ -3551,7 +3481,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
             : <>{reanalyzeBtn('business_model')}<BusinessModelTab data={data} /></>
         )}
         {tab === 'competitors' && (
-          (isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <CardsSkeleton count={4} /> :
+          (isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <SectionGenerating label={uiT.tabs.competitors.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.competitors_v2
             ? (hasTabData('competitors', data, financialsV2Local)
                 ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} dataSource={data.dataSource} />
@@ -3559,7 +3489,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
             : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>
         )}
         {tab === 'strategy' && (
-          (isReanalyzing('strategy') || !batchDone(TAB_BATCH.strategy)) ? <CardsSkeleton count={3} /> :
+          (isReanalyzing('strategy') || !batchDone(TAB_BATCH.strategy)) ? <SectionGenerating label={uiT.tabs.strategy.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.strategy_v2
             ? (hasTabData('strategy', data, financialsV2Local)
                 ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
@@ -3567,7 +3497,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
             : <>{reanalyzeBtn('strategy')}<StrategyTab data={data} /></>
         )}
         {tab === 'financials' && (
-          (isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <TableSkeleton rows={5} cols={7} /> :
+          (isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <SectionGenerating label={uiT.tabs.financials.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           financialsV2Local
             ? (hasTabData('financials', data, financialsV2Local)
                 ? <FinancialsV2Tab
@@ -3581,7 +3511,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
             : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>
         )}
         {tab === 'founder' && (
-          (isReanalyzing('founder') || !batchDone(TAB_BATCH.founder)) ? <FounderSkeleton /> :
+          (isReanalyzing('founder') || !batchDone(TAB_BATCH.founder)) ? <SectionGenerating label={uiT.tabs.founder.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.founder_v2
             ? (hasTabData('founder', data, financialsV2Local)
                 ? <FounderV2Tab f={data.founder_v2} />
@@ -3590,7 +3520,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
         )}
         {tab === 'growth_scenario' && (
           !isPremium ? <GrowthScenarioLocked /> :
-          !batchDone(TAB_BATCH.growth_scenario) ? <CardsSkeleton count={3} /> :
+          !batchDone(TAB_BATCH.growth_scenario) ? <SectionGenerating label={uiT.tabs.growth_scenario.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.growth_scenario_v2
             ? <GrowthScenarioV2Tab g={data.growth_scenario_v2} />
             : <p className="text-sm text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>

@@ -509,7 +509,7 @@ export default function HomeContent() {
     setRateLimitInfo(null);
     setSelectedCompany(null);
     setResolveResult(null);
-    setCompletedBatches(new Set([-1])); // sentinel: streaming started, no batch done yet → all tabs show skeleton
+    setCompletedBatches(new Set([-1])); // sentinel: streaming started, no batch done yet → all tabs show SectionGenerating
     streamingRef.current = null;
     analysisIdRef.current = null;
     analysisDoneRef.current = false;
@@ -765,7 +765,7 @@ export default function HomeContent() {
   }
 
   // Phase 1: batch 1 (summary) not yet done → show loading screen
-  // Phase 2: batch 1 done → show card (summary real, others skeleton)
+  // Phase 2: batch 1 done → show card (summary real, others show SectionGenerating)
   const phase1 = loading && completedBatches.has(-1) && !completedBatches.has(1);
   const showCard = result ?? (loading && completedBatches.has(1) ? (displayData ?? emptyBase(companyName.trim())) : null);
 
