@@ -380,9 +380,9 @@ export interface CrossIndustryNudgeV1 {
 
 export interface AnalysisData {
   summary_v2: SummaryV2;
-  // 온디맨드 전환(2026-07) — 초기 배치에서 생성하지 않음. null이면 "아직 생성 안 됨"을 의미하며
-  // 프론트가 "pain 진단 시작" 버튼 클릭 시 /api/analyze/:id/pain-diagnosis로 그때 생성함
-  // (2026-08 — 기존 탭별 자동생성 방식에서 명시적 버튼 트리거 방식으로 전환).
+  // 2026-08-16부터 배치5로 승격되어 9개 섹션과 동일하게 병렬 생성됨(구 "pain 진단 시작"
+  // 버튼 온디맨드 트리거는 제거됨). null은 여전히 initialData로 캐시된 값이 없을 때의
+  // 초기 상태를 의미 — 타입은 다른 섹션과의 호환을 위해 유지.
   industry_history_v2: IndustryHistoryV2 | null;
   tech_evolution_v2: TechEvolutionV2 | null;
   value_chain_v2: ValueChainV2;
@@ -1180,16 +1180,15 @@ export async function analyzeCompany(
     // 덮어쓰는 데 사용(overrideFinancialsTable) — 없으면 Claude 결과를 그대로 둔다.
     rawEdgar?: EdgarRawSeries | null;
     rawDart?: DartRawSeries | null;
+    // 분석 요청마다 입력받는 목적(매 요청 단위, financial_cache 캐시 키에는 미포함) — 각 섹션
+    // 프롬프트 컨텍스트에 해석 레이어로만 얹는다. 톤 분기 로직은 없음(주입 배관만).
+    purposeCategory?: string;
+    purposeDetail?: string;
   },
 ): Promise<AnalysisData> {
   const language: Language = opts?.language ?? 'en';
   const skip = opts?.skipBatches ?? new Set<number>();
   const result: AnalysisData = { ...DEFAULT_ANALYSIS_DATA, ...(opts?.initialData ?? {}) };
-  // industry_history_v2/tech_evolution_v2는 배치2/3에서 더 이상 생성하지 않음(온디맨드 전환) —
-  // 캐시(initialData)로 이미 채워진 게 아니라면 DEFAULT_ANALYSIS_DATA의 빈 placeholder 대신
-  // null을 명시해야 프론트가 "생성됨(빈 데이터)"이 아니라 "아직 생성 안 됨"으로 인식한다.
-  if (!opts?.initialData?.industry_history_v2) result.industry_history_v2 = null;
-  if (!opts?.initialData?.tech_evolution_v2)   result.tech_evolution_v2   = null;
 
   const BATCH_TIMEOUT = 75_000;
 
@@ -1197,11 +1196,12 @@ export async function analyzeCompany(
     batchNum: number,
     makeRunners: () => Promise<any>[],
     merge: (vals: any[]) => Partial<AnalysisData>,
+    timeoutMs: number = BATCH_TIMEOUT,
   ): Promise<void> {
     if (skip.has(batchNum)) return;
     const t = Date.now();
     try {
-      const vals = await withTimeout(Promise.all(makeRunners()), BATCH_TIMEOUT, `batch${batchNum}`);
+      const vals = await withTimeout(Promise.all(makeRunners()), timeoutMs, `batch${batchNum}`);
       console.log(`[claude] batch${batchNum} OK ${Date.now() - t}ms`);
       const data = merge(vals);
       Object.assign(result, data);
@@ -1217,10 +1217,17 @@ export async function analyzeCompany(
   const research1 = await gatherResearch1(companyName);
   console.log(`[claude] gatherResearch1 done ${Date.now() - t0}ms`);
 
+  // 유저가 매 분석 요청마다 입력하는 목적 — 리서치 단계(gatherResearch1/2)는 language 정책과
+  // 동일하게 purpose-agnostic으로 두고, synthesis 단계(callSection) 컨텍스트에만 반영한다.
+  const purposeBlock = opts?.purposeCategory
+    ? `\n[User's stated purpose]\n${opts.purposeCategory}: ${opts.purposeDetail ?? ''}`.trim()
+    : null;
+
   const phase1Context = [
     `Company: ${companyName}`,
     financialContext ? `\n[Disclosed data — prioritize these figures]\n${financialContext}` : null,
     `\n[Web research — basic info]\n${research1}`,
+    purposeBlock,
   ].filter(Boolean).join('\n');
 
   // ── Batch 1 (summary) + Phase 2 research 병렬 실행 ────────────────────────────
@@ -1242,16 +1249,18 @@ export async function analyzeCompany(
     financialContext ? `\n[Disclosed data — prioritize these figures]\n${financialContext}` : null,
     `\n[Web research — basic info]\n${research1}`,
     `\n[Web research — detailed info]\n${research2}`,
+    purposeBlock,
   ].filter(Boolean).join('\n');
 
-  // Batch 2-4 병렬 실행 — sharedContext 공유, 완료 순서대로 즉시 SSE 전송
+  // Batch 2-5 병렬 실행 — sharedContext 공유, 완료 순서대로 즉시 SSE 전송
   // 각 runBatch는 완료 즉시 onBatch → send('batch') 호출 → 탭 순차 채워짐
   // financial_cache 히트 시 batch3(financials)가 가장 먼저 완료될 수 있음
   const cachedFin = opts?.cachedFinancials;
-  // 2026-08 재편: industry_history_v2/tech_evolution_v2를 "pain 진단 시작" 버튼 트리거
-  // 온디맨드 엔드포인트(POST /api/analyze/:id/pain-diagnosis)로 완전히 분리하면서 배치가
-  // 2/3/4 세 개로 줄었다 — founder_v2(구 배치5)는 sources와 함께 배치4로, financials_v2는
-  // value_chain_v2/strategy_v2와 함께 배치3으로 재배치.
+  // founder_v2는 sources와 함께 배치4로, financials_v2는 value_chain_v2/strategy_v2와 함께
+  // 배치3으로 배치. industry_history_v2/tech_evolution_v2(Pain Diagnosis)는 2026-08-16부터
+  // "pain 진단 시작" 버튼 온디맨드 트리거를 제거하고 배치5로 승격 — 다른 9개 섹션과 동일하게
+  // 처음부터 병렬 실행된다. 다만 실측 소요시간(90~106초)이 나머지 배치의 75초 타임아웃보다
+  // 길어 배치5만 별도 타임아웃(180초)을 준다.
   await Promise.all([
     runBatch(2,
       () => [
@@ -1350,6 +1359,17 @@ export async function analyzeCompany(
         sources:    src ?? DEFAULT_ANALYSIS_DATA.sources,
       }),
     ),
+    runBatch(5,
+      () => [
+        callSection<IndustryHistoryV2>(sharedContext, 'industry_history_v2', language),
+        callSection<TechEvolutionV2>(sharedContext, 'tech_evolution_v2', language),
+      ],
+      ([ih, te]) => ({
+        industry_history_v2: ih ?? DEFAULT_ANALYSIS_DATA.industry_history_v2,
+        tech_evolution_v2:   te ?? DEFAULT_ANALYSIS_DATA.tech_evolution_v2,
+      }),
+      180_000,
+    ),
   ]);
 
   // ── Golden Set 검증 (전체 배치 완료 후 1회) ───────────────────────────────
@@ -1368,8 +1388,8 @@ export async function analyzeCompany(
   if (!hasAnySources) {
     console.warn(`[golden-set] sources 전체 비어있음`);
   }
-  // industry_history_v2/tech_evolution_v2는 온디맨드 전환으로 초기 분석에서 항상 null이라
-  // "실패"가 아니므로 golden-set 빈 섹션 카운트에서 제외.
+  // industry_history_v2/tech_evolution_v2가 2026-08-16부터 배치5로 표준화되어 다른 섹션과
+  // 동일하게 실패 감지 대상에 포함(이전엔 온디맨드라 항상 null이라 제외했었음).
   const emptySectionCount = [
     result.value_chain_v2.layers.length === 0,
     result.business_model_v2.revenue_streams.length === 0,
@@ -1377,6 +1397,8 @@ export async function analyzeCompany(
     result.strategy_v2.corporate.direction === '',
     result.financials_v2.income_statement.length === 0,
     result.founder_v2.founders.length === 0,
+    !result.industry_history_v2?.timeline.length,
+    !result.tech_evolution_v2?.stages.length,
   ].filter(Boolean).length;
   if (emptySectionCount >= 4) {
     console.warn(`[golden-set] ⚠️ ${emptySectionCount}개 섹션 데이터 없음 — 전체 분석 실패 가능성`);
@@ -1394,6 +1416,7 @@ export async function reanalyzeSingleSection(
   financialContext?: string,
   language: Language = 'en',
   rawFinancials?: { rawEdgar?: EdgarRawSeries | null; rawDart?: DartRawSeries | null },
+  purpose?: { purposeCategory?: string | null; purposeDetail?: string | null },
 ): Promise<any> {
   if (sectionKey === 'founder_v2') {
     return callFounderSection(companyName, language);
@@ -1407,11 +1430,15 @@ export async function reanalyzeSingleSection(
     gatherResearch1(companyName),
     gatherResearch2(companyName),
   ]);
+  const purposeBlock = purpose?.purposeCategory
+    ? `\n[User's stated purpose]\n${purpose.purposeCategory}: ${purpose.purposeDetail ?? ''}`.trim()
+    : null;
   const context = [
     `Company: ${companyName}`,
     financialContext ? `\n[Disclosed data — prioritize these figures]\n${financialContext}` : null,
     `\n[Web research — basic info]\n${research1}`,
     `\n[Web research — detailed info]\n${research2}`,
+    purposeBlock,
   ].filter(Boolean).join('\n');
   const result = await callSection(context, sectionKey, language);
   if (sectionKey === 'financials_v2' && rawFinancials) {

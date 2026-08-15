@@ -1601,8 +1601,8 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
   session: Session | null;
   signInWithGoogle: () => Promise<void>;
   uiT: ReturnType<typeof getUiStrings>;
-  // 결과/상태는 AnalysisCardInner에 끌어올려져 있다(painDiagnosisStarted와 동일 패턴) —
-  // 탭 전환으로 이 컴포넌트가 언마운트/재마운트돼도 값이 유지되도록. 2026-08-15.
+  // 결과/상태는 AnalysisCardInner에 끌어올려져 있다 — 탭 전환으로 이 컴포넌트가
+  // 언마운트/재마운트돼도 값이 유지되도록. 2026-08-15.
   result: IcpInsightResponse | null;
   setResult: Dispatch<SetStateAction<IcpInsightResponse | null>>;
   status: 'idle' | 'loading' | 'error';
@@ -2666,41 +2666,20 @@ function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: 
   );
 }
 
-// 섹션 로딩 UI 공통 컴포넌트 — 배치 스트리밍(최초 생성)/탭별 재분석/온디맨드 생성(pain
-// 진단)/ICP 인사이트 생성 전부 이 하나로 통일한다(2026-08-15, "산업역사 탭만 스피너+예상
-// 소요시간, 나머지는 스켈레톤 shimmer"였던 불일치 해소 — 예전엔 SummarySkeleton/
-// CardsSkeleton/TableSkeleton/FounderSkeleton 4종이 섹션마다 제각각 있었으나 전부 이
-// 컴포넌트로 대체되어 삭제됨). 스켈레톤(콘텐츠 모양을 흉내낸 shimmer)과 달리 "지금 이
-// 요청으로 실제 생성 중"임을 명시적으로 알리고, suffix로 기대 대기시간을 안내해 "로딩만
-// 계속 돈다"는 오인을 방지한다(financials 새로고침 버튼과 동일한 철학). suffix는 트리거
-// 종류별 실측 소요시간에 맞춰 나눈다 — 배치 스트리밍/탭별 재분석/ICP 인사이트는 서버
-// 타임아웃이 각각 75s/90s대(BATCH_TIMEOUT/DISCOVERY_QUESTION_TIMEOUT)라
-// sectionGeneratingSuffixShort("최대 1~2분")를, pain 진단(산업역사·기술변화 동시 생성,
-// 10분 타임아웃, 실측 90~106초)만 기존 sectionGeneratingSuffix("최대 10분")를 그대로 쓴다.
+// 섹션 로딩 UI 공통 컴포넌트 — 배치 스트리밍(최초 생성)/탭별 재분석/ICP 인사이트 생성
+// 전부 이 하나로 통일한다(2026-08-15, "산업역사 탭만 스피너+예상 소요시간, 나머지는
+// 스켈레톤 shimmer"였던 불일치 해소 — 예전엔 SummarySkeleton/CardsSkeleton/TableSkeleton/
+// FounderSkeleton 4종이 섹션마다 제각각 있었으나 전부 이 컴포넌트로 대체되어 삭제됨).
+// 스켈레톤(콘텐츠 모양을 흉내낸 shimmer)과 달리 "지금 이 요청으로 실제 생성 중"임을
+// 명시적으로 알리고, suffix로 기대 대기시간을 안내해 "로딩만 계속 돈다"는 오인을
+// 방지한다(financials 새로고침 버튼과 동일한 철학). 배치5(Pain Diagnosis 포함)가 2026-08-16
+// 부터 다른 배치와 동일하게 병렬 실행되면서 모든 섹션이 sectionGeneratingSuffixShort
+// ("최대 1~2분")로 통일됨.
 function SectionGenerating({ label, suffix }: { label: string; suffix: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
       <RefreshCw size={20} className="animate-spin" />
       <span className="text-sm">{label}{suffix}</span>
-    </div>
-  );
-}
-
-// "pain 진단 시작" CTA — industry_history_v2/tech_evolution_v2는 탭 열람만으론 생성되지
-// 않고(2026-08, 기존 탭별 자동생성 방식 대체), 이 버튼 클릭 1번으로 두 섹션이 함께 생성된다.
-function PainDiagnosisStart({ onStart, intro, startLabel }: { onStart: () => void; intro: string; startLabel: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-      <Lightbulb size={20} className="text-amber-400" />
-      <p className="text-sm text-gray-500 max-w-xs leading-relaxed whitespace-pre-line">
-        {intro}
-      </p>
-      <button
-        onClick={onStart}
-        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
-      >
-        {startLabel}
-      </button>
     </div>
   );
 }
@@ -3099,10 +3078,9 @@ type TabKey = (typeof TABS)[number]['key'];
 // (아래 batchDone()에서만 사용). 탭 바 체크마크(✓)는 이 값을 안 쓰고 hasTabData()로
 // 판정한다 — 혼동 금지.
 //
-// industry_history/tech_evolution은 2026-08부터 배치와 완전히 무관해졌다("pain 진단 시작"
-// 버튼 전용 온디맨드) — 아래 숫자는 이제 어떤 스켈레톤 판정에도 쓰이지 않는 vestigial 값(타입
-// 완결성 때문에 Record<TabKey, number>에 키는 남겨둠). 실제 렌더링은 하단 tab content에서
-// batchDone을 아예 거치지 않고 data 존재/isReanalyzing만으로 분기한다.
+// industry_history/tech_evolution(Pain Diagnosis)은 2026-08-16부터 배치5로 승격되어
+// 다른 8개 섹션과 동일하게 batchDone 기반 스켈레톤 판정을 받는다(구 "pain 진단 시작"
+// 버튼 온디맨드 트리거는 제거됨).
 const TAB_BATCH: Record<TabKey, number> = {
   summary:              1,
   business_model:       2,
@@ -3113,8 +3091,8 @@ const TAB_BATCH: Record<TabKey, number> = {
   financials:           40,
   founder:              4,
   growth_scenario:      6,
-  industry_history:     0,
-  tech_evolution:       0,
+  industry_history:     5,
+  tech_evolution:       5,
   icp_insight:          0,
 };
 
@@ -3136,7 +3114,7 @@ function firstTabOfGroup(group?: 'company' | 'pain'): TabKey {
 // "필드 단위로 실제 콘텐츠가 있는가" 판정이지만, 서버는 "저장 전에 이 섹션을 통째로
 // 폐기할지"를 판단하는 반면 여기는 "이미 저장된 값이 실제 콘텐츠인지 빈 placeholder인지"를
 // 판단하는 다른 용도라 필드 선정은 각 V2Tab이 실제로 렌더링하는 필드에 맞춰 별도로 정의한다.
-function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV2 | undefined): boolean {
+export function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: FinancialsV2 | undefined): boolean {
   switch (key) {
     case 'summary': {
       const s = data.summary_v2;
@@ -3437,32 +3415,24 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, onPainDiagnosis
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('nudge')}<p className="text-sm text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>
         )}
-        {/* industry_history/tech_evolution: 2026-08부터 배치와 무관 — "pain 진단 시작" 버튼
-            클릭 1번으로 둘 다 동시 생성된다. batchDone 게이트 없이 data 존재/reanalyzing
-            상태로만 분기(카드 자체가 batch1 완료 후에만 마운트되므로 별도 스켈레톤 불필요). */}
+        {/* industry_history/tech_evolution(Pain Diagnosis): 2026-08-16부터 배치5로
+            승격되어 다른 8개 배치 섹션과 동일한 batchDone/hasTabData/EmptySectionState
+            패턴을 쓴다(구 "pain 진단 시작" 버튼 온디맨드 트리거는 제거됨). */}
         {tab === 'industry_history' && (
+          (isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.industry_history_v2
-            ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
-            : (isReanalyzing('industry') || isReanalyzing('tech'))
-              ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffix} />
-              : !onPainDiagnosisStart
-                // 히스토리/공유 링크 등 읽기 전용 화면 — 버튼을 눌러도 아무 요청도 안 나가면서
-                // "결과를 불러오지 못했다"는 오해성 실패 메시지만 뜨는 걸 방지(2026-08-12 발견).
-                ? <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
-                : painDiagnosisStarted
-                  ? <>{reanalyzeBtn('industry')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
-                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} intro={uiT.actions.painDiagnosisIntro} startLabel={uiT.actions.startPainDiagnosis} />
+            ? (hasTabData('industry_history', data, financialsV2Local)
+                ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('industry') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+            : <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
         )}
         {tab === 'tech_evolution' && (
+          (isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.tech_evolution_v2
-            ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
-            : (isReanalyzing('industry') || isReanalyzing('tech'))
-              ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffix} />
-              : !onPainDiagnosisStart
-                ? <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
-                : painDiagnosisStarted
-                  ? <>{reanalyzeBtn('tech')}<p className="text-sm text-gray-500 py-4 text-center">진단 결과를 불러오지 못했어요.</p></>
-                  : <PainDiagnosisStart onStart={handlePainDiagnosisClick} intro={uiT.actions.painDiagnosisIntro} startLabel={uiT.actions.startPainDiagnosis} />
+            ? (hasTabData('tech_evolution', data, financialsV2Local)
+                ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('tech') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+            : <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
         )}
         {/* ICP 인사이트: 다른 온디맨드 탭과 달리 analyses 행에 결과를 저장하지 않고
             별도 icp_insights 테이블로 관리 — batchDone/painDiagnosisStarted 게이트를

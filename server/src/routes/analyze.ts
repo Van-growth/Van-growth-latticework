@@ -23,6 +23,9 @@ import { resolveAuthUser } from '../lib/authUser';
 
 const router = Router();
 
+// 분석 요청 시 입력받는 목적 카테고리 — analyses.purpose_category CHECK 제약과 동일한 값 셋.
+const PURPOSE_CATEGORIES = ['ma', 'investment', 'partnership', 'customer', 'other'];
+
 // company_id로 상장 정보 조회 — 다중상장 회사(EDGAR+DART 둘 다 있음)면
 // fetchFinancialContext가 이름 휴리스틱 대신 이 identifier로 직접 조회한다.
 async function fetchCompanyListings(companyId: string | undefined): Promise<CompanyListingRef[] | undefined> {
@@ -356,9 +359,6 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
       summary_v2: data.summary_v2 ?? null,
       summary:    data.summary_v2?.key_bullets?.join(' | ') ?? '',
     };
-    // industry_history_v2/tech_evolution_v2는 어떤 배치로도 생성하지 않음(온디맨드 전환) —
-    // 여기서 필드를 포함하면 이미 온디맨드로 생성돼 있던 값을 배치 재실행 시 null로 덮어쓰게 되므로
-    // 아예 건드리지 않는다(별도 소유자: POST /api/analyze/:id/pain-diagnosis).
     case 2: return {
       business_model_v2:       data.business_model_v2       ?? null,
       competitors_v2:          data.competitors_v2           ?? null,
@@ -373,6 +373,12 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
     case 4: return {
       founder_v2: data.founder_v2 ?? null,
       sources:    data.sources    ?? {},
+    };
+    // 2026-08-16부터 industry_history_v2/tech_evolution_v2(Pain Diagnosis)가 배치5로
+    // 승격되어 다른 배치와 동일하게 저장된다(구 온디맨드 전용 엔드포인트는 삭제됨).
+    case 5: return {
+      industry_history_v2: data.industry_history_v2 ?? null,
+      tech_evolution_v2:   data.tech_evolution_v2    ?? null,
     };
     default: return {};
   }
@@ -565,7 +571,10 @@ router.post('/stream', async (req: Request, res: Response) => {
     return;
   }
 
-  const { companyName, companyId, forceRefresh, sectorTag, baseRevenue, language: rawLanguage } = req.body as {
+  const {
+    companyName, companyId, forceRefresh, sectorTag, baseRevenue,
+    language: rawLanguage, purposeCategory: rawPurposeCategory, purposeDetail,
+  } = req.body as {
     companyName?: string;
     companyId?: string;
     forceRefresh?: boolean;
@@ -574,9 +583,16 @@ router.post('/stream', async (req: Request, res: Response) => {
     sectorTag?: string;
     baseRevenue?: number;
     language?: string;
+    // 분석 요청마다 입력받는 목적(매 요청 단위) — 각 섹션 프롬프트에 해석 레이어로 주입.
+    purposeCategory?: string;
+    purposeDetail?: string;
   };
   // 기본값 EN(언어 정책 SSOT) — 클라이언트가 안 보내거나 알 수 없는 값이면 안전하게 폴백
   const language: Language = rawLanguage === 'ko' ? 'ko' : 'en';
+  // 허용값 밖이면 조용히 무시(하드 400 아님) — language 폴백과 동일한 관용적 처리.
+  const purposeCategory = PURPOSE_CATEGORIES.includes(rawPurposeCategory ?? '')
+    ? rawPurposeCategory
+    : undefined;
   const isPremium = await isPremiumUser({ clientId: null, authUserId: authUser.id });
   const usageUserId = authUser.id;
 
@@ -674,15 +690,15 @@ router.post('/stream', async (req: Request, res: Response) => {
 
       if (cached) {
         const b1 = !!cached.summary_v2;
-        // industry_history_v2/tech_evolution_v2는 온디맨드 전환(2026-07, 2026-08부터는
-        // "pain 진단 시작" 버튼 전용 엔드포인트로 완전 분리)으로 어떤 배치에도 포함되지 않음 —
-        // "배치 완료" 판정에서 제외해야 아직 생성 전인 정상 캐시 행이 매번 배치 전체
-        // 재생성으로 이어지지 않는다. 캐시에 있으면 sendCached에서 별도로 실어보냄.
         const b2 = !!(cached.business_model_v2 && cached.competitors_v2 && cached.cross_industry_nudge_v1);
         const b3 = !!(cached.value_chain_v2 && cached.strategy_v2 && cached.financials_v2);
         const b4 = !!cached.founder_v2;
+        // 2026-08-16부터 industry_history_v2/tech_evolution_v2(Pain Diagnosis)가 배치5로
+        // 승격되어 다른 배치와 동일하게 캐시 완료 판정에 포함된다 — 배치5가 없는 기존 캐시
+        // 행은 자동으로 partial cache로 떨어져 배치5만 라이브로 채워진다(자연 백필).
+        const b5 = !!(cached.industry_history_v2 && cached.tech_evolution_v2);
 
-        if (b1 && b2 && b3 && b4) {
+        if (b1 && b2 && b3 && b4 && b5) {
           // Full cache hit — financial_cache 조회 (web_search 기반 캐시만 업그레이드)
           let effectiveFinancials = cached.financials_v2;
           let effectiveCompetitors = cached.competitors_v2;
@@ -747,27 +763,35 @@ router.post('/stream', async (req: Request, res: Response) => {
           completedCount++;
           skipBatches.add(batchNum);
           Object.assign(initialData, data);
-          send('batch', { batch: batchNum, data, completed: completedCount, total: 4, analysisId: cached.id });
+          send('batch', { batch: batchNum, data, completed: completedCount, total: 5, analysisId: cached.id });
         };
 
         if (b1) sendCached(1, { summary_v2: cached.summary_v2 });
-        // industry_history_v2/tech_evolution_v2는 온디맨드라 캐시에 있을 때만 실어보냄 —
-        // 없으면 프론트에서 undefined로 남아 "pain 진단 시작" 버튼이 계속 노출된다.
         if (b2) sendCached(2, {
           business_model_v2: cached.business_model_v2,
           competitors_v2:    cached.competitors_v2,
           cross_industry_nudge_v1: cached.cross_industry_nudge_v1,
-          ...(cached.industry_history_v2 ? { industry_history_v2: cached.industry_history_v2 } : {}),
         });
         if (b3) sendCached(3, {
           value_chain_v2: cached.value_chain_v2,
           strategy_v2:    cached.strategy_v2,
           financials_v2:  cached.financials_v2,
-          ...(cached.tech_evolution_v2 ? { tech_evolution_v2: cached.tech_evolution_v2 } : {}),
         });
         if (b4) sendCached(4, { founder_v2: cached.founder_v2, sources: cached.sources ?? {} });
+        if (b5) sendCached(5, {
+          industry_history_v2: cached.industry_history_v2,
+          tech_evolution_v2:   cached.tech_evolution_v2,
+        });
 
         if (!(await checkAndRecordUsage())) return;
+
+        // 이번 요청에 목적이 실려왔으면 기존 캐시 행에 반영(라이브로 재생성되는 섹션에만
+        // 적용됨 — 이미 캐시된 섹션 콘텐츠를 소급 변경하진 않음, "주입 배관만" 스코프).
+        if (purposeCategory) {
+          await supabase.from('analyses')
+            .update({ purpose_category: purposeCategory, purpose_detail: purposeDetail?.trim() || null })
+            .eq('id', cached.id);
+        }
 
         const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name, listings);
         send('meta', { isFirstLookup: !isCacheHit });
@@ -800,7 +824,7 @@ router.post('/stream', async (req: Request, res: Response) => {
             if (batchNum === 3 && data.financials_v2) {
               attachSecBenchmarkToFinancials(data.financials_v2, await secBenchmarkPromise);
             }
-            send('batch', { batch: batchNum, data, completed: completedCount, total: 4, analysisId: cached.id });
+            send('batch', { batch: batchNum, data, completed: completedCount, total: 5, analysisId: cached.id });
             const fields = getBatchDbFields(batchNum, data);
             if (Object.keys(fields).length > 0) {
               await supabase.from('analyses').update(fields).eq('id', cached.id);
@@ -812,7 +836,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               );
             }
           },
-          { skipBatches, initialData, cachedFinancials: useCachedFin, language, rawEdgar, rawDart },
+          { skipBatches, initialData, cachedFinancials: useCachedFin, language, rawEdgar, rawDart, purposeCategory, purposeDetail },
         );
 
         if (analysis.sources) await saveSources(cached.id, name, analysis.sources);
@@ -825,7 +849,7 @@ router.post('/stream', async (req: Request, res: Response) => {
         }
         // SSE 전송은 프리미엄 유저에게만 — 무료 유저는 이 이벤트 자체를 받지 않는다.
         if (growthScenario && isPremium) {
-          send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: completedCount, total: 4, analysisId: cached.id });
+          send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: completedCount, total: 5, analysisId: cached.id });
         }
 
         await attachIndustryData(analysis.financials_v2, analysis.competitors_v2, dataSource, rawEdgar);
@@ -895,6 +919,8 @@ router.post('/stream', async (req: Request, res: Response) => {
               financials_structured: {},
               sources:     {},
               data_source: dataSource,
+              purpose_category: purposeCategory ?? null,
+              purpose_detail:   purposeDetail?.trim() || null,
               summary_v2:          data.summary_v2 ?? null,
               industry_history_v2: null,
               tech_evolution_v2:   null,
@@ -909,14 +935,14 @@ router.post('/stream', async (req: Request, res: Response) => {
             .select('id, created_at')
             .single();
           if (!error && saved) { savedId = saved.id; savedAt = saved.created_at; }
-          send('batch', { batch: batchNum, data, completed: batchCount, total: 4, analysisId: savedId });
+          send('batch', { batch: batchNum, data, completed: batchCount, total: 5, analysisId: savedId });
 
         } else if (savedId) {
           const fields = getBatchDbFields(batchNum, data);
           if (Object.keys(fields).length > 0) {
             await supabase.from('analyses').update(fields).eq('id', savedId);
           }
-          send('batch', { batch: batchNum, data, completed: batchCount, total: 4, analysisId: savedId });
+          send('batch', { batch: batchNum, data, completed: batchCount, total: 5, analysisId: savedId });
 
           if (batchNum === 3 && !cachedFinancials && data.financials_v2) {
             await supabase.from('financials_v2_cache').upsert(
@@ -926,7 +952,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
       },
-      { cachedFinancials, language, rawEdgar, rawDart },
+      { cachedFinancials, language, rawEdgar, rawDart, purposeCategory, purposeDetail },
     );
 
     if (savedId && analysis.sources) await saveSources(savedId, name, analysis.sources);
@@ -939,7 +965,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     }
     // SSE 전송은 프리미엄 유저에게만 — 무료 유저는 이 이벤트 자체를 받지 않는다.
     if (growthScenario && savedId && isPremium) {
-      send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: batchCount, total: 4, analysisId: savedId });
+      send('batch', { batch: 6, data: { growth_scenario_v2: growthScenario }, completed: batchCount, total: 5, analysisId: savedId });
     }
 
     await attachIndustryData(analysis.financials_v2, analysis.competitors_v2, dataSource, rawEdgar);
@@ -1019,9 +1045,10 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
 
   try {
     // 이 행이 어느 언어로 생성됐는지는 클라이언트 입력이 아니라 DB에서 직접 읽는다 —
-    // 한 리포트 안에서 섹션마다 언어가 갈리는 사고를 방지(언어 정책 SSOT 참고).
+    // 한 리포트 안에서 섹션마다 언어가 갈리는 사고를 방지(언어 정책 SSOT 참고). purpose도
+    // 동일하게 DB 행 기준으로 읽어 개별 재시도에서도 일관성을 유지한다(재입력 요구 안 함).
     const { data: existing } = await supabase
-      .from('analyses').select('language').eq('id', analysisId.trim()).maybeSingle();
+      .from('analyses').select('language, purpose_category, purpose_detail').eq('id', analysisId.trim()).maybeSingle();
     const language: Language = existing?.language === 'ko' ? 'ko' : 'en';
 
     let financialCtx: string | undefined;
@@ -1032,7 +1059,9 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
       rawFinancials = { rawEdgar, rawDart };
     }
 
-    const data = await reanalyzeSingleSection(name, sectionKey, financialCtx, language, rawFinancials);
+    const data = await reanalyzeSingleSection(name, sectionKey, financialCtx, language, rawFinancials, {
+      purposeCategory: existing?.purpose_category, purposeDetail: existing?.purpose_detail,
+    });
 
     if (!data) {
       res.status(422).json({ error: '재분석 결과를 얻지 못했습니다. 잠시 후 다시 시도해주세요.' });
@@ -1055,81 +1084,13 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/analyze/:id/pain-diagnosis — "pain 진단 시작" 버튼 ───────────────────
-// industry_history_v2 + tech_evolution_v2를 한 번에 생성한다(2026-08, 기존 탭별 개별
-// 자동생성 방식을 명시적 버튼 트리거로 대체). 내부적으로 reanalyzeSingleSection을 그대로
-// 재사용 — 새 생성 로직을 만들지 않는다. 각 섹션이 실측 90~106초 걸리므로(2026-08 3개사
-// 실측) 두 섹션을 병렬로 돌려도 기존 75초 배치 타임아웃으로는 부족해 전용 10분 타임아웃을 둔다.
-const PAIN_DIAGNOSIS_TIMEOUT = 10 * 60 * 1000;
-
-router.post('/:id/pain-diagnosis', async (req: Request, res: Response) => {
-  // /reanalyze와 동일하게 하드 401만 적용 — 소유권(403) 체크 없음(공용 캐시 협업 UX,
-  // 실전 발견 이력 16번과 동일한 설계 판단).
-  const authUser = await resolveAuthUser(req);
-  if (!authUser) {
-    res.status(401).json({ error: '로그인이 필요합니다.' });
-    return;
-  }
-
-  const analysisId = String(req.params.id ?? '').trim();
-  const { companyName } = req.body as { companyName?: string };
-  if (!analysisId || !companyName?.trim()) {
-    res.status(400).json({ error: 'companyName이 필요합니다.' });
-    return;
-  }
-  const name = companyName.trim();
-
-  try {
-    // 이미 둘 다 생성돼 있으면 재생성 없이 즉시 반환 (불필요한 비용 발생 방지)
-    const { data: existing } = await supabase
-      .from('analyses')
-      .select('industry_history_v2, tech_evolution_v2, language')
-      .eq('id', analysisId)
-      .maybeSingle();
-    if (existing?.industry_history_v2 && existing?.tech_evolution_v2) {
-      res.json({ industry_history_v2: existing.industry_history_v2, tech_evolution_v2: existing.tech_evolution_v2 });
-      return;
-    }
-    // 이 행이 어느 언어로 생성됐는지는 DB에서 직접 읽는다 — 한 리포트 안에서 섹션마다
-    // 언어가 갈리는 사고 방지(언어 정책 SSOT 참고).
-    const language: Language = existing?.language === 'ko' ? 'ko' : 'en';
-
-    console.log(`[pain-diagnosis] START for "${name}"`);
-    const [industryHistory, techEvolution] = await withTimeout(
-      Promise.all([
-        reanalyzeSingleSection(name, 'industry_history_v2', undefined, language),
-        reanalyzeSingleSection(name, 'tech_evolution_v2', undefined, language),
-      ]),
-      PAIN_DIAGNOSIS_TIMEOUT,
-      'pain-diagnosis',
-    );
-
-    if (!industryHistory && !techEvolution) {
-      res.status(422).json({ error: 'pain 진단 생성에 실패했습니다. 잠시 후 다시 시도해주세요.' });
-      return;
-    }
-
-    const dbFields: Record<string, any> = {};
-    if (industryHistory) dbFields.industry_history_v2 = industryHistory;
-    if (techEvolution)   dbFields.tech_evolution_v2   = techEvolution;
-    const { error: updateErr } = await supabase.from('analyses').update(dbFields).eq('id', analysisId);
-    if (updateErr) throw updateErr;
-
-    console.log(`[pain-diagnosis] OK for "${name}"`);
-    res.json({ industry_history_v2: industryHistory ?? null, tech_evolution_v2: techEvolution ?? null });
-  } catch (err) {
-    console.error('[pain-diagnosis] FAIL', err);
-    res.status(500).json({ error: 'pain 진단 중 오류가 발생했습니다.' });
-  }
-});
-
 // ── POST /api/analyze/:id/icp-insight — "ICP 인사이트"(디스커버리 질문) 탭 (2026-08-15 개편) ──
 // 9개 섹션(discoveryQuestions.ts, summary_v2~founder_v2 + cross_industry_nudge_v1의 기존
 // financial_impact_question)이 이미 생성해둔 discovery_questions 후보 풀에서, 이 유저의
 // ICP와 관련도 높은 3-5개를 선별한다. ICP가 전부 비어있으면 Claude 호출 없이 결정론적으로
 // 선택(pickDefaultDiscoveryQuestions), 하나라도 있으면 Claude 큐레이션(curateDiscoveryQuestions)
-// 호출 — 신규 web_search 없는 단일 호출이라 pain-diagnosis(10분)보다 훨씬 짧게 잡음(90초).
-// /reanalyze·/pain-diagnosis와 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시
+// 호출 — 신규 web_search 없는 단일 호출이라 90초로 잡음.
+// /reanalyze와 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시
 // 협업 UX). analysis_id + icp_fingerprint 캐시(icp_insights 테이블)는 기존 그대로 재사용 —
 // 별도 캐시 테이블 신규 생성 없음.
 // 60s→90s(2026-08-15): curateDiscoveryQuestions()가 JSON 파싱 실패 시 1회 재시도하도록
