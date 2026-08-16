@@ -30,7 +30,6 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
   const [msgIdx, setMsgIdx]     = useState(0);
   const [msgVisible, setMsgVisible] = useState(true);
   const [elapsed, setElapsed]   = useState(0);
-  const [progress, setProgress] = useState(0);
 
   // 메시지 초기 랜덤 선택
   useEffect(() => {
@@ -43,20 +42,14 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
     return () => clearInterval(id);
   }, []);
 
-  // 프로그레스 바 (가짜 0→90%, 완료 시 100%)
-  useEffect(() => {
-    if (completed) {
-      setProgress(100);
-      return;
-    }
-    const id = setInterval(() => {
-      setProgress(p => {
-        const remaining = 90 - p;
-        return Math.min(90, p + Math.max(0.4, remaining * 0.045));
-      });
-    }, 400);
-    return () => clearInterval(id);
-  }, [completed]);
+  // 프로그레스 바는 더 이상 JS setInterval로 숫자를 채우지 않는다 — @react-pdf/renderer의
+  // pdf().toBlob()이 Yoga 레이아웃을 포함한 긴 동기 작업이라 메인 스레드를 오래 점유하면
+  // JS 타이머 자체가 굶어(못 돌아) 진행률이 15% 안팎에서 멈춘 것처럼 보이던 버그(2026-08-16
+  // 원인 확정 — 백엔드/PDF 생성 로직은 정상, 프론트 진행률 시뮬레이션만의 문제였음)의
+  // 근본 해결책은 "메인 스레드 점유 여부와 무관하게 계속 움직이는 표시"뿐이다 — 아래
+  // CSS keyframe 애니메이션(transform 기반, 컴포지터 스레드에서 동작)으로 교체.
+  // 어차피 react-pdf가 실제 진행률 콜백을 제공하지 않아 숫자(%) 자체가 항상 허구였으므로,
+  // 숫자를 흉내내는 대신 "진행 중임을 계속 보여주는" 무한(indeterminate) 바로 전환한다.
 
   // 메시지 fade out → 새 메시지 → fade in
   useEffect(() => {
@@ -122,23 +115,30 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
           ))}
         </div>
 
-        {/* 프로그레스 바 */}
+        {/* 프로그레스 바 — 완료 전엔 무한(indeterminate) CSS 애니메이션, 완료 시 100% 고정
+            (숫자 %는 표시하지 않음 — react-pdf가 실제 진행률을 안 주므로 항상 허구였고,
+            메인 스레드가 막혀도 이 애니메이션은 계속 움직여 "멈춘 것처럼 보이는" 문제가
+            재발하지 않는다) */}
         <div className="w-full space-y-1.5">
+          <style>{`
+            @keyframes pdf-progress-indeterminate {
+              0%   { transform: translateX(-100%); }
+              100% { transform: translateX(250%); }
+            }
+          `}</style>
           <div className="flex justify-between items-center text-[11px] text-gray-400">
             <span>PDF 준비 중...</span>
             <span>{elapsed}초</span>
           </div>
           <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-navy-500 rounded-full"
-              style={{
-                width:      `${progress}%`,
-                transition: completed ? 'width 0.4s ease-out' : 'width 0.4s ease-out',
-              }}
-            />
-          </div>
-          <div className="text-right text-[11px] text-gray-300">
-            {Math.round(progress)}%
+            {completed ? (
+              <div className="h-full w-full bg-navy-500 rounded-full transition-[width] duration-300 ease-out" />
+            ) : (
+              <div
+                className="h-full w-2/5 bg-navy-500 rounded-full"
+                style={{ animation: 'pdf-progress-indeterminate 1.1s ease-in-out infinite' }}
+              />
+            )}
           </div>
         </div>
 

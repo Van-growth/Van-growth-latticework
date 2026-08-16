@@ -36,8 +36,11 @@ const MARKERS: Record<'ko' | 'en', { notDisclosed: string; notApplicable: string
 
 // 고정된 연도 리터럴 대신 "최근 몇 개년까지 보여줄지"만 정책으로 유지 — 실제 컬럼(연도)은
 // 회사가 가진 rawSeries.fiscalYears에서 그대로 가져온다(신규 상장사는 자연히 더 적게 나옴).
+// MAX_BS_YEARS는 기존 3이었으나 손익계산서(5)와 다르게 잘라야 할 근거가 코드/커밋에 없었고,
+// 실측(에이피알, 2026-08-16) 결과 raw_dart.cfs에 FY2021 자산/부채/자본이 이미 정상 존재하는데도
+// 이 캡 때문에 화면/PDF에서 잘려나가고 있었음 — 손익계산서와 동일하게 5로 상향.
 const MAX_IS_YEARS = 5;
-const MAX_BS_YEARS = 3;
+const MAX_BS_YEARS = 5;
 
 function fmtUsd(v: number): string {
   const sign = v < 0 ? '-' : '';

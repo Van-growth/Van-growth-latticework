@@ -26,6 +26,8 @@ import type {
   GrowthScenarioV2,
   Source,
   AnalysisSources,
+  CrossIndustryNudgeV1,
+  DataSource,
 } from '@/types';
 import { countFinancialsReliability, getFinancialYearCols } from '@/lib/financialsReliability';
 import type { Language } from '@/app/context/LanguageContext';
@@ -38,6 +40,17 @@ Font.register({
   fonts: [
     { src: `${_origin}/fonts/noto-sans-kr-400.woff`, fontWeight: 400 },
     { src: `${_origin}/fonts/noto-sans-kr-700.woff`, fontWeight: 700 },
+  ],
+});
+// 2026-08-16 — 웹 개편(제목: Noto Serif KR / 본문: Noto Sans KR)과 동기화. 700 weight만
+// 등록(본문과 동일하게 굵기 하나만 쓰는 기존 패턴 유지) — 헤딩 계층(커버/섹션/서브헤더)에만
+// 적용, 본문은 NotoSansKR 그대로. 풀 한글 char셋이라 파일이 큼(2.4MB, sans 700의 ~2.7배) —
+// pdf().toBlob() 동기 작업이 늘어나는 만큼 진행률 바를 CSS 무한 애니메이션으로 전환한
+// ExportPdfButton.tsx 수정과 함께 적용해야 체감 프리징이 재발하지 않는다.
+Font.register({
+  family: 'NotoSerifKR',
+  fonts: [
+    { src: `${_origin}/fonts/noto-serif-kr-700.woff`, fontWeight: 700 },
   ],
 });
 Font.registerHyphenationCallback(w => [w]);
@@ -94,18 +107,36 @@ function sanitizeDeep<T>(value: T): T {
 }
 
 // ── Design tokens ────────────────────────────────────────────────────────────
+// 웹 앱(globals.css @theme inline)과 동일한 팔레트로 매핑 — 흰색/검은색/네이비 3색
+// 기본 체계 + success/risk/source-reliability 시맨틱 예외(2026-08-17 웹 개편,
+// 2026-08-16 PDF 동기화). 기존 키 이름(blue/green/red/orange 등)은 그대로 두고 값만
+// 교체 — 파일 전체에서 C.blue 등으로 참조하는 곳이 많아 값만 바꾸는 쪽이 안전.
+// orange는 이제 순수하게 "출처 신뢰도 L2(참고)/재무 데이터 신뢰도 배너" 용도로만 쓴다 —
+// 밸류체인 병목/간접경쟁사 등 순수 비즈니스 경고 성격의 태그는 risk(red)로 통일해
+// CLAUDE.md가 명시한 3색+3예외 체계 밖의 4번째 색 의미를 만들지 않는다.
 const C = {
-  blue:       '#2563EB',
-  blueLight:  '#EFF6FF',
-  dark:       '#1E293B',
-  mid:        '#64748B',
-  light:      '#94A3B8',
-  bg:         '#F8FAFC',
-  border:     '#E2E8F0',
-  white:      '#FFFFFF',
-  green:      '#16A34A',
-  red:        '#DC2626',
-  orange:     '#D97706',
+  blue:            '#1e3a5f', // navy (구 #2563EB)
+  blueHover:       '#16293f', // navy-hover
+  blueLight:       '#eef2f7', // navy-tint (구 #EFF6FF)
+  blueLightBorder: '#d3dee8', // navy-tint-border
+  dark:            '#171717', // 본문 텍스트(black) — 웹 --foreground와 동일(구 #1E293B)
+  mid:             '#64748B',
+  light:           '#94A3B8',
+  bg:              '#F8FAFC',
+  border:          '#E2E8F0',
+  white:           '#FFFFFF',
+  green:           '#059669', // success (구 #16A34A)
+  greenBg:         '#ecfdf5',
+  greenBorder:     '#a7f3d0',
+  red:             '#dc2626', // risk
+  redBg:           '#fef2f2',
+  redBorder:       '#fecaca',
+  orange:          '#d97706', // source-reference(L2/참고) 전용
+  orangeBg:        '#fffbeb',
+  orangeBorder:    '#fde68a',
+  graySoft:        '#6b7280', // source-estimate(L3/추정) 전용
+  graySoftBg:      '#f3f4f6',
+  graySoftBorder:  '#e5e7eb',
 };
 
 const s = StyleSheet.create({
@@ -135,6 +166,7 @@ const s = StyleSheet.create({
     marginBottom:  16,
   },
   coverCompany: {
+    fontFamily: 'NotoSerifKR',
     fontSize:   30,
     fontWeight: 700,
     color:      C.dark,
@@ -180,6 +212,7 @@ const s = StyleSheet.create({
     marginRight: 7,
   },
   sectionTitle: {
+    fontFamily: 'NotoSerifKR',
     fontSize:   12.5,
     fontWeight: 700,
     color:      C.dark,
@@ -187,6 +220,7 @@ const s = StyleSheet.create({
 
   // ── Sub-section ──
   subHeader: {
+    fontFamily: 'NotoSerifKR',
     fontSize:   10,
     fontWeight: 700,
     color:      C.dark,
@@ -300,10 +334,32 @@ const s = StyleSheet.create({
     lineHeight: 1.8,
   },
 
-  // ── Reliability banner (재무 데이터 신뢰도 요약, amber-50/100/700 대응) ──
+  // ── Pain Diagnosis (산업역사+기술변화 통합 강조 박스, 웹의 <ReportSection emphasis>와
+  //     동등한 시각 언어 — amber 강조는 CLAUDE.md UI/UX 원칙의 명시적 4번째 예외, source-
+  //     reference와 같은 amber 토큰을 그대로 재사용) ──
+  painBox: {
+    backgroundColor:   C.orangeBg,
+    border:            `1.5 solid ${C.orangeBorder}`,
+    borderRadius:      6,
+    padding:           16,
+  },
+  painSubTitle: {
+    fontFamily: 'NotoSerifKR',
+    fontSize:   10.5,
+    fontWeight: 700,
+    color:      C.orange,
+    marginBottom: 8,
+  },
+  painDivider: {
+    height:          1,
+    backgroundColor: C.orangeBorder,
+    marginVertical:  14,
+  },
+
+  // ── Reliability banner (재무 데이터 신뢰도 요약 — source-reference 토큰) ──
   reliabilityBanner: {
-    backgroundColor:   '#FFFBEB',
-    border:            '1 solid #FEF3C7',
+    backgroundColor:   C.orangeBg,
+    border:            `1 solid ${C.orangeBorder}`,
     borderRadius:      4,
     paddingVertical:   10,
     paddingHorizontal: 14,
@@ -311,7 +367,7 @@ const s = StyleSheet.create({
   },
   reliabilityBannerText: {
     fontSize:   8.5,
-    color:      '#B45309',
+    color:      C.orange,
     lineHeight: 1.6,
   },
 
@@ -432,9 +488,9 @@ const s = StyleSheet.create({
     marginTop:    1,
     flexShrink:   0,
   },
-  srcBadgeL1: { backgroundColor: '#F0FDF4', color: '#16A34A' },
-  srcBadgeL2: { backgroundColor: '#FFFBEB', color: '#D97706' },
-  srcBadgeL3: { backgroundColor: '#F1F5F9', color: '#64748B' },
+  srcBadgeL1: { backgroundColor: C.greenBg, color: C.green },
+  srcBadgeL2: { backgroundColor: C.orangeBg, color: C.orange },
+  srcBadgeL3: { backgroundColor: C.graySoftBg, color: C.graySoft },
   srcOrg: {
     fontSize:   8.5,
     fontWeight: 700,
@@ -571,7 +627,7 @@ function KeyBulletsPdf({ bullets }: { bullets?: string[] | null }) {
     <View style={{ backgroundColor: C.dark, borderRadius: 4, padding: 18, marginBottom: 16 }}>
       {bullets.map((b, i) => (
         <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: i < bullets.length - 1 ? 6 : 0 }}>
-          <Text style={{ color: '#60A5FA', fontSize: 8, marginRight: 6, lineHeight: 1.7 }}>•</Text>
+          <Text style={{ color: '#a8bed3', fontSize: 8, marginRight: 6, lineHeight: 1.7 }}>•</Text>
           <Text style={{ color: C.white, fontSize: 9, lineHeight: 1.7, flex: 1 }}>{b}</Text>
         </View>
       ))}
@@ -645,18 +701,21 @@ function CoverPage({ data, shareUrl, language, t }: { data: AnalysisDetail; shar
 // id는 각 섹션의 SectionHeader에 넘기는 id와 매칭되는 내부 링크 목적지(#없는 형태).
 // present는 실제 렌더링 조건(Document 본문의 `data.xxx_v2 &&`)과 반드시 동일하게 유지 —
 // 안 그러면 목차에는 있는데 실제로는 없는 섹션으로 가는 죽은 링크가 생긴다.
+// 순서/번호는 웹의 sticky 그리드+스크롤 레이아웃(AnalysisCard.tsx)과 동일하게 맞춤
+// (2026-08-16) — 요약→밸류체인→비즈니스모델→경쟁사→넛지→재무→전략→창업자→
+// Pain Diagnosis→(출처는 부록 취급, 목차 미포함, 기존 컨벤션 유지)→성장시나리오.
 function getTocItems(t: TFn): Array<{ num: number; id: string; title: string; present: (d: AnalysisDetail) => boolean }> {
   return [
-    { num: 1,  id: 'sec-1',  title: t('기업 개요', 'Company Overview'),         present: d => !!d.summary_v2 },
-    { num: 2,  id: 'sec-2',  title: t('산업 역사', 'Industry History'),         present: d => !!d.industry_history_v2 },
-    { num: 3,  id: 'sec-3',  title: t('기술 변화', 'Tech Evolution'),           present: d => !!d.tech_evolution_v2 },
-    { num: 4,  id: 'sec-4',  title: t('밸류체인', 'Value Chain'),               present: d => !!d.value_chain_v2 },
-    { num: 5,  id: 'sec-5',  title: t('비즈니스 모델', 'Business Model'),       present: d => !!d.business_model_v2 },
-    { num: 6,  id: 'sec-6',  title: t('경쟁사 분석', 'Competitor Analysis'),    present: d => !!d.competitors_v2 },
-    { num: 7,  id: 'sec-7',  title: t('전략 분석', 'Strategy Analysis'),        present: d => !!d.strategy_v2 },
-    { num: 8,  id: 'sec-8',  title: t('재무 분석', 'Financial Analysis'),       present: d => !!d.financials_v2 },
-    { num: 9,  id: 'sec-9',  title: t('창업자 분석', 'Founder Analysis'),       present: d => !!d.founder_v2 },
-    { num: 10, id: 'sec-10', title: t('성장 시나리오', 'Growth Scenario'),      present: d => !!d.growth_scenario_v2 },
+    { num: 1,  id: 'sec-1',  title: t('기업 개요', 'Company Overview'),               present: d => !!d.summary_v2 },
+    { num: 2,  id: 'sec-2',  title: t('밸류체인', 'Value Chain'),                     present: d => !!d.value_chain_v2 },
+    { num: 3,  id: 'sec-3',  title: t('비즈니스 모델', 'Business Model'),             present: d => !!d.business_model_v2 },
+    { num: 4,  id: 'sec-4',  title: t('경쟁사 분석', 'Competitor Analysis'),          present: d => !!d.competitors_v2 },
+    { num: 5,  id: 'sec-5',  title: t('크로스인더스트리 넛지', 'Cross-Industry Nudge'), present: d => !!d.cross_industry_nudge_v1 },
+    { num: 6,  id: 'sec-6',  title: t('재무 분석', 'Financial Analysis'),             present: d => !!d.financials_v2 },
+    { num: 7,  id: 'sec-7',  title: t('전략 분석', 'Strategy Analysis'),              present: d => !!d.strategy_v2 },
+    { num: 8,  id: 'sec-8',  title: t('창업자 분석', 'Founder Analysis'),             present: d => !!d.founder_v2 },
+    { num: 9,  id: 'sec-9',  title: t('Pain Diagnosis (산업 역사 · 기술 진화)', 'Pain Diagnosis (Industry History · Tech Evolution)'), present: d => !!(d.industry_history_v2 || d.tech_evolution_v2) },
+    { num: 10, id: 'sec-10', title: t('성장 시나리오', 'Growth Scenario'),            present: d => !!d.growth_scenario_v2 },
   ];
 }
 
@@ -776,10 +835,10 @@ function SummarySection({ v, t }: { v: SummaryV2; t: TFn }) {
             <View style={{ marginBottom: 6 }}>
               <View style={{
                 flexDirection: 'row', alignItems: 'center', gap: 4,
-                backgroundColor: v.customer_concentration.is_concentrated ? '#FFFBEB' : '#F0FDF4',
+                backgroundColor: v.customer_concentration.is_concentrated ? C.redBg : C.greenBg,
                 borderRadius: 4, padding: 5, marginBottom: 5,
               }}>
-                <Text style={{ fontSize: 7, color: v.customer_concentration.is_concentrated ? '#D97706' : '#16A34A' }}>
+                <Text style={{ fontSize: 7, color: v.customer_concentration.is_concentrated ? C.red : C.green }}>
                   {v.customer_concentration.is_concentrated ? '⚠' : '✓'} {t(
                     `상위 ${v.customer_concentration.top_n}개 고객 매출 ${v.customer_concentration.top_n_share}% 차지`,
                     `Top ${v.customer_concentration.top_n} customers account for ${v.customer_concentration.top_n_share}% of revenue`
@@ -826,12 +885,24 @@ function SummarySection({ v, t }: { v: SummaryV2; t: TFn }) {
   );
 }
 
-// ── Section 2: 산업 역사 ─────────────────────────────────────────────────────
+// ── Section 9: Pain Diagnosis (산업 역사 + 기술 진화 통합) ──────────────────────
+// 2026-08-16 — 웹의 sticky 그리드+스크롤 레이아웃과 동일하게, 두 섹션을 amber 강조
+// 박스 하나로 묶어 렌더링(구 별도 섹션 2/3 → 통합 섹션 9). 각 하위 파트는 자기
+// 출처(SectionSources)를 그대로 유지 — 두 데이터가 서로 다른 Claude 호출 결과라
+// 출처를 합치면 어느 쪽 근거인지 알 수 없어진다.
 
-function IndustryHistorySection({ v, t }: { v: IndustryHistoryV2; t: TFn }) {
+const HYPE_COLOR: Record<string, string> = {
+  emerging:    C.blue,
+  hype:        C.mid,
+  trough:      C.red,
+  recovery:    C.green,
+  mainstream:  C.mid,
+};
+
+function IndustryHistoryContent({ v, t }: { v: IndustryHistoryV2; t: TFn }) {
   return (
-    <View style={s.section}>
-      <SectionHeader num={2} title={`${t('산업 역사', 'Industry History')} — ${v.industry_name}`} id="sec-2" />
+    <View>
+      <Text style={s.painSubTitle}>{t('산업 역사', 'Industry History')} — {v.industry_name}</Text>
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {v.why_durable?.length > 0 && (
@@ -850,7 +921,7 @@ function IndustryHistorySection({ v, t }: { v: IndustryHistoryV2; t: TFn }) {
 
       <SubHeader>{t('발전 타임라인', 'Development Timeline')}</SubHeader>
       {v.timeline?.map((tl, i) => (
-        <View key={i} style={[s.card, { marginBottom: 5 }]}>
+        <View key={i} style={[s.card, { marginBottom: 5, backgroundColor: C.white }]}>
           <View style={[s.row, { marginBottom: 2 }]}>
             <Text style={[s.cardTitle, { marginBottom: 0, flex: 1 }]}>{sp(tl.period)} — {sp(tl.title)}</Text>
           </View>
@@ -869,27 +940,17 @@ function IndustryHistorySection({ v, t }: { v: IndustryHistoryV2; t: TFn }) {
   );
 }
 
-// ── Section 3: 기술 진화 ─────────────────────────────────────────────────────
-
-const HYPE_COLOR: Record<string, string> = {
-  emerging:    C.blue,
-  hype:        C.orange,
-  trough:      C.red,
-  recovery:    C.green,
-  mainstream:  C.mid,
-};
-
-function TechEvolutionSection({ v, t }: { v: TechEvolutionV2; t: TFn }) {
+function TechEvolutionContent({ v, t }: { v: TechEvolutionV2; t: TFn }) {
   return (
-    <View style={s.section}>
-      <SectionHeader num={3} title={`${t('기술 진화', 'Tech Evolution')} — ${v.tech_name}`} id="sec-3" />
+    <View>
+      <Text style={s.painSubTitle}>{t('기술 진화', 'Tech Evolution')} — {v.tech_name}</Text>
       <KeyBulletsPdf bullets={v.key_bullets} />
       <LabelDetailField label={t('현재 단계', 'Current Stage')} item={v.current_stage} />
       <LabelDetailField label={t('다음 변곡점', 'Next Inflection')} item={v.next_inflection} />
 
       <SubHeader>{t('기술 발전 단계', 'Technology Development Stages')}</SubHeader>
       {v.stages?.map((st, i) => (
-        <View key={i} style={[s.card, { borderLeftColor: HYPE_COLOR[st.hype_level] ?? C.blue }]}>
+        <View key={i} style={[s.card, { borderLeftColor: HYPE_COLOR[st.hype_level] ?? C.blue, backgroundColor: C.white }]}>
           <View style={s.row}>
             <Text style={s.cardTitle}>
               {`Stage ${st.stage}  ${st.period}  ${st.title}`}
@@ -914,14 +975,32 @@ function TechEvolutionSection({ v, t }: { v: TechEvolutionV2; t: TFn }) {
   );
 }
 
+function PainDiagnosisSection({ industryHistory, techEvolution, t }: {
+  industryHistory?: IndustryHistoryV2 | null;
+  techEvolution?: TechEvolutionV2 | null;
+  t: TFn;
+}) {
+  if (!industryHistory && !techEvolution) return null;
+  return (
+    <View style={s.section}>
+      <SectionHeader num={9} title={t('Pain Diagnosis (산업 역사 · 기술 진화)', 'Pain Diagnosis (Industry History · Tech Evolution)')} id="sec-9" />
+      <View style={s.painBox}>
+        {industryHistory && <IndustryHistoryContent v={industryHistory} t={t} />}
+        {industryHistory && techEvolution && <View style={s.painDivider} />}
+        {techEvolution && <TechEvolutionContent v={techEvolution} t={t} />}
+      </View>
+    </View>
+  );
+}
+
 // ── Section 4: 밸류체인 ──────────────────────────────────────────────────────
 
-const POWER_COLOR = { high: C.green, medium: C.orange, low: C.red };
+const POWER_COLOR = { high: C.green, medium: C.mid, low: C.red };
 
 function ValueChainSection({ v, t }: { v: ValueChainV2; t: TFn }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={4} title={`${t('밸류체인', 'Value Chain')} — ${v.industry}`} id="sec-4" />
+      <SectionHeader num={2} title={`${t('밸류체인', 'Value Chain')} — ${v.industry}`} id="sec-2" />
       <KeyBulletsPdf bullets={v.key_bullets} />
       {v.value_flow?.length > 0 && (
         <View style={{ marginBottom: 4 }}>
@@ -941,7 +1020,7 @@ function ValueChainSection({ v, t }: { v: ValueChainV2; t: TFn }) {
         <View key={i} style={[
           s.card,
           layer.is_subject ? { borderLeftColor: C.blue }
-            : layer.buyer   ? { borderLeftColor: C.green, backgroundColor: '#F0FDF4' }
+            : layer.buyer   ? { borderLeftColor: C.green, backgroundColor: C.greenBg }
             : { borderLeftColor: C.border },
         ]}>
           <View style={s.row}>
@@ -952,12 +1031,12 @@ function ValueChainSection({ v, t }: { v: ValueChainV2; t: TFn }) {
               </Text>
             )}
             {layer.bottleneck && (
-              <Text style={[s.tag, { marginLeft: 4, backgroundColor: '#FEF3C7', color: C.orange }]}>
+              <Text style={[s.tag, { marginLeft: 4, backgroundColor: C.redBg, color: C.red }]}>
                 {t('병목', 'Bottleneck')}
               </Text>
             )}
             {layer.buyer
-              ? <Text style={[s.tag, { marginLeft: 4, backgroundColor: '#DBEAFE', color: C.blue }]}>{t('구매자', 'Buyer')}</Text>
+              ? <Text style={[s.tag, { marginLeft: 4, backgroundColor: C.blueLight, color: C.blue }]}>{t('구매자', 'Buyer')}</Text>
               : layer.pricing_power
                 ? <Text style={[s.tag, { marginLeft: 4, color: POWER_COLOR[layer.pricing_power], backgroundColor: C.bg }]}>
                     {t('가격협상력', 'Pricing Power')} {layer.pricing_power}
@@ -983,7 +1062,7 @@ function ValueChainSection({ v, t }: { v: ValueChainV2; t: TFn }) {
 function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={5} title={t('비즈니스 모델', 'Business Model')} id="sec-5" />
+      <SectionHeader num={3} title={t('비즈니스 모델', 'Business Model')} id="sec-3" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       <FieldRow label={t('성장 모션', 'Growth Motion')} value={v.growth_motion} />
@@ -1039,7 +1118,7 @@ function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
           <SubHeader>{t('경쟁 해자', 'Moat')}</SubHeader>
           {v.moat.map((m, i) => (
             <View key={i} style={[s.card, {
-              borderLeftColor: m.strength === 'strong' ? C.green : m.strength === 'medium' ? C.orange : C.light,
+              borderLeftColor: m.strength === 'strong' ? C.green : m.strength === 'medium' ? C.mid : C.red,
             }]}>
               <Text style={s.cardTitle}>{m.type}  <Text style={{ fontWeight: 400, color: C.mid }}>{m.strength}</Text></Text>
               <Text style={s.cardText}>{m.description}</Text>
@@ -1057,7 +1136,7 @@ function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
 function CompetitorsSection({ v, t }: { v: CompetitorsV2; t: TFn }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={6} title={t('경쟁사 분석', 'Competitor Analysis')} id="sec-6" />
+      <SectionHeader num={4} title={t('경쟁사 분석', 'Competitor Analysis')} id="sec-4" />
       <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label={t('경쟁 포지션', 'Competitive Position')} value={v.competitive_position} />
 
@@ -1106,7 +1185,7 @@ function CompetitorsSection({ v, t }: { v: CompetitorsV2; t: TFn }) {
           <View style={s.gridLeft}>
             <SubHeader>{t('간접 경쟁사', 'Indirect Competitors')}</SubHeader>
             {v.indirect.map((c, i) => (
-              <View key={i} style={[s.card, { borderLeftColor: C.orange }]}>
+              <View key={i} style={[s.card, { borderLeftColor: C.mid }]}>
                 <Text style={s.cardTitle}>{c.name}</Text>
                 <Text style={s.cardText}>{c.threat}</Text>
               </View>
@@ -1126,6 +1205,44 @@ function CompetitorsSection({ v, t }: { v: CompetitorsV2; t: TFn }) {
           </View>
         )}
       </View>
+      <SectionSources sources={v.sources} t={t} />
+    </View>
+  );
+}
+
+// ── Section 5: 크로스인더스트리 넛지 (Pain Diagnosis) ───────────────────────────
+// 2026-08-16 신규 — 웹 리포트엔 정식 섹션으로 있었으나 PDF에 완전히 누락돼 있던
+// cross_industry_nudge_v1을 추가. financial_impact_question은 프롬프트 규칙상 항상
+// 질문형(숫자 단정 금지)이라 그대로 텍스트로 노출.
+
+function CrossIndustryNudgeSection({ v, t }: { v: CrossIndustryNudgeV1; t: TFn }) {
+  return (
+    <View style={s.section}>
+      <SectionHeader num={5} title={t('크로스인더스트리 넛지', 'Cross-Industry Nudge')} id="sec-5" />
+      <KeyBulletsPdf bullets={v.key_bullets} />
+
+      {v.industry_pain && (
+        <View style={[s.card, { borderLeftColor: C.blue, marginBottom: 8 }]}>
+          <Text style={s.cardTitle}>{v.industry_pain.title}</Text>
+          {v.industry_pain.description?.map((d, i) => (
+            <Text key={i} style={[s.cardText, { marginTop: i === 0 ? 4 : 2 }]}>{sp(d)}</Text>
+          ))}
+          {v.industry_pain.financial_impact_question && (
+            <Text style={[s.cardText, { marginTop: 6, fontWeight: 700, color: C.dark }]}>
+              {sp(v.industry_pain.financial_impact_question)}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {v.cross_industry_example && (
+        <View style={[s.card, { borderLeftColor: C.green }]}>
+          <Text style={s.cardTitle}>
+            {v.cross_industry_example.source_industry} — {v.cross_industry_example.case_name}
+          </Text>
+          <Text style={s.cardText}>{sp(v.cross_industry_example.solution_description)}</Text>
+        </View>
+      )}
       <SectionSources sources={v.sources} t={t} />
     </View>
   );
@@ -1255,11 +1372,11 @@ function BSTable({ rows, t }: { rows: FinancialsV2BSRow[]; t: TFn }) {
   );
 }
 
-function FinancialsSection({ v, t }: { v: FinancialsV2; t: TFn }) {
+function FinancialsSection({ v, t, dataSource }: { v: FinancialsV2; t: TFn; dataSource?: DataSource }) {
   const { estimatedCount, unknownCount } = countFinancialsReliability(v);
   return (
     <View style={s.section}>
-      <SectionHeader num={8} title={t('재무 분석', 'Financial Analysis')} id="sec-8" />
+      <SectionHeader num={6} title={t('재무 분석', 'Financial Analysis')} id="sec-6" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {(estimatedCount > 0 || unknownCount > 0) && (
@@ -1304,28 +1421,46 @@ function FinancialsSection({ v, t }: { v: FinancialsV2; t: TFn }) {
       <SubHeader>{t('재무상태표', 'Balance Sheet')}</SubHeader>
       <BSTable rows={v.balance_sheet} t={t} />
 
-      {/* Cash flow */}
-      {v.cash_flow && (
-        <>
-          <SubHeader>{t('현금흐름', 'Cash Flow')}</SubHeader>
-          <View style={s.finGrid}>
-            {[
-              { label: t('영업활동', 'Operating'),    val: v.cash_flow.operating },
-              { label: t('투자활동', 'Investing'),    val: v.cash_flow.investing },
-              { label: t('재무활동', 'Financing'),    val: v.cash_flow.financing },
-              { label: 'FCF',        val: v.cash_flow.fcf },
-            ].filter(m => pdfVal(m.val) !== '—').map(({ label, val }, i) => (
-              <View key={i} style={s.finChip}>
-                <Text style={s.finChipLabel}>{label}</Text>
-                <Text style={s.finChipValue}>{pdfVal(val)}</Text>
+      {/* Cash flow — 4개 지표가 전부 placeholder면 SubHeader만 뜨고 빈 그리드가 남던
+          표시상 버그 수정(2026-08-16). DART 소스 기업은 현재 파이프라인이 쓰는 요약
+          재무제표 엔드포인트에 현금흐름표 자체가 없어 구조적으로 항상 비어있다(백엔드
+          신규 수집은 별도 백로그) — "확인 필요"가 아니라 "애초에 이 데이터가 없다"는
+          걸 명확히 구분해 보여준다. */}
+      {v.cash_flow && (() => {
+        const cfMetrics = [
+          { label: t('영업활동', 'Operating'),    val: v.cash_flow.operating },
+          { label: t('투자활동', 'Investing'),    val: v.cash_flow.investing },
+          { label: t('재무활동', 'Financing'),    val: v.cash_flow.financing },
+          { label: 'FCF',        val: v.cash_flow.fcf },
+        ].filter(m => pdfVal(m.val) !== '—');
+        return (
+          <>
+            <SubHeader>{t('현금흐름', 'Cash Flow')}</SubHeader>
+            {cfMetrics.length > 0 ? (
+              <View style={s.finGrid}>
+                {cfMetrics.map(({ label, val }, i) => (
+                  <View key={i} style={s.finChip}>
+                    <Text style={s.finChipLabel}>{label}</Text>
+                    <Text style={s.finChipValue}>{pdfVal(val)}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-          {v.cash_flow.notes && (
-            <Text style={[s.cardText, { color: C.mid, marginBottom: 6 }]}>{v.cash_flow.notes}</Text>
-          )}
-        </>
-      )}
+            ) : (
+              <Text style={[s.cardText, { color: C.light, marginBottom: 6 }]}>
+                {dataSource === 'dart'
+                  ? t(
+                      '현금흐름 데이터 없음 — DART 요약 재무제표는 현금흐름표를 포함하지 않습니다.',
+                      'No cash flow data available — DART summary financial statements do not include a cash flow statement.'
+                    )
+                  : t('현금흐름 데이터 없음', 'No cash flow data available')}
+              </Text>
+            )}
+            {v.cash_flow.notes && (
+              <Text style={[s.cardText, { color: C.mid, marginBottom: 6 }]}>{v.cash_flow.notes}</Text>
+            )}
+          </>
+        );
+      })()}
 
       {/* Key risks */}
       {v.key_risks?.length > 0 && (
@@ -1376,7 +1511,7 @@ function FounderSection({ v, t }: { v: FounderV2; t: TFn }) {
   const isSerial = v.founding_history.type === 'serial';
   return (
     <View style={s.section}>
-      <SectionHeader num={9} title={t('창업자 분석', 'Founder Analysis')} id="sec-9" />
+      <SectionHeader num={8} title={t('창업자 분석', 'Founder Analysis')} id="sec-8" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {/* Founder profiles */}
@@ -1427,8 +1562,8 @@ function FounderSection({ v, t }: { v: FounderV2; t: TFn }) {
       <SubHeader>{t('창업 이력', 'Founding History')}</SubHeader>
       <View style={[s.tagsRow, { marginBottom: 4 }]}>
         <Text style={[s.tag, {
-          backgroundColor: isSerial ? '#EDE9FE' : C.bg,
-          color: isSerial ? '#7C3AED' : C.mid,
+          backgroundColor: isSerial ? C.blueLight : C.bg,
+          color: isSerial ? C.blue : C.mid,
         }]}>
           {isSerial ? 'Serial Founder' : '1st Time Founder'}
         </Text>
@@ -1535,8 +1670,8 @@ function GrowthScenarioSection({ g, t }: { g: GrowthScenarioV2; t: TFn }) {
 
       <View style={s.tagsRow}>
         <Text style={[s.tag, {
-          backgroundColor: isHigh ? '#DCFCE7' : '#FEF3C7',
-          color: isHigh ? '#15803D' : '#92400E',
+          backgroundColor: isHigh ? C.greenBg : C.redBg,
+          color: isHigh ? C.green : C.red,
         }]}>
           {isHigh ? t('높은 신뢰도', 'High Confidence') : t('낮은 신뢰도', 'Low Confidence')} · {sampleLabel}
         </Text>
@@ -1620,11 +1755,14 @@ function SourceRow({ src, idx, t }: { src: Source; idx: number; t: TFn }) {
   );
 }
 
-function SourcesPage({ sources, founderSources, company, t }: { sources: AnalysisSources; founderSources?: Source[] | null; company: string; t: TFn }) {
+function SourcesPage({ sources, founderSources, nudgeSources, company, t }: { sources: AnalysisSources; founderSources?: Source[] | null; nudgeSources?: Source[] | null; company: string; t: TFn }) {
   const entries = Object.entries(sources) as [keyof AnalysisSources, Source[]][];
   const filled = entries.filter(([, srcs]) => srcs && srcs.length > 0);
   const hasFounder = !!(founderSources && founderSources.length > 0);
-  if (filled.length === 0 && !hasFounder) return null;
+  // cross_industry_nudge_v1.sources는 AnalysisSources 스키마 밖(자체 섹션 JSON에 내장) —
+  // 웹의 buildSourceGroups()와 동일하게 founder와 같은 방식으로 별도 그룹 처리(2026-08-16).
+  const hasNudge = !!(nudgeSources && nudgeSources.length > 0);
+  if (filled.length === 0 && !hasFounder && !hasNudge) return null;
   const srcTabLabels = getSrcTabLabels(t);
 
   return (
@@ -1639,6 +1777,14 @@ function SourcesPage({ sources, founderSources, company, t }: { sources: Analysi
             ))}
           </View>
         ))}
+        {hasNudge && (
+          <View>
+            <Text style={s.srcGroupLabel}>{t('크로스인더스트리 넛지', 'Cross-Industry Nudge')}</Text>
+            {nudgeSources!.map((src, i) => (
+              <SourceRow key={i} src={src} idx={i} t={t} />
+            ))}
+          </View>
+        )}
         {hasFounder && (
           <View>
             <Text style={s.srcGroupLabel}>{t('창업자', 'Founder')}</Text>
@@ -1700,27 +1846,37 @@ export default function AnalysisPdf({ data: rawData, shareUrl }: { data: Analysi
         )}
 
         {data.summary_v2 && <SummarySection v={data.summary_v2} t={t} />}
-        {data.industry_history_v2 && <IndustryHistorySection v={data.industry_history_v2} t={t} />}
-        {data.tech_evolution_v2 && <TechEvolutionSection v={data.tech_evolution_v2} t={t} />}
         {data.value_chain_v2 && <ValueChainSection v={data.value_chain_v2} t={t} />}
         {data.business_model_v2 && <BusinessModelSection v={data.business_model_v2} t={t} />}
         {data.competitors_v2 && <CompetitorsSection v={data.competitors_v2} t={t} />}
+        {data.cross_industry_nudge_v1 && <CrossIndustryNudgeSection v={data.cross_industry_nudge_v1} t={t} />}
+        {data.financials_v2 && <FinancialsSection v={data.financials_v2} t={t} dataSource={data.dataSource} />}
         {data.strategy_v2 && <StrategySection v={data.strategy_v2} t={t} />}
-        {data.financials_v2 && <FinancialsSection v={data.financials_v2} t={t} />}
         {data.founder_v2 && <FounderSection v={data.founder_v2} t={t} />}
-        {data.growth_scenario_v2 && <GrowthScenarioSection g={data.growth_scenario_v2} t={t} />}
+        {(data.industry_history_v2 || data.tech_evolution_v2) && (
+          <PainDiagnosisSection industryHistory={data.industry_history_v2} techEvolution={data.tech_evolution_v2} t={t} />
+        )}
 
         <PageFooter company={data.companyName} t={t} />
       </Page>
 
-      {/* Sources */}
+      {/* Sources — 웹과 동일하게 Pain Diagnosis 다음, 최후미의 성장 시나리오보다 앞 */}
       {data.sources && (
         <SourcesPage
           sources={data.sources}
           founderSources={data.founder_v2?.sources}
+          nudgeSources={data.cross_industry_nudge_v1?.sources}
           company={data.companyName}
           t={t}
         />
+      )}
+
+      {/* 성장 시나리오 — 프리미엄 전용, 웹과 동일하게 스택 최후미(출처 뒤)에 배치 */}
+      {data.growth_scenario_v2 && (
+        <Page size="A4" style={s.page}>
+          <GrowthScenarioSection g={data.growth_scenario_v2} t={t} />
+          <PageFooter company={data.companyName} t={t} />
+        </Page>
       )}
     </Document>
   );
