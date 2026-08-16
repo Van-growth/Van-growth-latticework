@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo, FormEvent, KeyboardEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Share2, Link, X, RefreshCw, Target, MessageCircle } from 'lucide-react';
+import { Share2, Link, X, RefreshCw, Target } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import LoginPromptModal from './LoginPromptModal';
-import BenPanel, { BenWidthPreset } from './BenPanel';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
@@ -37,16 +36,6 @@ const PENDING_INDUSTRY_SELECTION_KEY = 'pending_industry_company_selection';
 // 즐겨찾기는 /history 라우트로 각각 독립.
 const PURPOSE_CATEGORIES = ['ma', 'investment', 'partnership', 'customer', 'other'] as const;
 type PurposeCategory = (typeof PURPOSE_CATEGORIES)[number];
-
-// Ben 채팅 패널 폭 — 기업분석 결과 화면에서만 렌더되므로 이 컴포넌트가 상태를 직접 소유한다
-// ("기본"/"넓게" 2단 프리셋, localStorage에 프리셋 이름만 저장).
-const BEN_WIDTH_PRESETS: Record<BenWidthPreset, number> = { default: 420, wide: 640 };
-const BEN_WIDTH_LS_KEY = 'ben_panel_width';
-
-function loadSavedBenWidthPreset(): BenWidthPreset {
-  if (typeof window === 'undefined') return 'default';
-  return window.localStorage.getItem(BEN_WIDTH_LS_KEY) === 'wide' ? 'wide' : 'default';
-}
 
 function daysAgo(iso: string | null): number {
   if (!iso) return 0;
@@ -151,16 +140,6 @@ export default function HomeContent() {
   const { session, signInWithGoogle } = useAuth();
   const { language } = useLanguage();
   const t = getUiStrings(language).home;
-
-  // Ben 채팅 패널 — 기업분석 결과 화면(showResult)에서만 렌더(2026-08-18, 전역 노출
-  // 버그 수정 — 히스토리/산업별 보기/설정 등 리포트가 없는 화면에는 아예 마운트 안 함).
-  const [benWidthPreset, setBenWidthPresetState] = useState<BenWidthPreset>('default');
-  const [showBenMobile, setShowBenMobile] = useState(false);
-  useEffect(() => { setBenWidthPresetState(loadSavedBenWidthPreset()); }, []);
-  function setBenWidthPreset(preset: BenWidthPreset) {
-    setBenWidthPresetState(preset);
-    try { window.localStorage.setItem(BEN_WIDTH_LS_KEY, preset); } catch { /* ignore */ }
-  }
 
   const [companyName, setCompanyName] = useState('');
   // 분석 요청마다 매번 입력받는 목적 — 온보딩 저장값 아님, 요청 시점 body에만 실린다.
@@ -753,10 +732,8 @@ export default function HomeContent() {
   const phase1 = loading && completedBatches.has(-1) && !completedBatches.has(1);
   const showCard = result ?? (loading && completedBatches.has(1) ? (displayData ?? emptyBase(companyName.trim())) : null);
   const showResult = !!(showCard && !fetchingId);
-  const benT = getUiStrings(language).ben;
 
   return (
-    <>
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Hero */}
       <div className="text-center mb-10">
@@ -979,14 +956,10 @@ export default function HomeContent() {
           {error}
         </div>
       )}
-    </div>
 
-    {/* Result (final or streaming partial) — 좌: 리포트, 우: Ben 채팅 패널.
-        Ben은 이 화면(기업분석 결과)에서만 마운트된다(2026-08-18, 전역 노출 버그 수정) —
-        히스토리/산업별 보기/설정 등 다른 페이지에는 아예 렌더되지 않는다. */}
-    {showResult && (
-      <div className="max-w-[1600px] mx-auto px-4 pb-8 lg:flex lg:items-start lg:gap-4">
-        <div className="flex-1 min-w-0 max-w-4xl mx-auto lg:mx-0">
+      {/* Result (final or streaming partial) */}
+      {showResult && (
+        <div>
           {/* Cache banner */}
           {result && isCached && (
             <div className="flex items-center justify-between bg-navy-50 border border-navy-100 rounded-xl px-4 py-2.5 mb-3">
@@ -1041,58 +1014,29 @@ export default function HomeContent() {
             </div>
           )}
 
+          {/* Toast */}
+          {toast && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
+              {toast}
+            </div>
+          )}
+
           {/* 2026-08-17부터 AnalysisCard가 탭 전환 없는 sticky 그리드+스크롤 문서로
               바뀌면서 기업분석/pain 진단 두 그룹이 항상 함께 이어져 보인다. */}
           <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} isPremium={usage?.isPremium ?? false} />
         </div>
+      )}
 
-        {/* Ben — desktop sticky rail */}
-        <div className="hidden lg:flex shrink-0 sticky top-0 h-screen" style={{ width: BEN_WIDTH_PRESETS[benWidthPreset] }}>
-          <div className="flex-1 min-w-0 h-full py-3 pl-1 overflow-hidden">
-            <BenPanel analysisData={showCard} widthPreset={benWidthPreset} setWidthPreset={setBenWidthPreset} />
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Ben — mobile floating action button + full-screen slide-over, 결과 화면에서만 */}
-    {showResult && (
-      <>
-        <button
-          className="lg:hidden fixed bottom-6 right-4 z-30 w-12 h-12 bg-navy-600 text-white rounded-full shadow-lg flex items-center justify-center"
-          onClick={() => setShowBenMobile(v => !v)}
-          aria-label={benT.openAria}
-        >
-          {showBenMobile ? <X size={20} /> : <MessageCircle size={20} />}
-        </button>
-        {showBenMobile && (
-          <div className="lg:hidden fixed inset-0 z-20 flex justify-end">
-            <div className="absolute inset-0 bg-black/20" onClick={() => setShowBenMobile(false)} />
-            <div className="relative w-full max-w-sm h-full">
-              <BenPanel analysisData={showCard} />
-            </div>
-          </div>
-        )}
-      </>
-    )}
-
-    {/* Toast */}
-    {toast && (
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
-        {toast}
-      </div>
-    )}
-
-    {pendingSuggestion && (
-      <LoginPromptModal
-        companyName={pendingSuggestion.name}
-        onClose={() => setPendingSuggestion(null)}
-        onContinue={() => {
-          sessionStorage.setItem(PENDING_SELECTION_KEY, JSON.stringify(pendingSuggestion));
-          signInWithGoogle();
-        }}
-      />
-    )}
-    </>
+      {pendingSuggestion && (
+        <LoginPromptModal
+          companyName={pendingSuggestion.name}
+          onClose={() => setPendingSuggestion(null)}
+          onContinue={() => {
+            sessionStorage.setItem(PENDING_SELECTION_KEY, JSON.stringify(pendingSuggestion));
+            signInWithGoogle();
+          }}
+        />
+      )}
+    </div>
   );
 }

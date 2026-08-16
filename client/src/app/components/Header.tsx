@@ -1,10 +1,12 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { getUiStrings } from '@/lib/i18n/uiStrings';
+import BenLauncher from './BenLauncher';
 
 export function GoogleIcon() {
   return (
@@ -23,11 +25,24 @@ export default function Header() {
   const { language } = useLanguage();
   const t = getUiStrings(language).header;
 
-  // 최상단 내비게이션 1단 구조(2026-08-17) — 기업분석/산업별 보기/히스토리/설정/로그아웃
-  // 5개 항목을 동일한 시각적 비중으로 나열. 로그아웃도 더 이상 아바타 옆 보조 텍스트가
-  // 아니라 나머지 4개와 같은 위치·굵기의 nav 링크로 승격.
+  // 최상단 내비게이션 — 기업분석/산업별 보기/히스토리 3개 nav 링크 + 우측 Ben 버튼(상시) +
+  // 아바타 드롭다운(설정/로그아웃, 2026-08-18) 구조. 설정/로그아웃은 이전엔 나머지와 같은
+  // nav 링크였으나(2026-08-17 "1단 구조"), Ben 버튼 자리를 만들기 위해 아바타 클릭 시
+  // 뜨는 드롭다운으로 재배치.
   const navLinkCls = (active: boolean) =>
     `text-sm ${active ? 'text-navy-600 font-medium' : 'text-gray-500 hover:text-gray-800'}`;
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [menuOpen]);
 
   return (
     <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
@@ -38,50 +53,72 @@ export default function Header() {
             <Link href="/" className={navLinkCls(pathname === '/')}>{t.analysis}</Link>
             <Link href="/industries" className={navLinkCls(pathname === '/industries')}>{t.industries}</Link>
             <Link href="/history" className={navLinkCls(pathname === '/history')}>{t.history}</Link>
-            {!loading && user && (
-              <>
-                <Link href="/settings" className={navLinkCls(pathname === '/settings')}>{t.settings}</Link>
-                <button
-                  type="button"
-                  onClick={() => signOut()}
-                  className="text-sm text-gray-500 hover:text-gray-800"
-                  aria-label={t.logoutAria}
-                >
-                  {t.logout}
-                </button>
-              </>
-            )}
           </div>
         </div>
 
-        {!loading && (
-          user ? (
-            <div className="flex items-center gap-2 shrink-0">
-              {user.user_metadata?.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={user.user_metadata.avatar_url}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className="w-7 h-7 rounded-full"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-navy-100 text-navy-700 text-xs font-semibold flex items-center justify-center">
-                  {(user.email ?? '?')[0].toUpperCase()}
-                </div>
-              )}
-              <span className="text-xs text-gray-500 hidden sm:inline max-w-[160px] truncate">{user.email}</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => signInWithGoogle()}
-              className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3.5 py-1.5 shadow-sm hover:bg-gray-50 transition-colors shrink-0"
-            >
-              <GoogleIcon />
-              {t.loginWithGoogle}
-            </button>
-          )
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <BenLauncher />
+
+          {!loading && (
+            user ? (
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(v => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  className="flex items-center gap-2"
+                >
+                  {user.user_metadata?.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="w-7 h-7 rounded-full"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-navy-100 text-navy-700 text-xs font-semibold flex items-center justify-center">
+                      {(user.email ?? '?')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-xs text-gray-500 hidden sm:inline max-w-[160px] truncate">{user.email}</span>
+                </button>
+
+                {menuOpen && (
+                  <div role="menu" className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20">
+                    <div className="px-3 py-2 text-xs text-gray-400 truncate border-b border-gray-100 sm:hidden">{user.email}</div>
+                    <Link
+                      href="/settings"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {t.settings}
+                    </Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setMenuOpen(false); signOut(); }}
+                      aria-label={t.logoutAria}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {t.logout}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => signInWithGoogle()}
+                className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3.5 py-1.5 shadow-sm hover:bg-gray-50 transition-colors shrink-0"
+              >
+                <GoogleIcon />
+                {t.loginWithGoogle}
+              </button>
+            )
+          )}
+        </div>
       </div>
     </nav>
   );
