@@ -2826,7 +2826,7 @@ function growthScenarioToMd(g: GrowthScenarioV2): string {
     `**CAGR (Year+1 → Year+${years})**: 보수적(P10) ${fmtCagr(calcCagr(g.simulation.p10))} · 예상(P50) ${fmtCagr(calcCagr(g.simulation.p50))} · 낙관적(P90) ${fmtCagr(calcCagr(g.simulation.p90))}`,
     `| 연차 | 보수적(P10) | 예상(P50) | 낙관적(P90) |\n|---|---|---|---|\n${
       Array.from({ length: years }, (_, i) =>
-        `| Year+${i + 1} | ${g.simulation.p10[i]} | ${g.simulation.p50[i]} | ${g.simulation.p90[i]} |`
+        `| Year+${i + 1} | ${fmtGrowthRevenue(g.simulation.p10[i], g.currency)} | ${fmtGrowthRevenue(g.simulation.p50[i], g.currency)} | ${fmtGrowthRevenue(g.simulation.p90[i], g.currency)} |`
       ).join('\n')
     }`,
   ]);
