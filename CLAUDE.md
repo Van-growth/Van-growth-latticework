@@ -9,41 +9,99 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-17 (2026-08-16 세션에서 이어짐)
-**커밋**: `a83e61c`/`6866422`(배치5+purpose+4탭+산업별보기, 2026-08-16 push 완료) →
-`bfffd24`(목적 섹션 시각 강조+discovery_questions 섹션별 캡, push 완료) → `5eb58e0`
-(sticky 그리드+스크롤 레이아웃 전환, ICP Insights 입력소스 purpose 전환+rationale —
-**이번 세션 마지막 커밋, 아직 push 안 함**).
-**Render 배포**: `bfffd24`까지는 push+배포 확인 요청받아 진행함(사용자가 직접 확인).
-`5eb58e0`은 미push — 다음 세션 시작 시 push 여부 확인 필요.
+**날짜**: 2026-08-17 (같은 날 세션 계속 — 색상 팔레트+내비게이션 재편에 이어 UI/UX 개선 4건 추가)
+**커밋**: `a83e61c`~`40b6035`까지 전부 push 완료(이전 작업, `git rev-parse HEAD`==
+`origin/main` 확인). **이번 세션 작업(색상+내비게이션+즐겨찾기 + Settings ICP 폼 제거+
+섹션 카드 복사/맨위로 버튼+출처 순서 이동+성장 시나리오 CAGR) 전부 아직 커밋 전** — 아래
+"완료" 전체가 워킹트리에만 존재.
+**Render 배포**: 미확인 — 이번 세션 아직 push 없음.
 
-### 완료
-- 분석 목적 섹션 시각 강조: 검색창+목적버튼+상세입력 카드형 통합, 라벨/대비 강화(`bfffd24`).
-- discovery_questions 캡을 전체 총량(5개) → 섹션별(`capPerSection()`, 섹션당 최대 5개)로
-  전환 — 합성 후보 30개로 검증, 5개→18개(섹션당 3개 고르게)로 정상 확장 확인(`bfffd24`).
-- 기업분석 탭 좌우 스크롤 탭바 완전 제거 → 상단 sticky 상태 그리드(기존 진행 카드 재사용)
-  + 세로 스크롤 문서 레이아웃 전환(`5eb58e0`) — 그리드 클릭 시 `scrollIntoView` 앵커 이동,
-  전 섹션 동시 마운트로 전환(성능 원칙 "탭 unmount 유지"는 의도적으로 뒤집힘, CLAUDE.md
-  반영). `activeGroup`/`TAB_GROUPS`/`firstTabOfGroup` 죽은 코드 정리. 신규 "출처" 통합
-  섹션 추가. `ShareContent.tsx`는 코드 변경 없이 동일 개선 혜택.
-- ICP Insights 큐레이션 입력소스를 온보딩 ICP(`profiles.icp_*`, CEO 타겟 유저는 항상
-  비어있어 결정론적 경로로만 빠지고 있었음— 코드 확인으로 재검증)에서 매 요청
-  purpose(`analyses.purpose_category`/`purpose_detail`)로 전환(`5eb58e0`). `icp_insights`
-  스키마 변경 없음(purpose는 `signals_used` JSONB에 기록). 질문마다 "왜 이 질문이 나왔는지"
-  rationale 추가(source_facts 인용 강제) — 합성 후보로 검증, 실제 근거만 인용하고 근거
-  없는 후보는 자동 제외됨을 확인.
-- CLAUDE.md 아키텍처 문서(신규 섹션 2개 + ICP 통합 섹션 업데이트 + 성능 원칙 + 버전
-  히스토리 v2.11.0) 갱신, 백로그 6개 항목 중 4개 완료 처리.
-- 서버+클라이언트 `tsc --noEmit` 전 구간 클린(이번 세션 전체).
+### 완료 (이번 세션 — 커밋 전, 워킹트리)
+- **색상 팔레트 3색 체계 전환**: `globals.css`에 `@theme inline` 토큰 신설(`navy-50~800`
+  풀스케일 + `navy`/`navy-hover`/`navy-tint`/`navy-tint-border` alias, `success`/`success-bg`/
+  `success-border`, `risk`/`risk-bg`/`risk-border`, `source-official`/`source-reference`/
+  `source-estimate`+각 bg/border). client 전체(13개 파일, 약 350곳)에서 `blue-*`→`navy-*`
+  1:1 셰이드 매핑 기계적 치환, `indigo`/`purple`/`violet`/`orange`/`sky`/`teal` 등 장식적
+  단발 사용은 전부 navy/gray로 수렴. green/emerald/amber/red는 필드별로 직접 판정 — 진행완료
+  (sticky 그리드 체크마크, 진행중 스피너는 amber 아닌 navy로 신규 지정)/리스크(핵심 리스크·
+  리스크 분석·붕괴 시나리오·경쟁사 약점·재무 YoY 하락·rate-limit·에러 배너 등 20여 곳)/출처
+  신뢰도(L1·L2·L3 배지 + "(추정)" 인라인 마커 + financials_v2 신뢰도 요약 캐비닛)만 시맨틱
+  유지, 나머지(bull_case/무디 강도/펀딩단계 태그/차트 범례 등)는 navy 단색 그러데이션 또는
+  gray로 전환. Pain Diagnosis(cross_industry_nudge "업종 공통 Pain" + ReportSection emphasis
+  ring + 사이드그리드 isPain 링)의 기존 amber 차별화는 사전 조사 단계에서 4번째 keep-case로
+  명시해 승인받고 그대로 유지 — 3대 예외 외 유일한 보존 사례. **ICP Insights(discovery
+  questions) 탭 내부 색상은 지시대로 전혀 안 건드림**(별점 위젯/lightbulb/질문 카드 amber
+  그대로). AnalysisPdf.tsx(raw hex `StyleSheet.create`, Tailwind 미사용)는 스코프 제외 —
+  후속 세션 대상으로 남김. 검증: `bg-blue-|indigo-|purple-|violet-|orange-|sky-|teal-` 전체
+  0건 확인, 컴파일된 CSS에서 `.bg-navy-600`/`.text-risk`/`.bg-source-official` 실제 생성
+  확인(curl로 `/_next/static/css/app/layout.css` 직접 확인).
+- **최상단 내비게이션 1단 구조**: `기업분석`/`산업별 보기`/`히스토리`/`설정`/`로그아웃` 5개
+  동일 비중 nav 링크로 재편(`Header.tsx`) — 로그아웃도 아바타 옆 보조텍스트에서 나머지와
+  같은 위치의 링크로 승격. `HomeContent.tsx`의 `TOP_TABS`/`topTab`/`TopTabKey`/
+  `handleSelectIndustryCompany` 전부 제거, 이 컴포넌트 자체가 곧 "기업분석" 홈이 됨(별도
+  탭 개념 삭제). 신규 라우트 `client/src/app/industries/page.tsx` — `IndustryView`를
+  HomeContent 내부 조건부 렌더링에서 독립 페이지로 승격, 클릭 시 회사 선택은
+  `PENDING_INDUSTRY_SELECTION_KEY` sessionStorage 브릿지(기존 `PENDING_SELECTION_KEY`
+  로그인-재개 패턴과 동일 구조)로 `/`에 전달 → `HomeContent.tsx`의 신규 마운트 effect가
+  읽어서 자동 `handleSelectSuggestion` 이어감.
+- **히스토리 — 즐겨찾기 실기능 신규 구현(최근조회 통합)**: 신규 테이블
+  `analysis_favorites`(user_id/analysis_id UNIQUE, RLS 활성화 정책 0개 — 다른 테이블과 동일
+  기준, `supabase/migrations/20260817120000_analysis_favorites.sql`, **prod만 적용, CLI로
+  직접 적용 후 `migration repair --status applied`로 이력 정리** — dev는 기존 방침대로
+  잠정 미적용). 서버: `GET /api/analyses`가 `isFavorited` 필드 추가(이 유저의
+  `analysis_favorites` 집합과 대조), `GET /api/analyses/:id`도 동일, 신규
+  `POST`/`DELETE /api/analyses/:id/favorite`(하드 401만, 소유권 체크 없음 — 개인화 토글이라
+  본인이 조회한 어떤 분석이든 즐겨찾기 가능). `history/page.tsx`를 "★ 즐겨찾기"(항상 표시,
+  비어있으면 안내 문구) + "최근 조회"(즐겨찾기 항목 제외) 2섹션으로 재작성, 각 행에 별표
+  토글(낙관적 업데이트+실패 시 롤백). `AnalysisCard.tsx` 헤더에도 동일 별표 토글 추가
+  (`data.id` 없으면 비활성화 — 스트리밍 중 저장 전 방어, ICP Insight 404 버그와 동일 계열
+  가드 재사용). `isShareView`에서는 별표 버튼 자체를 숨김(공유 링크는 읽기 전용 유지).
+- **Settings 페이지 죽은 ICP 입력 폼 제거**: `curateDiscoveryQuestions()`가 이미 온보딩
+  ICP 대신 매 요청 purpose를 쓰도록 전환(`5eb58e0`)돼 있어 채워도 효과 없던 "ICP (이상적
+  고객 프로필)" 섹션(제품/타겟산업/타겟직무 3개 입력) 전체 제거. `ProfileForm.tsx`의
+  `showIcp` prop을 `showNickname`으로 rename(닉네임 입력 블록만 계속 게이트 — ICP와
+  무관한 별개 기능이라 분리), `ProfileFormValues`/`toFormValues()`/JSX에서 icp_* 3필드
+  전부 삭제, `settings/page.tsx`의 PATCH body에서도 제거. 서버 `PATCH /api/profile`은
+  이미 `if (icp_product !== undefined)` 패턴이라 필드를 안 보내면 기존 DB값이 그대로
+  보존됨(컬럼 삭제 없음, 서버/DB 변경 불필요 — 확인 후 무변경 결정). `uiStrings.ts`
+  `profileForm`의 icp* 8개 키(interface+ko+en)도 함께 제거.
+- **섹션 카드 헤더에 복사/맨위로 버튼**: `ReportSection`에 `getMarkdown`/`uiT` prop 추가
+  — 자체 `copied` state로 클립보드 복사(아이콘만, `title`로 툴팁 — 기존 `CopyButton`과
+  동일 로직 별도 아이콘 전용 렌더) + `window.scrollTo({top:0})`으로 맨 위 이동, 2버튼
+  모두 12개 `ReportSection` 호출부(Pain Diagnosis emphasis 섹션 포함) 전체에 적용.
+  마크다운 소스가 없던 3곳 신규 작성 — `crossIndustryNudgeToMd()`, `mdSourcesBlock()`을
+  `label` 파라미터로 확장한 뒤 `AllSourcesSummary`의 groups 빌드 로직을
+  `buildSourceGroups()` 공용 함수로 추출해 신규 `sourcesToMd()`가 재사용, `icpInsightToMd()`
+  (큐레이션 로직은 안 건드리고 이미 선별된 질문+rationale만 포맷팅, `isShareView` 여부로
+  `data.icpDiscoveryQuestions`/`icpInsightResult` 중 소스만 분기). `pain_diagnosis`는
+  기존 `industryHistoryToMd`+`techEvolutionToMd`를 `mdJoin`으로 합성.
+- **출처 섹션을 맨 끝으로**: 렌더 순서를 요약→밸류체인→비즈니스모델→경쟁사→넛지→재무→
+  전략→창업자→Pain Diagnosis→출처(→growth_scenario/icp_insight, 기존처럼 그리드 밖
+  스택 끝 유지)로 조정 — 구 순서(창업자 바로 다음 출처)에서 출처를 Pain Diagnosis
+  뒤로 이동.
+- **성장 시나리오 라인별 CAGR**: `calcCagr(values)` 헬퍼(배열 길이 기반 일반화,
+  `(last/first)**(1/(n-1))-1`, `years`가 항상 3이지만 하드코딩 안 함 — `server/src/
+  services/monteCarloService.ts`의 `years=3` 기본값을 오버라이드하는 호출부가 코드
+  전체에 없음을 확인) 추가. "연도별 매출 시나리오" 제목과 차트 사이에 보수적/예상/
+  낙관적 3개 CAGR 배지(회색 라벨+진한 숫자, 기존 KPI 카드 톤 재사용 — 별도 시맨틱
+  색 안 씀) 표시, `growthScenarioToMd()`에도 동일 CAGR 라인 추가해 복사 결과 반영.
+- 서버+클라이언트 `tsc --noEmit` 전 구간 클린(양쪽 라운드 전부), eslint 0 errors(기존
+  경고 2건은 이번 세션 무관 사전 존재분 — `TABS`/`ticker` unused, `ProfileForm.tsx`
+  등 이번에 손댄 파일은 경고 0). dev 서버(3000/4000) 핫리로드로 전 구간 무오류 확인,
+  `/`/`/industries`/`/history`/`/settings` 전부 200 확인.
 
 ### 남음
-- **오늘 만든 sticky 그리드+스크롤 레이아웃/ICP rationale UI의 실제 브라우저 시각 검증** —
-  이번 세션에도 브라우저 자동화 도구가 없어 코드리뷰+서버 API/직접 함수호출 검증으로만
-  확인함(2026-08-16부터 이월 중인 동일 한계) — 다음 세션 최우선
+- **이번 세션 작업 전체(색상+내비게이션+즐겨찾기+ICP폼 제거+섹션 카드 버튼+출처 순서+
+  CAGR) 커밋 + push 여부 확인** — 다음 세션 최우선, 아직 사용자에게 커밋 승인 요청 전
+- **실제 브라우저 시각 검증** — 이번에도 브라우저 자동화 도구가 없어 코드리뷰+tsc+eslint+
+  컴파일된 CSS 직접 확인+curl 라우트 응답 코드로만 검증(2026-08-16부터 이월 중인 동일 한계).
+  색상 그러데이션 자연스러움, 즐겨찾기 별표 토글 실클릭, 섹션 카드 복사/맨위로 버튼 실동작,
+  성장 시나리오 CAGR 배지 레이아웃 전부 미확인
+- **AnalysisPdf.tsx 색상 팔레트 정리** — 이번 스코프에서 의도적으로 제외(raw hex
+  `StyleSheet.create`, Tailwind 클래스 아님), 필요 시 별도 세션
 - Settings 페이지의 구 AE용 ICP 입력폼(icp_product 등) 처리 방향 — ICP Insights 큐레이션은
   이미 purpose로 전환됐으므로 이 폼 자체를 없앨지 다른 용도로 재정의할지만 남음
 - 산업별 보기 — 산업명 검색 기능(영문 SIC description 기준, 한글 매핑 필요 여부 별도 결정)
-- 최근 조회 / 즐겨찾기 기능 설계 및 구현 — 스코프 큼, 별도 세션(현재 UI만 빈 상태)
 - 구글 로그인 + 온보딩 설문 실사용 검증 — 여러 세션째 최대 병목, 이번 세션 미착수
 - FCF도 EBITDA와 동일 원칙으로 제거할지 판단 — 이번 세션 미반영
 - 공유 링크 로딩 이슈(`/share/C2ud9AuX`) 실제 브라우저 재확인 — 이월
@@ -78,10 +136,16 @@
 - `DataSourceBadge` 하드코딩 한국어라 언어 토글 미적용 — 기존 격차, 범위 밖 유지
 - PDF `pdftotext` 한글 구간 깨짐(시각 렌더링엔 무영향) — 별도 확인 필요
 - react-pdf 테이블 행 `wrap={false}` 없음 — 페이지 경계 잘림 가능성, 실측 미재현
+- `GrowthScenarioV2Tab`(성장 시나리오 탭) 내부 라벨("연도별 매출 시나리오", `SCENARIO_LABEL`
+  등)이 `uiT` 안 거치고 하드코딩 한국어 — 이번 세션에 CAGR 배지 추가하며 발견, 위
+  "AnalysisCard.tsx 탭 내부 콘텐츠 일부 의도적 미번역"과 같은 계열로 판단해 이번 스코프
+  에서 손 안 댐(신규 CAGR 라벨도 기존 톤 그대로 하드코딩 한국어로 추가, 새 불일치 만들지
+  않음) — 별도 i18n 손볼 때 같이 처리
 
 ### 다음 세션 우선순위
-1. `5eb58e0` push 여부 확인 후, sticky 그리드+스크롤 레이아웃/ICP rationale UI를 실제
-   브라우저로 시각 검증
+1. 이번 세션 전체 작업(색상 팔레트+내비게이션 1단 구조+즐겨찾기+Settings ICP폼 제거+
+   섹션 카드 복사/맨위로 버튼+출처 순서 이동+CAGR) 커밋/push 여부 확인 후, 실제 브라우저로
+   시각 검증
 
 ## Vision & Mission
 
@@ -442,6 +506,15 @@ DART/web_search 소스는 SIC 체계가 안 맞아 조용히 스킵. dev 프로�
 겸용. `checkAnalysisUsage`는 `is_cache_view=false`인 행만 카운트 — 캐시 조회는 히스토리엔
 남지만 무료 횟수는 안 깎음
 
+**analysis_favorites** (2026-08-17): `id`, `user_id`(FK→auth.users), `analysis_id`
+(FK→analyses), `created_at`. UNIQUE(user_id, analysis_id) — 유저가 명시적으로 켜고 끄는
+토글 상태라 `analysis_usage`(append-only 활동 로그)와 별도 테이블로 분리. 히스토리 페이지
+"★ 즐겨찾기" 섹션 + 기업분석 결과 화면 헤더 별표 토글의 유일한 소스 — `GET /api/analyses`/
+`GET /api/analyses/:id`가 `isFavorited` 필드로 노출, `POST`/`DELETE /api/analyses/:id/favorite`
+로 토글(하드 401만, 소유권 체크 없음 — 본인이 조회한 어떤 분석이든 즐겨찾기 가능). RLS
+활성화·정책 0개(다른 테이블과 동일 기준). **prod에만 적용, dev 미적용**(2026-08-15 확정된
+"dev 잠정 미사용" 방침 유지).
+
 **profiles** (2026-07-03, 구글 로그인 도입): `id`(PK, auth.users(id) 참조), `email`,
 `is_premium_override`(BOOLEAN, 기본 false — Stripe 연동 전 로그인 유저 개별 프리미엄 우회용),
 `created_at`. auth.users에 신규 행(최초 구글 로그인) 생성 시 트리거로 자동 1행 생성.
@@ -730,26 +803,47 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### UI/UX 원칙
 - 라이트 테마 고정
+- **색상 팔레트 — 흰색/검은색/진한 네이비 3색 기본 체계 (2026-08-17 확정)**: 버튼(primary/
+  secondary)/pill 선택 버튼/카드 보더/배경/뱃지/링크 등 UI 전반의 장식적 색상은 navy 계열
+  (`globals.css`의 `@theme inline` 토큰, `navy-50`~`navy-800` 풀스케일 + `navy`/`navy-hover`/
+  `navy-tint`/`navy-tint-border` alias — 구 Tailwind `blue-*`와 1:1 셰이드 대응)로 통일한다.
+  시맨틱 예외는 정확히 3가지만 — ① 진행상태: 완료=`success`/`success-bg`/`success-border`
+  (기존 초록 유지), 진행중 스피너=navy(신규 지정, 기존엔 회색이었음). ② 리스크/유의사항:
+  `risk`/`risk-bg`/`risk-border`(빨강 유지) — "핵심 리스크"/"리스크 분석"/"붕괴 시나리오"
+  같은 리포트 내 리스크 섹션뿐 아니라 앱 레벨의 에러 배너·rate-limit 안내·경쟁사 약점처럼
+  "부정적/주의가 필요한" 내용 전반에 적용, 반대로 그 페어링 상대(성장 모멘텀·강점·긍정적
+  요약 등)는 navy로 전환해 비대칭 강조(위험만 눈에 띄게, 나머지는 중립). ③ 출처 신뢰도:
+  `source-official`(🟢, 초록)/`source-reference`(🟡, 호박색)/`source-estimate`(⚪, 회색)
+  3단 배지 + 인라인 "(추정)" 마커 + financials_v2 신뢰도 요약 캐비닛까지 전부 이 토큰
+  사용. **Pain Diagnosis(크로스인더스트리 넛지 + 산업역사/기술역사 섹션)의 amber 강조는
+  위 3대 예외에 속하지 않지만 기존에 확립된 제품 차별화 언어라 예외적으로 유지**(사전
+  조사 단계에서 4번째 keep-case로 명시). ICP Insights(discovery questions) 탭 내부 색상은
+  건드리지 않음(작업 스코프 아님, 기존 amber 그대로). `AnalysisPdf.tsx`(raw hex
+  `StyleSheet.create`, Tailwind 미사용)는 이번 스코프 제외 — 후속 세션 대상.
 - 탭별 검정 배경 한줄 요약 블록 필수
 - 탭별 핵심 먼저 표시 + 더 보기 구조
 - 국가 표시: 국기 이모지
 - 모바일 반응형 유지
-- **최상위 4탭 구조 (2026-08-16 재편 — 구 3탭 Company Intelligence/Pain Diagnosis/AE Skills
-  대체)**: 기업분석 / 산업별 보기 / 최근 조회 / 즐겨찾기. Pain Diagnosis가 배치5로 자동
-  병렬 실행되면서 별도 최상위 모드로 존재할 이유가 사라져 "기업분석" 탭이 기존 검색+리포트
-  플로우를 그대로 이어받는다(사이드바는 `activeGroup` prop 없이 기업분석/pain 진단 두 그룹을
-  항상 함께 보여줌 — `AnalysisCard.tsx`의 `TAB_GROUPS`/`activeGroup` 로직 자체는 남아있고
-  단지 호출부가 더 이상 값을 넘기지 않을 뿐, 새 컴포넌트 안 만듦). **산업별 보기**는 신규
-  `IndustryView.tsx` — `GET /api/industries`(SIC별 그룹+커버리지 카운트, `cik_master.
-  sic_code/sic_description` 재사용) → 선택 시 `GET /api/industries/:sicCode/companies?
-  limit=10`(financial_cache.raw_edgar 최신 매출 기준 내림차순, EDGAR 전용). Top 10만 실제
-  연동, 30/50/100은 UI만 있고 비활성 "준비 중" 뱃지(백엔드는 limit 1~100 전부 지원하지만
-  프론트가 의도적으로 10만 노출). 회사 클릭 시 기업분석 탭으로 전환 + 기존 typeahead
-  선택(`resolve`)과 동일한 플로우 재사용(신규 분석 플로우 안 만듦). **최근 조회/즐겨찾기**는
-  이번 스코프에서 로직 없는 빈 상태 문구만(별도 파일 안 만듦, HomeContent.tsx에 인라인).
-  AE Skills는 이번 스코프에서 내비게이션 진입점만 빠지고 컴포넌트(`AeSkillsView.tsx`)는
-  코드에 남아있음(향후 재배치는 별도 세션 판단). 상단 탭 상태는 URL에 반영하지 않음 —
-  새로고침 시 기업분석으로 리셋(기존 정책 유지).
+- **최상단 내비게이션 1단 구조 (2026-08-17 재편 — 구 "1단(분석/히스토리/설정) + 2단
+  (기업분석/산업별보기/최근조회/즐겨찾기)" 2계층 대체)**: `Header.tsx`가 기업분석(`/`) /
+  산업별 보기(`/industries`) / 히스토리(`/history`) / 설정(`/settings`) / 로그아웃 5개를
+  동일한 시각적 비중으로 나열 — 로그아웃도 아바타 옆 보조텍스트에서 나머지와 같은 위치의
+  nav 링크로 승격. "기업분석"은 더 이상 별도 탭이 아니라 `HomeContent.tsx` 자체(검색+목적
+  입력+리포트 플로우)가 곧 그 라우트(`/`) — `TOP_TABS`/`topTab`/`TopTabKey` 전부 삭제.
+  **산업별 보기**는 신규 라우트 `client/src/app/industries/page.tsx`로 독립 승격
+  (`IndustryView.tsx` 자체는 코드 변경 없음, `onSelectCompany` 콜백만 받는 자기완결
+  컴포넌트라 그대로 재사용) — 클릭한 회사는 `PENDING_INDUSTRY_SELECTION_KEY` sessionStorage
+  브릿지로 `/`에 전달(로그인-재개용 `PENDING_SELECTION_KEY`와 동일한 패턴), `HomeContent.tsx`
+  마운트 effect가 읽어 자동으로 `handleSelectSuggestion` 이어감. `GET /api/industries`/
+  `GET /api/industries/:sicCode/companies` 백엔드는 2026-08-16 그대로, Top 10만 실동작
+  (30/50/100은 비활성 뱃지)도 동일. **히스토리**가 "최근 조회"+"즐겨찾기"를 흡수(상세는
+  DB schema `analysis_favorites`/Architecture 섹션 참고) — 상단 "★ 즐겨찾기"(항상 표시,
+  비어있으면 안내 문구, 필터 토글 없음) + 그 아래 "최근 조회"(즐겨찾기 항목 제외) 2섹션.
+  즐겨찾기 토글은 히스토리 각 행 + 기업분석 결과 화면 헤더 양쪽에 별표 아이콘으로 노출,
+  클릭 즉시 서버 반영(낙관적 업데이트+실패 시 롤백). AE Skills는 여전히 내비게이션
+  진입점 없음, 컴포넌트(`AeSkillsView.tsx`)만 코드에 남아있음(2026-08-16 결정 유지). 상단
+  네비 상태는 URL 라우트 자체가 곧 상태라 별도 client state 불필요(구 `topTab` 리셋 정책은
+  자연 소멸 — 브라우저 주소창이 이미 그 역할을 함).
 
 ### 언어 정책 (2026-08-12 재개정 — 다국어 토글 재도입, 솔루션 앱 전체 + PDF만 대상)
 - **배경**: 2026-08 초 "영어 단일 고정" 결정(바로 아래 이력 참고)을 한국 BD/전략 담당자
@@ -1147,14 +1241,6 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
     Lever API 방식(13.3%)보다도 낮은 커버리지** — "회사 자체 페이지" 방식도 기각.
 - [ ] **산업별 보기 — 산업명 검색 기능** — 영문 SIC description 기준 검색, 한글 매핑
   필요 여부는 별도 결정.
-- [ ] **최근 조회 / 즐겨찾기 기능 설계 및 구현** (스코프 큼 — 별도 세션) — 현재는
-  최상위 탭에 UI 빈 상태만 자리 잡아둔 상태(로직 없음).
-- [ ] **Settings/온보딩 ICP 구조 재정비** (AE 기준 → CEO 목적 기준) — 방향 미정:
-  A안(설정에 배경정보 저장 후 분석 시 자동 적용) vs B안(완전 단발성, 저장 없이 매번
-  목적 입력만 — 현재 분석 요청 목적 입력이 이 방향). ICP Insights 큐레이션 입력은
-  2026-08-17에 purpose로 이미 전환됐으므로(아래 "완료" 참고) 이 항목은 순수하게
-  "Settings 페이지에 아직 남아있는 구 AE용 ICP 입력폼을 어떻게 할지"만 남음 — 폼 자체를
-  없앨지, 다른 용도로 재정의할지 다음 세션에서 판단.
 
 ### ✅ 완료
 - [x] 창업자 탭 추가
@@ -1452,6 +1538,34 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   실제 근거만 인용하고 근거 없는 후보는 자동 제외됨을 확인. **성능 원칙과 상충**:
   "탭 콘텐츠 조건부 렌더링(unmount) 유지" 원칙이 이번 변경으로 뒤집힘(전 섹션 동시
   마운트가 스크롤 레이아웃의 전제) — 아래 "성능 원칙" 섹션에 반영.
+- [x] 색상 팔레트 3색 체계 전환 + 최상단 내비게이션 1단 구조 재편 + 즐겨찾기 신규 구현
+  (2026-08-17) — 상세는 위 "UI/UX 원칙"(색상 팔레트/최상단 내비게이션 1단 구조) 및 DB
+  schema(`analysis_favorites`) 섹션 참고. 요약: (1) `globals.css`에 navy 풀스케일+success/
+  risk/source-* 토큰 신설, client 전체(13개 파일)에서 blue/indigo/purple/violet/orange 등
+  장식적 색상을 navy로 기계적 치환, green/emerald/amber/red는 진행완료·리스크·출처신뢰도
+  3대 예외만 유지하고 나머지는 필드 단위로 navy/gray 재판정(약 400곳). (2) `Header.tsx`
+  5개 항목 1단 nav로 재편, `HomeContent.tsx`의 `TOP_TABS`/`topTab` 전부 삭제, 신규 라우트
+  `/industries`(`IndustryView.tsx` 독립 승격). (3) 신규 `analysis_favorites` 테이블 +
+  `POST`/`DELETE /api/analyses/:id/favorite` + `GET /api/analyses`/`GET /api/analyses/:id`의
+  `isFavorited` 필드 — `history/page.tsx`를 즐겨찾기(상단)+최근조회(하단, 즐겨찾기 제외)
+  2섹션으로 재작성, `AnalysisCard.tsx` 헤더에도 별표 토글 추가. **DART 코드/참조 신규
+  추가 없음, 브랜드명 변경 없음, ICP Insights 로직/색상 전혀 안 건드림**(요청 제약사항 준수
+  확인). 서버+클라이언트 `tsc --noEmit` 클린, eslint 0 errors, 컴파일된 CSS에서 신규 토큰
+  유틸리티 실제 생성 확인(`.bg-navy-600`/`.text-risk`/`.bg-source-official`), dev 서버로
+  `/`/`/industries`/`/history`/`/settings` 전부 200 확인. **브라우저 실사용 검증은
+  미완료**(이 세션도 브라우저 자동화 도구 없음 — 기존 세션들과 동일한 한계).
+- [x] UI/UX 개선 4건 — Settings ICP 폼 제거/섹션 카드 복사·맨위로 버튼/출처 순서 이동/
+  성장 시나리오 CAGR (2026-08-17) — 상세는 Handoff/"발견(미처리)" 섹션 참고. 요약: (1)
+  `ProfileForm.tsx`의 죽은 ICP 입력 폼(제품/타겟산업/타겟직무) 완전 삭제, `showIcp`→
+  `showNickname` rename(닉네임 블록만 계속 게이트) — 서버 `PATCH /api/profile`이 이미
+  `!== undefined` 부분 업데이트 패턴이라 DB 컬럼/서버 변경 없이 안전하게 UI만 제거.
+  (2) `ReportSection`에 `getMarkdown`/`uiT` prop 추가, 12개 섹션 카드 헤더에 아이콘 전용
+  복사+맨위로 버튼(네이티브 `title` 툴팁) — 마크다운 소스 없던 3곳(`cross_industry_nudge`/
+  `sources`/`icp_insight`) 신규 작성, `mdSourcesBlock()`에 `label` 파라미터 추가해
+  `AllSourcesSummary`와 `sourcesToMd()`가 `buildSourceGroups()` 공유. (3) 출처 섹션을
+  창업자 바로 다음에서 Pain Diagnosis 뒤·스택 최후미로 이동. (4) `calcCagr()`(배열 길이
+  기반 일반화) 헬퍼로 성장 시나리오 P10/P50/P90 라인별 CAGR 배지 3개 추가, 복사 마크다운에도
+  반영. 서버+클라이언트 `tsc --noEmit` 클린, eslint 신규 에러 0.
 
 ## Security Principles (SSOT)
 
@@ -2534,4 +2648,16 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
   분석 목적 섹션 시각 강조(카드형 통합, 라벨/대비 강화). 상세는 Architecture 섹션
   "기업분석 탭 sticky 그리드+스크롤 레이아웃 전환"/"ICP 인사이트 discovery_questions
   2단계 통합" 2026-08-17 업데이트 참고. |
+| v2.12.0 | 2026-08-17 — 색상 팔레트를 흰색/검은색/네이비 3색 기본 체계로 전환
+  (`globals.css` 토큰 신설 + client 전체 약 400곳 치환, 진행완료/리스크/출처신뢰도 3대
+  시맨틱 예외만 유지) + 최상단 내비게이션을 1단 구조(기업분석/산업별 보기/히스토리/설정/
+  로그아웃)로 재편(구 2계층 탭 구조 대체, 산업별 보기는 `/industries` 독립 라우트로 승격)
+  + 히스토리에 즐겨찾기 실기능 신규 구현(`analysis_favorites` 테이블, 별표 토글이 히스토리
+  행+기업분석 헤더 양쪽에서 동작, 최근조회와 2섹션 통합). 상세는 UI/UX 원칙 섹션 및 DB
+  schema `analysis_favorites` 참고. |
+| v2.13.0 | 2026-08-17 — Settings 페이지 죽은 ICP 입력 폼(제품/타겟산업/타겟직무) 제거
+  (`curateDiscoveryQuestions()`가 이미 purpose 기반으로 전환돼 무효였음) + 섹션 카드
+  (`ReportSection`) 헤더에 복사/맨위로 아이콘 버튼 12곳 전체 추가 + 출처 섹션을 창업자
+  바로 다음에서 Pain Diagnosis 뒤·스택 최후미로 이동 + 성장 시나리오 P10/P50/P90 라인별
+  CAGR 배지 추가. 상세는 Handoff/"발견(미처리)" 섹션 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |
