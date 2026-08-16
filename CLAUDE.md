@@ -9,500 +9,67 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-16 (같은 날 세션 계속 — Ben 채팅 실패 진단 이후: 8월 비용 실측 →
-Haiku vs Sonnet synthesis 비교 테스트 → 리서치 단계 비교 테스트 → Haiku 전환 미채택
-결정 기록 → PDF 개편 3종 → PDF/웹 배포 동기화 확인 질의 대응(코드는 정상, 배포/캐시
-확인은 사용자 몫으로 정리) → PDF 목차 누락 버그 수정 → 출처를 웹·PDF 공통으로 진짜
-최종 섹션으로 재배치 → PDF 생성 소요시간(2~3분) 원인 조사 + 안내 문구 추가 → PDF
-성장 시나리오 섹션에 CAGR 배지+SVG 라인차트+최종연도 강조 추가)
-**커밋**: `f164f5c`(PDF 진행률 버그+콘텐츠 누락 4건+웹 디자인 동기화) → `ad1e861`
-(핸드오프 갱신) → `032e477`(PDF 목차 출처 누락 버그 수정 + 출처를 웹·PDF 공통
-최종 섹션으로 재배치, 사용자 확인 후 커밋) → `4f982b5`(핸드오프 커밋/push 상태
-정정) → `97d9e01`(PDF 생성 소요시간 원인 조사 + 안내 문구 추가, 사용자 확인 후
-커밋) → `7208ccd`(PDF 성장 시나리오 CAGR 배지+SVG 라인차트+최종연도 강조 추가,
-사용자 육안 확인 후 커밋) — 여기까지 `git push` 완료, 이 시점 `git rev-parse HEAD`
-== `origin/main` 확인됨.
-**의도적으로 커밋에서 제외한 파일**(이 세션 이전부터 미커밋 상태였고 이번 작업과
-무관 — `git status` 기준 여전히 untracked로 남아있음, 삭제하지 않음):
-`server/scripts/testDartQuickCheck.ts`/`testDartReanalysisConsistency.ts`/
-`ceo_staff_ben_guide.html`, 그리고 이번 세션의 Haiku 비교 테스트 산출물
-(`haiku_vs_sonnet_apr.html/json`, `haiku_vs_sonnet_research_apr.html/json` —
-생성된 리포트 산출물이라 소스코드가 아니므로 저장소에 안 넣음, 사용자에게는 이미
-전달 완료).
-**Render 배포**: `f164f5c`~`032e477`까지는 push 확인됨 — 이 환경엔 Render API
-토큰/CLI가 없어 실제 배포 성공 여부는 확인 불가(반복돼온 제약). 사용자가 배포 후
-PDF를 재생성해봤는데 색상/폰트/섹션순서가 예전 그대로였다고 제보 — 조사 결과
-`AnalysisPdf.tsx`는 스타일을 `data`(분석 콘텐츠)에서 전혀 읽지 않는 순수 코드
-하드코딩 구조임을 grep으로 재확인(스냅샷 저장 메커니즘 자체가 없음), 로컬
-프로덕션 빌드(`next build`)도 클린 성공 — 즉 **코드 문제 아님, 배포/브라우저
-캐시 쪽 문제로 좁혀짐**. 이 환경엔 Render 대시보드 접근 수단이 없어(client/server
-웹서비스가 `render.yaml`에 없고 대시보드에서 직접 관리되는 것으로 반복 확인된
-패턴) 실제 배포 성공 여부·브라우저 캐시 여부는 사용자가 직접 확인해야 함 —
-다음 세션 우선순위 1번 참고.
+**날짜**: 2026-08-16
+**커밋**: `f164f5c`, `ad1e861`, `032e477`, `4f982b5`, `97d9e01`, `1af34c9`,
+`7208ccd`, `62cbcf3`
+**Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI/대시보드 접근 수단이 없음
+(client/server 웹서비스가 `render.yaml`에 없고 대시보드에서 직접 관리되는 구조,
+반복 확인된 제약). 사용자가 배포 후 PDF 스타일이 예전 그대로였다고 제보했으나
+`AnalysisPdf.tsx`가 `data`에서 스타일을 읽지 않는 순수 코드 하드코딩 구조임을
+확인해 코드 문제는 아님으로 결론 — 실제 배포 반영 여부는 사용자가 직접 확인 필요.
 
-### 완료 (이번 세션 — `7208ccd`까지 커밋+push 완료)
-- **PDF 성장 시나리오 섹션(10번)에 CAGR 배지 + SVG 라인차트 + 최종연도 강조 추가**:
-  사용자 확인 — 웹(`GrowthScenarioV2Tab`)엔 이미 CAGR 배지(recharts `ComposedChart`
-  라인차트 포함)가 있는데 PDF(`AnalysisPdf.tsx`의 `GrowthScenarioSection`)에는
-  연도별 표만 있고 CAGR/차트가 전혀 없었음(웹/PDF가 별도 렌더링 시스템이라 웹
-  구현이 PDF에 자동 반영되지 않는 구조). **계산 로직 중복 구현 금지 원칙에 따라
-  신규 `client/src/lib/growthScenario.ts` 공용 유틸 신설** — `calcCagr()`(첫→마지막
-  연도 CAGR), `fmtCagr()`, `fmtGrowthRevenue()` 3개 함수를 여기 한 곳으로 통합하고
-  웹(`AnalysisCard.tsx`)과 PDF(`AnalysisPdf.tsx`) 양쪽이 이 파일을 import —
-  `AnalysisCard.tsx`의 로컬 중복 정의(`GrowthScenarioV2Tab` 내부 `fmtCagr`/
-  `calcCagr`, `growthScenarioToMd` 내부 `fmtCagr`) 전부 제거. 이 작업 중 기존에
-  이미 존재하던 중복도 함께 정리했음 — `AnalysisPdf.tsx`의 `fmtPdfRevenue`가
-  "mirrors AnalysisCard.tsx fmtGrowthRevenue"라는 주석까지 달려 있으면서 실제로는
-  손으로 미러링된 별도 구현이었던 것(이번에 CAGR을 추가하며 최종연도 강조에도
-  이 포맷터가 필요해 3번째 중복이 생기기 전에 함께 해소). **PDF 신규 구현**: (1)
-  CAGR 3열 배지(`s.cagrRow`/`cagrCard`) — 보수적/예상/낙관적 각 라인의 CAGR을
-  웹과 동일한 카드 레이아웃으로. (2) SVG 라인차트(`GrowthScenarioChart`, 신규
-  `Svg`/`Polyline`/`Circle` — react-pdf엔 recharts 같은 차트 라이브러리가 없어
-  직접 좌표 계산(연도 인덱스→x, 값→y 선형 스케일)해 그림) — P50 실선(navy,
-  `C.blue`) + P10/P90 점선(라이트 navy 톤 `#8fa8c2`, `strokeDasharray` 지원
-  확인 후 사용) + 각 지점 Circle 도트 + 상단/하단 절대위치 min/max 값 라벨 +
-  Year+1~N 축 라벨 + 범례. (3) 최종연도(Year+N) P50 매출 강조 카드
-  (`s.finalYearCard`, navy tint 배경). 기존 연도별 표는 그대로 유지(정확한
-  수치 확인용, 차트는 추세 파악용으로 상호보완).
-  **검증(실 DB 데이터, 계산 로직 재사용 확인)**: 이 PDF 테스트 대상 분석
-  (에이피알, `aa601e3a-...`)은 비프리미엄이라 API가 `growth_scenario_v2`를
-  null로 필터링해서 응답하므로, prod DB에서 `supabase db query --linked`
-  (읽기 전용)로 같은 레코드의 실제 `growth_scenario_v2` 값을 직접 조회해
-  API 응답에 덮어씌운 뒤(합성 데이터 아님, 같은 분석의 실제 시뮬레이션
-  결과) 렌더 — 이 환경엔 poppler(`pdftoppm`)가 없어 Read 도구로 PDF를
-  이미지 렌더링할 수 없었음, 대신 `pdf-parse`(스크래치패드에 임시 설치,
-  저장소엔 미반영)로 텍스트를 추출해 계산값을 직접 검산: 보수적 CAGR
-  35.3%/예상 CAGR 40.6%/낙관적 CAGR 46.2%가 `calcCagr()` 공식으로 손계산한
-  값과 정확히 일치, 차트 min/max 라벨("9150억원"/"2.4조원")과 최종연도
-  강조("Year+3 예상 매출(P50) 2.0조원")도 `fmtGrowthRevenue()`로 손계산한
-  값과 정확히 일치 확인. 총 페이지 22(기존 21+성장시나리오 섹션 1페이지)로
-  정상 증가. **다만 이건 텍스트 추출 기반 수치 검증이지 SVG 라인/도트가
-  실제로 올바른 위치에 시각적으로 그려지는지의 육안 확인은 아님** — 생성된
-  테스트 PDF를 `SendUserFile`로 전달해 사용자에게 실제 육안 확인 요청함
-  (테스트 파일 자체는 저장소에 미반영, 검증 후 로컬에서도 삭제).
-  검증: `tsc --noEmit` 클린, `eslint`(src 대상) 신규 경고 0(기존 TABS/ticker
-  2건만 유지). 조사에 쓴 TEMP 스크립트(`renderTestGrowthPdf.ts`)는 재사용
-  도구가 아니라 삭제 — 부수적으로 기존 `renderTestPdf.ts`의 하드코딩된
-  `window.location.origin`이 `http://localhost:3000`으로 남아있어(이전 세션의
-  `.next` 캐시 오염 수정으로 클라이언트 dev 서버가 3001로 이동했는데 반영 안
-  돼있던 것 발견) `http://localhost:3001`로 갱신 — 재사용 검증 도구가 조용히
-  깨져 있던 걸 이번에 발견해 같이 고침.
-- **PDF 목차 "11 출처 목록" 누락 버그 수정 + 출처를 웹·PDF 공통으로 진짜 최종
-  섹션으로 재배치**: (1) 사용자가 크로스인더스트리 넛지 출처 그룹을 추가했을 때
-  본문 헤더 번호는 갱신했지만 목차(`getTocItems()`) 추가를 빠뜨린 걸 발견 —
-  목차와 본문이 "출처를 보여줄지" 판정을 각자 따로 들고 있어 어긋난 것이 원인.
-  `hasSourcesContent()` 함수 하나로 통합해 목차·본문 양쪽이 같은 함수를 호출하도록
-  수정(같은 계열 버그 재발 원천 차단). (2) 이후 사용자가 "Pain Diagnosis→출처→
-  성장시나리오" 순서(직전에 의도된 설계로 확인했던 순서)를 재검토해 "출처는 항상
-  진짜 최종 섹션이어야 한다"로 결정 번복 — PDF(`AnalysisPdf.tsx`의 `getTocItems()`
-  +본문 렌더 순서+섹션 번호 10/11 스왑)와 웹(`AnalysisCard.tsx`의 `ReportSection`
-  렌더 순서 + 상단 sticky 내비 그리드의 `navCards` 배열 순서, 후자는 사용자가
-  명시하진 않았지만 그리드 클릭 순서와 실제 스크롤 순서가 어긋나면 안 된다는
-  동일 원칙으로 같이 수정) 둘 다 "...Pain Diagnosis→성장시나리오(프리미엄, 있으면)
-  →출처(항상 최후미)"로 재배치.
-  **검증(사용자가 "렌더 스크립트만으로 완료 보고하지 말 것"이라 명시해 한 단계
-  더 실측에 가까운 방법 사용)**: 이 세션엔 브라우저 자동화 도구가 없어(claude-in-
-  chrome 확장 미설치 상태 유지) 실제 클릭/스크롤은 여전히 불가능 — 대신 (a) PDF는
-  기존 `renderTestPdf.ts`로 실 DB 데이터 재렌더, 목차 "09→11"(이 분석은 비프리미엄이라
-  10번 성장시나리오 자체가 없어 건너뜀 — 정상 동작)과 본문 "11 출처 목록"이 정확히
-  마지막에 옴을 확인. (b) 웹은 신규 `client/scripts/renderTestWebSections.tsx`로
-  `react-dom/server`의 `renderToStaticMarkup()`을 이용해 **실제 `AnalysisCard`
-  컴포넌트를 실제 API 응답 데이터로 직접 렌더**해 최종 DOM의 `id="section-*"` 앵커
-  등장 순서를 실측 — `summary→...→founder→pain_diagnosis→growth_scenario→sources`
-  확인(isPremium을 강제로 true로 켜서 이 분석엔 없는 growth_scenario 위치까지 함께
-  검증). `AnalysisCardInner`가 쓰는 `useAuth`/`useLanguage`/`useAnalysis` 3개 Context는
-  전부 `createContext(default)`에 기본값이 있어 Provider 래핑 없이도 동작함을 이용 —
-  Provider 트리 재구성 없이 컴포넌트 자체를 격리 실행. 이 과정에서 (i) `tsx`가 `.env.local`을
-  자동 로드하지 않아 `AuthContext`→`supabaseClient` 모듈 로드 시점 에러 발생(공개
-  anon key를 스크립트에 직접 주입해 해결), (ii) `client/tsconfig.json`의
-  `jsx:"preserve"`(Next 전용 설정)를 `tsx`가 그대로 물려받아 클래식 JSX 트랜스폼으로
-  해석돼 `ReferenceError: React is not defined` 발생(`client/scripts/
-  tsconfig.script.json`을 신규 작성해 `jsx:"react-jsx"`로 오버라이드, `--tsconfig` 플래그로
-  지정해 해결 — 실제 프로덕션 `tsconfig.json`은 미변경) — 두 문제 모두 해결 완료.
-  **이 검증도 실제 브라우저 클릭/스크롤은 아님을 명확히 함** — 실제 컴포넌트+실제
-  데이터로 렌더한 최종 DOM 순서를 확인한 것으로, 소스 코드 diff 리뷰보다는 한 단계
-  더 실측에 가깝지만 사용자가 요청한 "다운로드 버튼/스크롤 직접 확인"의 완전한 대체는
-  아님 — 최종 확인은 여전히 사용자 몫.
-  검증: `tsc --noEmit`/`eslint` 클린(신규 경고 0). 부수 정리: `.next` 빌드 캐시가
-  직전 턴의 프로덕션 빌드 조사로 오염돼 클라이언트 dev 서버가 500 에러를 내던 것
-  발견 — `.next` 삭제 후 재기동으로 해결(포트 3000이 이전 프로세스에 붙잡혀 있어
-  강제 종료 후 3001로 재기동, 이번 작업과 무관한 환경 정리).
-- **PDF 생성 소요시간(2~3분) 원인 조사 완료 — 코드 버그 아님, 오늘 세션 폰트 추가로
-  실측 회귀 확인 + 안내 문구 추가**: 사용자 제보(21~22페이지치고 느림) 조사 —
-  `pdf().toBuffer()`를 실 DB 데이터(에이피알)로 직접 호출해 단계별 타이밍 계측
-  (`process.hrtime`, TEMP 프로파일 스크립트로 조사 후 삭제)한 결과:
-  1. **"폰트가 매번 새로 로드된다"는 가설은 기각** — `Font.register()`는 모듈
-     최상위(import 시점)에 1회만 호출되는 싱글턴 구조이고, `@react-pdf/font`의
-     `FontStore`가 fetch+fontkit 파싱 결과를 디스크립터(family+weight)별로
-     캐싱함을 소스(`node_modules/@react-pdf/font/lib/index.js`) 직접 확인 —
-     콜드(108.6s) vs 같은 프로세스 내 2회차 웜(71.3s) 비교로 캐싱이 실제 동작함을
-     실측 재확인(폰트 fetch+파싱 몫 ~37s는 세션 내 재사용 시 절약됨, 완전히
-     새로 리로드되는 구조가 아님).
-  2. **불필요한 재렌더링도 기각** — 동일 문단을 1개 vs 150개로 늘려도 소요시간이
-     3.16s→3.20s로 사실상 무변화(합성 테스트) — 텍스트/페이지 분량 자체는 지배
-     변수가 아님.
-  3. **실제 지배 변수 = CJK 풀 char셋 폰트의 글리프 서브셋 처리 비용(fontkit,
-     순수 JS)** — 동일 합성 문서에 NotoSansKR 1개만 등록: 3.2s, NotoSerifKR
-     (2.4MB, 오늘 세션 신규 추가)까지 2개 등록: 10.6s(콜드)/8.3s(웜) — 폰트
-     자체가 거의 안 쓰여도 등록만으로 +5~7s. 실 문서는 이 폰트를 커버/섹션헤더/
-     서브헤더 등 4곳(다회 반복 사용)에 적용해 영향이 더 큼.
-  4. **오늘 세션 전후 실측 비교로 회귀 정량 확인** — 오늘 PDF 개편(`f164f5c`)
-     직전 커밋(`7b70a84`)의 `AnalysisPdf.tsx`를 `git show`로 추출해 동일 데이터로
-     나란히 프로파일: 구버전 콜드 65.8s/웜 44.8s → 신버전 콜드 108.6s/웜 71.3s
-     (+65%/+59%). **"21페이지면 원래 이 정도"가 아니라, 오늘 세션에 신규 추가한
-     `NotoSerifKR`(웹의 헤딩용 Serif KR 폰트와 시각 동기화 목적)가 지배적 원인 —
-     실제 회귀임을 확인.** 단, 회귀 이전(구버전) 기준선 자체도 65.8s/44.8s로 이미
-     느렸다는 점도 함께 확인 — "오늘 갑자기 느려진 게 전부"는 아니고 "원래도 느린
-     구조인데 오늘 더 느려졌다"가 정확한 진단.
-  **조치**: (a) 근거 없이 폰트를 제거하거나 라이브러리를 교체하는 등 무리한
-  최적화는 시도하지 않음(사용자 명시적 지시) — CJK 전각 폰트의 fontkit 서브셋
-  비용은 라이브러리 구조적 한계이고, Serif 폰트 자체는 웹 디자인 동기화라는
-  명확한 목적이 있어 제거는 이번 스코프 밖. (b) `ExportPdfButton.tsx`의
-  `LoadingOverlay`에 "문서 분량에 따라 보통 1~3분 정도 걸려요" 안내 문구
-  신규 추가(진행률 바 위, 정적 텍스트) — 실측 기준 웜 상태에서도 최선의 경우
-  ~1.2분이 바닥이라 "몇 초면 끝난다"는 기대 자체가 애초에 성립하지 않는 구조,
-  진행률 바만으로는 "정상 진행 중"과 "멈춤"을 구분할 수 없어 사전 기대치 명시가
-  필요하다고 판단. (c) **백그라운드 폰트 프리페치(페이지 로드 시 `Font.load()`
-  선호출로 클릭 시점을 항상 "웜" 상태로 만드는 안)는 검토했으나 미적용** —
-  Node 계측상 콜드→웜 절감 효과(~37s)는 확실하지만, fontkit 파싱이 메인
-  스레드를 점유하는 동기 작업이라(오늘 세션 초반에 고친 진행률 프리징 버그와
-  동일 계열) 리포트를 읽는 동안 background로 실행 시 UI가 버벅일 위험을 이
-  환경(브라우저 자동화 도구 없음)에서 검증할 수 없어 사용자 확인 없이 임의
-  적용하지 않음 — 후속 세션에서 원하면 별도로 진행.
-  검증: `tsc --noEmit`/`eslint` 클린(신규 경고 0). 조사에 쓴 TEMP 프로파일링
-  스크립트(`profilePdf*.ts`, 구버전 추출본 `_oldAnalysisPdf.tsx`, 생성된 테스트
-  PDF)는 재사용 도구가 아니라 전부 삭제 — `renderTestPdf.ts`/
-  `renderTestWebSections.tsx`(재사용 검증 도구)와는 성격이 달라 리포지토리에
-  남기지 않음.
-- **모델 티어링 검토 완료 — Haiku 4.5 전환 미채택, Sonnet 5 유지 확정**: 사용자 요청으로
-  synthesis 단계(9개 섹션, `server/scripts/testHaikuVsSonnetApr.ts`)와 리서치 단계
-  (gatherResearch1/2, `server/scripts/testHaikuVsSonnetResearch.ts`) 두 차례 실측
-  비교(에이피알 1개 기업). **결론: 비용 절감(9개 섹션 기준 약 50%, 리서치 단계
-  기준 약 31%)보다 재무 데이터 정확도가 우선이라는 원칙에 따라 미채택** — 결정적
-  사유는 Haiku가 생성한 `financials_v2` 손익계산서 표의 전 연도 매출액이 정확히
-  1/10로 찍히는 자릿수 오류(자기 인용 출처 문구엔 정확한 값을 적어놓고 표 필드엔
-  틀린 값을 넣는 자기모순으로 확정 — 데이터 모호성이 아니라 Haiku가 synthesis 단계에서
-  직접 만든 오류). 부차 사유: 언어 지시 무시(9개 섹션 중 2개가 `language:'ko'`
-  요청에도 전체 영어로 응답). 리서치 단계 별도 테스트로 "Haiku 리서치 → Sonnet
-  synthesis"는 오류가 재현 안 됨을 확인 — synthesis 모델이 핵심 변수임을 재확인.
-  프로덕션 코드(`claude.ts`)는 테스트 목적으로만 일시 `export` 추가 후 즉시
-  `git checkout`으로 원상복구(`git diff` 0 확인, 두 테스트 모두). 상세는 Architecture
-  섹션 "모델 티어링 설계안 → 실측 완료" 참고.
-- **PDF 개편 3종 완료(진행률 버그 + 콘텐츠 누락 4건 + 웹 디자인 동기화)**: 4개
-  읽기전용 조사 에이전트로 원인 확정 후 계획 승인받아 구현.
-  1. **진행률 15% 멈춤 버그 수정**: 근본 원인 확정 — `ExportPdfButton.tsx`의
-     `LoadingOverlay`가 `setInterval(400ms)`로 0→90%를 흉내내는 **가짜 진행률**이었고,
-     `pdf(<AnalysisPdf/>).toBlob()`(Yoga WASM 레이아웃 포함 긴 동기 작업)이 메인
-     스레드를 오래 점유해 이 JS 타이머 자체가 굶어(못 돌아) 15%대에서 멈춘 것처럼
-     보였던 것(백엔드/PDF 생성 로직은 정상, 보고된 그대로). 숫자 % 대신 **CSS
-     keyframe 기반 무한(indeterminate) 진행바**로 교체 — 컴포지터 스레드에서 돌아
-     메인 스레드가 막혀도 멈추지 않음. 완료 시 즉시 100% 고정 바로 전환(기존 동작
-     유지). 실제 브라우저 클릭 애니메이션 시각 확인은 브라우저 자동화 도구 없어
-     미검증 — 사용자 재현 테스트 필요.
-  2. **콘텐츠 누락 4건 조사 결과**: (a) `cross_industry_nudge_v1` 섹션이 PDF에
-     완전히 누락돼 있던 것 확인 → 신규 `CrossIndustryNudgeSection` 추가(섹션 05),
-     `SourcesPage`에도 별도 출처 그룹 추가(웹의 `buildSourceGroups()`와 동일하게
-     `founder`와 같은 방식으로 `AnalysisSources` 스키마 밖에서 별도 처리 — 기존엔
-     누락돼 있었음). (b) 현금흐름 "Not disclosed" — **파싱 버그 아님, DART
-     파이프라인이 애초에 현금흐름표 데이터를 조회하지 않는 구조적 공백**(현재 쓰는
-     DART API `fnlttSinglAcnt.json`은 단일회사 주요계정 요약이라 현금흐름 항목 자체가
-     없음, 전 DART 소스 기업 공통 + 웹 재무 탭도 동일 영향). 사용자와 협의해 **이번엔
-     PDF 쪽만** 수정 — 4개 지표 전부 비어도 SubHeader만 뜨고 빈 그리드가 남던 표시상
-     버그를 고쳐 명시적 "현금흐름 데이터 없음" 문구로 교체, DART 신규 엔드포인트
-     연동은 별도 백로그로 분리(아래 "발견" 참고). (c) 재무상태표 FY2021 누락 —
-     `financialsTableBuilder.ts`의 `MAX_BS_YEARS=3`(손익계산서는 5) 하드코딩 캡이
-     원인, prod DB 확인 결과 FY2021 데이터 자체는 존재. `MAX_BS_YEARS`를 5로 상향해
-     해결 — **합성 데이터로 라이브 검증 완료**(4개년 정상 출력 확인). 단, 이미
-     캐시된 기존 `financials_v2`(예: 에이피알 실 레코드)는 소급 반영 안 됨(재분석
-     시 자연 해소, 이 저장소의 기존 캐시 패턴과 동일). (d) 밸류체인 출처 2개(다른
-     섹션 3-4개) — **정상 편차 확인, 코드 수정 없음**: `SECTION_SCHEMAS.
-     value_chain_v2` 프롬프트에 출처 최소 개수 지시 자체가 없고 렌더링 단에도
-     필터링/캡 없음.
-  3. **웹 디자인 동기화**: (a) 색상 — `AnalysisPdf.tsx`의 hardcoded hex 22개(blue/
-     green/red/orange 계열)를 웹 `globals.css`의 navy/success/risk/source-reference
-     토큰 값으로 전면 교체(`C` 객체 값만 교체, 키 이름은 유지해 파일 전체 참조처
-     안전 보존). 3색+3예외 원칙을 엄격히 지켜, 기존에 orange/amber가 뒤섞여 쓰이던
-     "병목"/"간접경쟁사"/"모트 강도"/"성장시나리오 신뢰도" 등 순수 비즈니스 경고성
-     태그는 risk(빨강)/중립회색으로 재배정하고, orange는 출처신뢰도(L2/참고)·재무
-     신뢰도 배너 용도로만 남김 — 웹에 없던 임의의 4번째 색 의미를 만들지 않음. (b)
-     폰트 — `@fontsource/noto-serif-kr` npm 패키지 신규 설치(기존 `noto-sans-kr`
-     확보 패턴과 동일), 풀 한글 char셋 700 weight `.woff`(2.4MB, sans 700의 ~2.7배)
-     확보해 `copy-fonts.js`가 함께 복사하도록 확장, 커버/섹션헤더/서브헤더 등
-     헤딩 계층에만 적용(본문은 기존 NotoSansKR 유지) — 단, 실제 웹 리포트 페이지
-     (`AnalysisCard.tsx`)엔 Serif KR이 전혀 쓰이지 않고 있음을 확인(전역
-     `globals.css`는 Noto Sans KR 단일 폰트) — 이 폰트 페어링은 "웹과의 동기화"라기
-     보다 `/guide` 페이지가 이미 쓰던 조합을 PDF에도 적용한 것(사용자 요청 원문
-     그대로 반영, 오해 소지 있어 명시). 폰트 용량 증가가 진행률 프리징을 악화시킬
-     수 있어 1번 CSS 애니메이션 수정과 함께 적용. (c) 섹션 순서 재배치 — 웹
-     `AnalysisCard.tsx`의 실제 코드(문서 아님) 기준으로 재확인한 순서(요약→
-     밸류체인→비즈니스모델→경쟁사→넛지→재무→전략→창업자→Pain Diagnosis→출처→
-     성장시나리오)로 PDF도 통일, TOC 번호/id 전면 갱신. (d) 산업역사+기술변화를
-     하나의 앰버 강조 박스(`PainDiagnosisSection`)로 통합 — 웹의 `<ReportSection
-     emphasis>`와 동등한 시각 언어, 각 하위 파트는 자기 출처를 그대로 유지(합치면
-     근거 구분 불가). **부수 발견**: `ValueChainSection`의 `layer.buyer` 참조는
-     서버 타입(`claude.ts`)엔 없지만 **클라이언트 타입(`types/index.ts`)엔 존재하고
-     웹(`AnalysisCard.tsx`)도 실제로 이 필드를 참조** — 죽은 코드가 아니었음을
-     확인해 삭제하지 않고 색상만 갱신(사전 판단 오류를 실제 코드 대조로 정정).
-  검증: 서버+클라이언트 `tsc --noEmit`/`eslint` 클린(신규 경고 0). **실 DB 데이터로
-  PDF 실제 렌더 검증** — Next.js RSC가 `'use client'` 컴포넌트를 서버에서 직접
-  invoke하는 걸 막아 API 라우트 방식은 실패, `npx tsx`로 Next 빌드 파이프라인을
-  완전히 우회하는 순수 Node 스크립트(`client/scripts/renderTestPdf.ts`)로 전환해
-  성공 — 에이피알 실 데이터로 21페이지 PDF 생성, 전 섹션(신규 넛지 섹션 포함)·
-  현금흐름 빈 상태 문구·Pain Diagnosis 통합 박스·출처 목록(신규 넛지 그룹 포함)
-  육안 확인 완료(사용자에게도 전달). 재무상태표 4개년 노출은 이 특정 캐시 레코드가
-  코드 변경 이전 생성분이라 이 렌더에선 3개년 그대로였음 — 별도 합성 데이터
-  라이브 호출로 코드 자체는 4개년 정상 출력함을 확인(위 2-(c) 참고, 사실과 다르게
-  "여전히 버그"로 오인하지 않도록 원인 구분해서 기록). **진행률 바 애니메이션·
-  실제 브라우저 다운로드 버튼 클릭 플로우는 브라우저 자동화 도구 없어 미검증** —
-  사용자 재현 테스트 필요.
-- **8월 비용 실측 조사(코드 변경 없음, DB 직접 조회만)**: 사용자가 Pain Diagnosis
-  상시실행 여부/Haiku 티어링 재검토를 위한 실제 숫자 요청 — prod Supabase CLI(`db
-  query --linked`)로 직접 조회. (1) 8월 실제 Claude 파이프라인 실행 **30건**
-  (`analysis_usage.is_cache_view=false`, `analyses` 신규 행 30건과 1:1 정확히 일치,
-  서로 다른 유저 2명), 순수 캐시 조회(비용 $0) 14건(유저 1명) 별도 확인. (2) 탭별
-  재분석(`POST /reanalyze`)은 `analysis_usage`에 전혀 기록 안 됨(코드 확인 —
-  `recordAnalysisUsage`는 `/stream` 전체 생성 플로우에서만 호출)을 재확인 — 이 30건은
-  실제 API 호출 총량의 **하한값**이지 정확한 값이 아니라는 캐비어트로 명시. (3) 이번
-  달 `ben_message_usage`/`ben_conversations` 둘 다 0건 — Ben이 8월 지출에 기여한 비용은
-  정확히 $0(전부 API 한도로 실패, DB 기록 도달 전 실패). (4) 배치별 `[cache-stats]`
-  로그 실측은 **이 환경에서 원천적으로 불가능**하다고 명확히 보고 — Render 로그
-  접근 수단 없음(반복 확인된 제약) + Anthropic Admin/Usage-Cost API 키 없음(`server/.env`
-  에 표준 키만 존재) + 라이브 재실행도 계정 사용량 한도로 막혀있음. 대신 최근 8월
-  분석 8건의 `pg_column_size()` 합산(9개 섹션 JSONB)으로 산출물 크기만 실측(27.3~
-  31.5KB/건, 평균 29.6KB, 전부 `language=ko`) — 인풋 토큰은 추정 근거 자체가 DB에
-  없어 배치별 분해는 시도하지 않고 "불가능"으로 정직하게 보고. **핵심 실측 단가**:
-  `$101.23 ÷ 30건 ≈ $3.37/분석`(신규+재분석 블렌디드 실제 평균) — 이번 달 API
-  한도($101.23 추정)가 지금 Ben을 막고 있는 바로 그 한도일 가능성이 높다는 점도
-  같이 보고(사용자가 Anthropic 콘솔에서 직접 대조 확인 필요, 기존 "다음 세션
-  우선순위" 1번과 동일 액션).
-- **Ben 채팅 실패("오류가 발생했습니다") 근본 원인 진단**: 사용자 제보(제안 질문
-  클릭 시 에러 표시) 조사 — 처음엔 서버 코드 버그를 의심했으나, 직접 라이브
-  Anthropic API 재호출로 **`ANTHROPIC_API_KEY` 계정이 현재도 사용량 한도에 걸려
-  있음을 재확인**(`400 "You have reached your specified API usage limits.
-  You will regain access on 2026-09-01 at 00:00 UTC."` — 실제 현재 날짜
-  2026-08-16 기준 아직 2주 이상 남음, 2026-08-15 Amprius Technologies
-  조사 때와 동일 계정·동일 한도). 사용자가 이후 "Network 탭에서 /ask가 200으로
-  응답하는데도 에러가 뜬다"고 재확인해줬는데, 이는 코드 버그가 **아니라** 정상적인
-  SSE 동작 — 헤더가 이미 flush된 뒤라 상태코드를 바꿀 수 없어, 스트림 내부에서
-  `event: error`로 실패를 알리는 것이 SSE의 정상 패턴(200 status ≠ 스트림이 성공했다는
-  뜻은 아님). `useBenChat.ts`의 파싱 로직도 재검증했으나 이상 없음(토큰 이벤트가
-  실제로 온 뒤 별도 에러가 겹쳐 뜨는 등의 이중 실행 경로 없음) — 프론트는 서버가
-  정직하게 보고한 실패를 정확히 표시하고 있었을 뿐. **Anthropic 계정 사용량 한도
-  자체는 코드로 해결 불가 — Anthropic Console에서 직접 확인/조치 필요**(2026-09-01
-  자동 재개 또는 플랜/결제 확인). 코드 개선: `server/src/routes/ben.ts`의 `error`
-  이벤트에 `reason`(`upstream`/`not_found`/`server`) 필드 추가 — 원본 에러 메시지는
-  노출 안 하되, 앞으로는 서버 로그 접근 없이도 브라우저 Network 탭 Response Body
-  만으로 실패 카테고리를 바로 구분 가능(이번처럼 "왜 실패했는지" 재조사가 필요 없어짐).
-  `useBenChat.ts`는 이 reason을 `console.error`로 남겨 DevTools 콘솔에서도 확인
-  가능. **별개 확인사항(에이피알 텍스트)**: BenPanel 헤더의 회사명 표시는 버그가
-  아니라 `AnalysisContext.analysisData.companyName`을 그대로 보여주는 의도된
-  동작(가장 최근에 조회한 분석 컨텍스트) — "에이피알"은 실제 한국 기업명(APR
-  Corporation)이었을 뿐 닉네임 필드가 아니었음. 다만 라벨 없이 회사명만 있어 혼동
-  소지가 있어 "이 리포트: {회사명}" 형태로 명확화(`uiStrings.ts` 신규
-  `ben.contextLabel`). CSP `frontend-cdn.perplexity.ai` 관련 제보는 코드베이스
-  전체 재검색 결과 이번에도 참조 0건 확인 — 2026-07-06에 이미 조사·기록된 것과
-  동일 결론(이 앱 코드가 아닌 브라우저 확장 프로그램 등 외부 요인으로 추정, CLAUDE.md
-  Security Principles 실전 발견 이력 10번 참고), Ben 실패와는 무관.
-  검증: tsc(서버+클라이언트) 클린, eslint 신규 경고 0, dev 서버 라우트 전부 200.
-  **Anthropic 계정 한도가 풀리기 전까지는 실제 정상 응답 수신까지의 재현 테스트
-  자체가 불가능**(코드가 맞아도 외부 계정 제약이 막고 있음) — 사용자가 Anthropic
-  Console에서 한도 확인 후에만 최종 검증 가능.
-- **아바타 톱니바퀴 드롭다운 + Ben 우측 슬라이드 패널 버그 수정**: (1) nav 바에서
-  이메일 텍스트 노출 제거, 아바타 옆에 `lucide-react` `Settings` 톱니바퀴 아이콘만
-  배치(클릭 시 설정/로그아웃 드롭다운 열림 — 이메일은 드롭다운 안에서만, `title`
-  속성으로 호버 툴팁) — 직전 커밋(`10cc35f`)에서 평면 nav 링크로 바꿨던 설정을
-  요구사항 변경에 따라 다시 드롭다운 트리거로 되돌림. (2) **Ben 패널이 "화면 상단
-  전체 가로 회색 바"로 잘못 열리던 버그 근본 원인 특정**: `Header.tsx`의 `<nav>`가
-  `backdrop-blur-sm`(`backdrop-filter`)을 쓰는데, `backdrop-filter`가 걸린 조상
-  엘리먼트는 `position:fixed` 자손의 containing block이 되어버려("뷰포트 전체"가
-  아니라 "그 nav 엘리먼트 박스 기준"으로 `fixed`가 계산됨) — nav는 폭은 풀스크린,
-  높이는 자기 콘텐츠 높이(~56px)뿐이라 `fixed inset-0`이 그 박스 크기로 찌그러져
-  "상단 가로 막대"처럼 보였던 것. `React.createPortal`로 오버레이/패널을
-  `document.body`에 직접 렌더해 nav 서브트리를 완전히 벗어나게 해서 해결, 포지셔닝도
-  `fixed inset-0 flex justify-end`(간접) → `fixed top-0 right-0 bottom-0`(명시적
-  3변 고정)로 더 견고하게 변경, `translate-x-full ↔ translate-x-0` 트랜지션(200ms)
-  으로 실제 슬라이드인 애니메이션 추가. 패널이 닫혀있을 때는 `BenPanel` 자체를
-  언마운트(컨테이너는 항상 마운트해 애니메이션 유지)해 페이지 로드마다 불필요한
-  대화 이력 조회가 나가지 않게 함. 폭 토글은 원래도 `BenPanel` 내부에만 있어 nav
-  바엔 노출된 적 없음(재확인만, 변경 없음).
-  검증: tsc/eslint 클린, dev 서버 라우트 전부 200. **브라우저 자동화 도구 설치를
-  이번 세션엔 사용자가 보류해 실제 클릭/드롭다운/슬라이드 애니메이션 시각 검증은
-  못 함** — CSS containing-block 동작 원리 분석(코드 리뷰)으로 갈음, 다음 세션
-  최우선 재현 테스트 대상.
-- **사용법(`/guide`) 페이지 신규 + 네비게이션 재구성**: 사용자가 저장소 루트에 둔
-  `ceo_staff_ben_guide.html`(별도로 작성해온 완성 카피) 발견 후 구조/카피 변경 없이
-  그대로 `/guide` 라우트로 이식. `client/src/app/guide/guide.module.css`(CSS Module)로
-  완전히 스코프 분리 — 원본이 `:root`/`body`/`*`에 걸던 변수·리셋을 전부 `.page`
-  해시 클래스 아래로만 적용되게 바꿔 이 앱의 `globals.css`(`--color-navy-*` 등)와
-  충돌 가능성을 원천 차단(컴파일된 CSS에서 `--navy-deep` 등이 `.guide_page__` 클래스
-  아래에만 있고 전역 `layout.css`엔 전혀 없음을 직접 확인). Noto Serif KR은 이 앱에
-  없던 폰트라 신규 자체 호스팅 — 원본의 Google Fonts CDN `@import`는 이 앱 CSP
-  (`font-src 'self'`)에 걸려 차단되므로, 기존 Noto Sans KR과 동일한 로컬 self-host
-  컨벤션을 따라 이 페이지가 실제로 쓰는 문자만 추출한 서브셋 파일(700 weight 전용,
-  ~12KB, `public/fonts/noto-serif-kr-700-guide.woff2`)을 Google Fonts `text=`
-  파라미터로 받아 저장. 로그인 여부 무관 접근 가능(별도 인증 게이트 없음), 하단에
-  신규 "지금 분석해보기" CTA 추가(→ `/`). 네비게이션은 `기업분석/산업별 보기/
-  히스토리/사용법` 4개를 동일 레벨 nav 링크로, 우측은 `Ben(전역 버튼) → 아바타+
-  이메일(표시 전용) → 설정` 순서로 재배치 — 로그아웃은 헤더에서 완전히 빠지고
-  설정 페이지 하단으로 이동(`settings/page.tsx`에 로그아웃 버튼 신규). 직전 커밋
-  (`22ce2ab`)에서 만들었던 아바타 클릭 드롭다운은 이번 요구사항엔 안 맞아 걷어냄
-  (설정이 별도 nav 항목으로 노출되는 구조라 드롭다운 자체가 불필요해짐).
-- **Ben 버튼 아이콘 이모지 교체**: `lucide-react`의 `MessageCircle` 아이콘 →
-  🧑‍💼 이모지, "Ben" 텍스트 앞 배치.
-- **Ben 노출 방식 3차 재설계 — 헤더 상시 버튼 + 오버레이 패널**: 직전 수정(기업분석
-  결과 화면에서만 마운트)이 리포트를 보다가 다른 페이지로 이동하면 Ben이 완전히
-  사라지는 사용성 문제로 재차 지적받아, 상단 헤더에 상시 고정된 "Ben" 버튼(클릭 시
-  우측 오버레이)으로 전환. 컨텍스트는 신규 store 없이 기존 `AnalysisContext.
-  analysisData`를 그대로 재사용(재확인 결과: 루트 레이아웃에서 한 번만 provide되고
-  라우트 전환에 언마운트 안 돼 이미 "가장 최근에 조회한 분석"으로 자연히 유지되고
-  있었음 — 5개 `setAnalysisData` 호출부 모두 확인·변경 없음, `/history`의 사전 로드
-  호출부 포함). **의도적 스코프 제한**: 스트리밍 도중(아직 완료 안 된) 분석에는
-  실시간 반영 안 됨(기존 호출부가 전 배치 완료/캐시로드/SSE done 시점에만 fire) —
-  건드리면 이 저장소에서 여러 번 버그가 난 민감한 SSE 상태 머신을 손대야 해서
-  이번 스코프 밖으로 명시.
-  - 신규 `client/src/app/components/BenLauncher.tsx`: 트리거 버튼(`useAnalysis()`로
-    `analysisData` 읽기) + 오버레이(데스크톱/모바일 구분 없이 단일 구현 —
-    `style={{width: PRESET, maxWidth:'100%'}}`로 넓은 화면은 420/640px, 좁은
-    화면은 뷰포트 폭에 자동 clamp). 폭 프리셋 `localStorage['ben_panel_width']`
-    키 재사용, 신규 i18n 문자열 불필요(`ben.panelTitle`/`ben.openAria` 기존 재사용).
-  - `Header.tsx`: 설정/로그아웃을 flat nav 링크에서 아바타 클릭 드롭다운으로 재배치
-    (이 저장소 최초의 드롭다운 UI — 기존 재사용 패턴 없어 `useState`+`useRef`+
-    `mousedown` click-outside로 신규 구현), 비는 자리에 `<BenLauncher/>` 배치 —
-    로그인 여부 무관 항상 노출(`BenPanel`/`useBenChat`가 `!session`/
-    `analysisData===null` 양쪽 다 크래시 없이 안내 문구로 degrade함을 확인).
-  - `HomeContent.tsx`: Ben 전용 state(`benWidthPreset`/`showBenMobile` 등)·마운트
-    블록 전부 제거, 레이아웃을 Ben이 추가되기 전(커밋 `fc222e2`) 구조로 완전
-    원복(`<>` Fragment + `max-w-[1600px] lg:flex` 2컬럼 래퍼 → 단일
-    `max-w-4xl` 컨테이너, Toast도 원위치로).
-  - 검증: tsc/eslint 클린(기존 경고 4건 외 신규 0), dev 서버로 `/`·`/history`·
-    `/industries`·`/settings` 전부 200 + 렌더된 HTML에 `aria-label="Open Ben"`
-    존재 확인(SSR 검증). `/share/*`는 `ShareContent.tsx`가 실제 `Header`를 아예
-    import 안 해 구조적으로 자동 제외(신규 가드 코드 없음). 실클릭(오버레이 열기/
-    닫기, 드롭다운, 페이지 전환 후 컨텍스트 유지)은 브라우저 자동화 도구 없어
-    미검증 — 배포 후 사용자 재현 테스트 필요(아래 우선순위 참고).
-- **Ben 패널 전역 노출 버그 수정**(2차 반복, 이후 3차로 대체됨 — 아래 참고): 처음 구현
-  시 사용자 확인을 거쳐 "전역 노출"로 결정했던 걸(공유 링크 제외 전 페이지, 분석
-  없으면 빈 상태) 사용자가 실사용 후 "기업분석 결과 화면에서만 보여야 한다"로 결정
-  번복 — `AppShell.tsx`에서 `BenPanel`/폭 토글/모바일 FAB 로직을 전부 제거해 원래의
-  단순 `OnboardingModal` 래퍼로 복귀시키고, `HomeContent.tsx`의 `showResult`
-  조건 안에서만 좌(리포트)+우(Ben) 분할 레이아웃을 렌더하도록 이전. **바로 위 3차
-  재설계로 이 방식 자체가 대체됨** — 이 항목은 그 사이 세션 내 변화 기록으로만 유지.
-- **CORS 화이트리스트 누락 핫픽스**: 배포된 커스텀 도메인(`https://ceostaffben.com`,
-  `https://www.ceostaffben.com`)이 `server/src/index.ts`의 `ALLOWED_ORIGINS`에
-  없어 로그인 이후 `/api/analyze/usage`·`/api/companies/typeahead`·
-  `/api/industries`·`/api/analyses` 등 사실상 전 API가 브라우저 CORS 차단으로
-  막혀있던 문제 — 사용자가 브라우저 콘솔 로그로 직접 원인 확정해 제보. 두 origin을
-  기존 하드코딩 목록에 추가(onrender.com/localhost 등 기존 항목은 그대로 유지).
-  prod는 `ALLOWED_ORIGINS` 환경변수 자체가 `render.yaml`에 없어 하드코딩 목록에만
-  의존 — Render 대시보드 환경변수 추가로는 해결 안 되고 코드 수정+재배포가 필수임을
-  확인. 재발 방지로 Security Principles 실전 발견 이력 18번 + "새 프로젝트/기능
-  착수 시 체크리스트"에 "커스텀 도메인 추가 시 CORS 화이트리스트도 함께 갱신" 항목
-  추가.
-- **ICP Insights(discovery questions 큐레이션) 완전 제거**: 서버 —
-  `server/src/lib/discoveryQuestions.ts`/`server/src/routes/icpInsights.ts`/
-  `server/scripts/testDiscoveryQuestions.ts` 파일 삭제, `claude.ts`의
-  `curateDiscoveryQuestions()`/`generateBenchmarkDiscoveryQuestion()`과 9개 섹션
-  스키마(summary_v2~founder_v2)의 `discovery_questions` 필드+타입+기본값 전부 제거
-  (SEC 벤치마크 막대비교/해석 텍스트 `sec_benchmark_comparison`은 그대로 유지, 그
-  서브 기능이던 벤치마크 이탈 질문 1개만 제거). `analyze.ts`의
-  `POST /:id/icp-insight` 라우트 제거, `share.ts`의 `icpDiscoveryQuestions`/
-  `icpOwnerLabel` 응답 필드 제거, `index.ts`의 `/api/icp-insights` mount 제거.
-  **`icp_insights` 테이블/기존 마이그레이션 2건은 삭제하지 않음**(데이터 보존,
-  런타임 참조만 중단). `analyses.purpose_category`/`purpose_detail`을 9개 섹션
-  프롬프트에 주입하는 로직은 ICP 큐레이션과 무관한 별개 기능이라 그대로 유지.
-  클라이언트 — `AnalysisCard.tsx`의 `IcpInsightTab`/`IcpRatingWidget`/
-  `SharedIcpQuestionsTab`/`icpInsightToMd()`/관련 state·탭 엔트리 전부 삭제,
-  `types/index.ts`의 `DiscoveryQuestionItem`/`IcpInsightResponse`/9개 섹션의
-  `discovery_questions` 필드 삭제(Settings 페이지의 별개 기능인
-  `UserProfile.icp_product` 등은 스코프 밖이라 미변경), `uiStrings.ts`의
-  `icpInsight` 네임스페이스 삭제, `AnalysisPdf.tsx` 표지의 ICP 문구 블록 삭제.
-- **"Ben" 채팅 어시스턴트 신규**: 예전에 만들다 만 AI 비서 패널(죽은
-  `AiAssistantPanel.tsx` + `AppShell.tsx`에 주석 처리돼있던 리사이즈 가능 우측
-  레일 레이아웃, 인증 없이 410 Gone만 반환하던 `/api/chat` Next.js 라우트)이
-  이 저장소에 그대로 남아있던 걸 확인하고 되살려 재작성. 단발 POST → SSE
-  스트리밍, 드래그 리사이즈 → "기본"/"넓게" 2단 폭 토글(localStorage
-  `ben_panel_width`), 하드코딩 한국어 → `uiT.ben`(ko/en) 전면 다국어화,
-  클라이언트 측 truncated 컨텍스트 조립 → 서버가 9개 섹션 전체로 조립. 죽은
-  `/api/chat`(Next.js, 무인증)은 되살리지 않고 완전 삭제 — 신규 Express
-  라우트(`server/src/routes/ben.ts`, `GET`/`POST`/`DELETE
-  /api/analyses/:id/ask`)로 이전, `resolveAuthUser` 하드 401(다른 Claude 호출
-  라우트와 동일 패턴) + 일 40메시지 롤링 레이트리밋(`server/src/lib/
-  benUsage.ts`, `analysis_usage`와 별개 카운터 — 그 테이블은 History 페이지
-  데이터 소스도 겸하고 있어 채팅 메시지가 섞이면 안 됨, 이유는 코드 주석 참고).
-  시스템 프롬프트는 `server/src/lib/benContext.ts`가 정적 톤/역할 규칙(9개 섹션
-  프롬프트가 공유하는 `sectionSystem()`의 톤 규칙 계승 — 투자자 언어 금지,
-  Bull/Bear 대신 성장모멘텀/핵심리스크) + 분석 데이터(9개 섹션 JSON, `sources[]`
-  제외)를 **2개의 독립된 `cache_control` 브레이크포인트**로 분리(이 저장소에서
-  첫 2-브레이크포인트 캐싱 사례 — 기존 `callSection()`은 단일 블록만 캐싱).
-  대화는 분석당 1개만 저장(`ben_conversations` 테이블, `UNIQUE(analysis_id,
-  user_id)`) — Harry(far-study-app, 완전 별개 프로젝트)의 `context_type`/
-  `context_id` 멀티컨텍스트 히스토리와 달리 Ben의 컨텍스트는 항상 "이 분석
-  하나"라 단순화, 별도 히스토리 목록 UI 없이 자동 복원+초기화 버튼만. 패널은
-  공유 링크(`/share/*`) 제외 전 페이지에 전역 노출(죽은 코드의 기존 패턴
-  그대로), 분석 없으면 `BenPanel` 내부가 빈 상태만 표시.
-- **신규 마이그레이션**: `supabase/migrations/20260818090000_ben_chat.sql`
-  (`ben_conversations`/`ben_message_usage`, RLS 활성화+정책 0개 — 기존 컨벤션과
-  동일). **Supabase MCP가 OAuth 미인증 상태라 CLI로 우회** — `supabase db query
-  --linked -f <파일>`로 DDL 직접 실행 후 컬럼/RLS 실제 생성을 읽기 전용 쿼리로
-  확인, `supabase migration repair --status applied 20260818090000`으로 이력만
-  기록(재실행 없음). prod(`rtpcmbxijcxhzvortwxf`)에만 적용 — dev는 기존 방침대로
-  잠정 미적용.
-- 서버+클라이언트 `tsc --noEmit` 양쪽 클린, 클라이언트 eslint 0 errors(경고 4건
-  전부 이번 세션 무관 사전 존재분 — `TABS`/`ticker`/`HomeContent.tsx` 훅
-  의존성 2건, 이번에 새로 만든 `BenPanel.tsx`/`useBenChat.ts`/`benContext.ts`/
-  `benUsage.ts`/`ben.ts`는 경고 0). dev 서버 기동 후 curl로 3개 신규 엔드포인트
-  전부 무인증 401, 삭제된 구 ICP 라우트 2개 전부 404 확인. 실제 DB의 완료된
-  분석(Apple Inc.) 레코드로 `buildBenAnalysisContext()`를 직접 호출해 9개 섹션이
-  정상 직렬화되는 것(24KB 컨텍스트, purpose 블록 포함) 확인 — 단, 그 다음 단계인
-  실제 Claude 스트리밍 호출은 계정 API 사용량 한도(2026-09-01 재개 예정, 아래
-  "발견" 참고)에 걸려 라이브 검증은 못 함.
+### 완료
+- Haiku 4.5 vs Sonnet 5 모델 티어링 실측 비교 — Haiku 미채택 확정(재무 수치
+  자릿수 오류 발견), Sonnet 5 유지. 상세는 Architecture 섹션 참고
+- PDF 개편 3종 — 진행률 프리징 버그(CSS indeterminate 애니메이션 전환)/콘텐츠
+  누락 4건(크로스인더스트리 넛지 섹션 추가/현금흐름 빈 상태 문구/재무상태표
+  FY2021 복원)/웹 3색 팔레트+Noto Serif KR+섹션순서 동기화
+- PDF 목차 "출처 목록" 누락 버그 수정 — `hasSourcesContent()` 단일 판정 함수로
+  목차·본문 통합
+- 출처를 웹·PDF 공통 진짜 최종 섹션(성장시나리오 뒤)으로 재배치 — 웹은 SSR
+  렌더 DOM 순서(`renderTestWebSections.tsx` 신규)로 실측 검증
+- PDF 생성 소요시간(2~3분) 원인 조사 — NotoSerifKR 폰트 추가가 지배적 회귀
+  원인으로 확정(전후 커밋 실측 비교), 예상 소요시간 안내 문구 추가
+- PDF 성장 시나리오 섹션에 CAGR 배지+SVG 라인차트+최종연도 강조 추가 — 신규
+  `growthScenario.ts` 공용 유틸로 웹/PDF 계산 로직 통합, 실 DB 데이터로 검산
+- 8월 비용 실측 조사(DB 직접 조회만) — 실제 분석 30건, $3.37/분석 단가 확인
+- Ben 채팅 실패 근본 원인 진단 — Anthropic API 계정 사용량 한도(2026-09-01
+  재개 예정)로 확정, 코드 문제 아님. 에러 이벤트에 `reason` 필드 추가
+- 아바타 톱니바퀴 드롭다운 + Ben 우측 슬라이드 패널 버그 수정 —
+  `backdrop-filter`의 containing-block 부작용이 원인, Portal로 해결
+- 사용법(`/guide`) 페이지 신규 + 최상단 네비게이션 재구성
+- "Ben" 채팅 어시스턴트 신규 구현 — SSE 스트리밍, 서버사이드 컨텍스트 조립,
+  일 40메시지 레이트리밋, 신규 마이그레이션(`ben_conversations`/`ben_message_usage`)
+- CORS 화이트리스트 누락 핫픽스 — 커스텀 도메인(ceostaffben.com) 추가 시 누락됐던
+  `ALLOWED_ORIGINS` 갱신
+- ICP Insights(discovery questions 큐레이션) 완전 제거 — 서버/클라이언트 관련
+  코드·라우트 삭제, `icp_insights` 테이블은 데이터 보존을 위해 유지
+- (의도적으로 미커밋) `server/scripts/testDartQuickCheck.ts` 등 7개 파일 —
+  이번 세션 작업과 무관, `git status`로 계속 확인 가능
 
 ### 남음
-- **(선택, 미확정) 백그라운드 폰트 프리페치 적용 여부 결정** — 페이지 로드 시
-  `Font.load()`를 선호출해 클릭 시점을 "웜" 상태로 만들면 콜드 대비 최대 ~34%
-  단축(실측 108.6s→71.3s) 가능하나, fontkit 파싱이 메인 스레드를 점유하는 동기
-  작업이라 리포트를 읽는 동안 background 실행 시 UI 버벅임 위험이 있고 이 환경엔
-  브라우저 자동화 도구가 없어 검증 불가 — 사용자가 원하면 다음 세션에서 별도 진행
-- **(이월) Render 배포 확인 + 2026-08-17 세션 전체 작업 실제 브라우저 시각 검증**
-  — 지난 세션(색상 팔레트+내비게이션 1단 구조+즐겨찾기+Settings ICP폼 제거+
-  섹션 카드 복사/맨위로 버튼+출처 순서 이동+CAGR) 우선순위가 계속 이월 중
-- **PDF/웹 개편 실제 브라우저 검증** — 진행률 바가 실제로 안 멈추는지(CSS
-  애니메이션 전환 확인), 다운로드 버튼 클릭→파일 저장 전체 플로우, 폰트/색상이
-  실제 PDF 뷰어에서 의도대로 보이는지, 목차/섹션순서/출처 최후미 배치가 실제
-  배포 사이트에서도 그대로인지(렌더 스크립트로 소스 실행 결과는 확인했으나 실제
-  클릭/스크롤은 여전히 미검증, 이번 세션도 브라우저 자동화 도구 없음) — 다음 세션.
-  **PDF 스타일이 배포 후에도 예전 그대로였다는 사용자 제보는 코드 문제가 아님을
-  확인 완료(위 배포 섹션 참고)** — 이 항목의 핵심은 "배포가 실제로 새 코드를
-  반영했는가"이지 추가 코드 수정이 아님.
-- **Ben 채팅 실제 브라우저 검증** — 이번 세션도 브라우저 자동화 도구 없음. 확인
-  필요: 메시지 전송 시 토큰 단위 스트리밍, 새로고침 후 대화 자동 복원, 초기화
-  버튼, 폭 토글, 모바일 FAB, 로그아웃 유도, `/share/*` 미노출, 레이트리밋 안내
-  — 다음 세션(Render 배포 확인 후)
+- 백그라운드 폰트 프리페치 적용 여부 결정 — 브라우저 자동화 도구 없어 UI 버벅임
+  위험 검증 불가, 사용자 요청 시 별도 세션
+- 2026-08-17 세션 작업(색상 팔레트/내비게이션 1단 구조/즐겨찾기 등) 실제 브라우저
+  검증 — 다음 세션
+- PDF/웹 개편 전체(진행률바/폰트·색상/목차·출처순서/CAGR+차트) 실제 브라우저
+  재현 테스트 — 다음 세션
+- Ben 채팅 실제 브라우저 검증(스트리밍/자동복원/폭토글/모바일FAB 등) —
+  Anthropic 한도 해제(2026-09-01) 이후
 
 ### 발견 (미처리)
-- **DART 현금흐름표 데이터 파이프라인 공백(신규 백로그 후보)** — `dart.ts`가 쓰는
-  DART API `fnlttSinglAcnt.json`(단일회사 주요계정 요약)은 구조적으로 현금흐름표를
-  포함하지 않음. 완전히 수집하려면 다른 엔드포인트(`fnlttSinglAcntAll.json?
-  sj_div=CF`, 전체 재무제표) 신규 연동 필요 — `dart.ts`(`DartFinSeries`에 현금흐름
-  필드 추가) + `dartBatchPrecompute.ts`(라이브 로직 복제하는 기존 패턴, 동일 반영
-  필요) + `financialsTableBuilder.ts`(`buildCashFlow()` 신규) 3개 파일 + 기존
-  `financial_cache`(수천 개 DART 기업) 재수집까지 필요한 별도 규모의 작업. 영향
-  범위는 PDF뿐 아니라 웹 재무 탭도 동일(공통 파이프라인) — 이번 세션은 PDF 쪽
-  표시상 버그(빈 그리드)만 수정하고 이 항목은 착수 안 함(사용자 확정 결정).
+- DART 현금흐름표 데이터 파이프라인 구조적 공백 — `fnlttSinglAcnt.json`이
+  현금흐름표 미포함, PDF+웹 재무 탭 공통 영향, 신규 엔드포인트 연동 필요(별도 백로그)
 - Anthropic API 계정 사용량 한도 — 2026-09-01 00:00 UTC 재개 예정, 그 전까지
-  Ben 채팅 라이브 검증 불가(2026-08-16 재확인, 근본 원인은 이미 확정됨 — 코드
-  문제 아님).
-- **비용/토큰 실측 인프라 부재** — Render 서버 로그 조회 수단(API 토큰/CLI) 자체가
-  없고 Anthropic Admin/Usage-Cost API 키도 없음(표준 `ANTHROPIC_API_KEY`만 존재).
-  다음에 같은 요청이 오면 이 항목부터 먼저 사용자에게 확인할 것.
+  Ben 채팅 라이브 검증 불가
+- 비용/토큰 실측 인프라 부재 — Render 로그 접근 수단/Anthropic Admin API 키 둘 다 없음
+- ⚠️ KR/EN 미확인 — `ExportPdfButton.tsx` 전체가 하드코딩 한국어 고정(기존부터
+  그랬음, 이번 세션 추가한 소요시간 안내 문구도 동일 패턴 유지) — 언어 토글 적용
+  시 이 컴포넌트 전체 재작업 필요
 
 ### 다음 세션 우선순위
-1. **Render 배포 확인(push는 `7208ccd`까지 완료) → PDF(진행률 바/색상·폰트·
-   섹션순서/현금흐름 빈 상태/목차·출처 최후미/소요시간 안내 문구/성장시나리오
-   CAGR+차트)와 Ben 채팅(2026-09-01 한도 해제 전이면 스트리밍 제외 나머지만)
-   실제 브라우저 재현 테스트.** 이번 세션은 코드 레벨 검증(tsc/eslint/실 데이터
-   PDF 렌더+타이밍 계측+텍스트 추출 검산 + 웹 SSR 렌더 DOM 순서 실측)까지만
-   가능했고, 실제 배포 환경에서의 시각 확인은 전부 다음 세션으로 이월된 상태.
+1. Render 배포 확인 → PDF(진행률바/색상·폰트/목차·출처순서/CAGR+차트)와
+   Ben 채팅 실제 브라우저 재현 테스트
 
 ## Vision & Mission
 
