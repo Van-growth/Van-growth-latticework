@@ -9,14 +9,28 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-18
-**커밋**: `7b70a84`(ICP Insights 제거 + Ben 채팅 어시스턴트 신규, 전체 코드) +
-`c44d434`(CLAUDE.md 세션 핸드오프) — 둘 다 push 완료, `git rev-parse HEAD` ==
-`origin/main`(`c44d434`) 확인.
+**날짜**: 2026-08-18 (같은 날 세션 계속 — ICP 제거+Ben 신규에 이어 CORS 핫픽스 추가)
+**커밋**: `7b70a84`(ICP Insights 제거 + Ben 채팅 어시스턴트 신규) → `c44d434`(핸드오프
+기록) → `b6cc767`(핸드오프 push 상태 정정) → `f1851d7`(CORS 화이트리스트에
+`ceostaffben.com` 추가 핫픽스) — 전부 push 완료, `git rev-parse HEAD` == `origin/main`
+(`f1851d7`) 확인.
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI가 없어 확인 수단 자체가 없음
-(push는 확인됨, 실제 배포 성공 여부는 사용자가 대시보드에서 직접 확인 필요).
+(push는 확인됨, 실제 배포 성공 여부 + CORS 핫픽스로 사이트가 실제로 복구됐는지는
+사용자가 직접 확인 필요 — 최우선).
 
-### 완료 (이번 세션 — 커밋 `7b70a84`/`c44d434`, push 완료)
+### 완료 (이번 세션 — 커밋 `7b70a84`~`f1851d7`, push 완료)
+- **CORS 화이트리스트 누락 핫픽스**: 배포된 커스텀 도메인(`https://ceostaffben.com`,
+  `https://www.ceostaffben.com`)이 `server/src/index.ts`의 `ALLOWED_ORIGINS`에
+  없어 로그인 이후 `/api/analyze/usage`·`/api/companies/typeahead`·
+  `/api/industries`·`/api/analyses` 등 사실상 전 API가 브라우저 CORS 차단으로
+  막혀있던 문제 — 사용자가 브라우저 콘솔 로그로 직접 원인 확정해 제보. 두 origin을
+  기존 하드코딩 목록에 추가(onrender.com/localhost 등 기존 항목은 그대로 유지).
+  prod는 `ALLOWED_ORIGINS` 환경변수 자체가 `render.yaml`에 없어 하드코딩 목록에만
+  의존 — Render 대시보드 환경변수 추가로는 해결 안 되고 코드 수정+재배포가 필수임을
+  확인. 재발 방지로 Security Principles 실전 발견 이력 18번 + "새 프로젝트/기능
+  착수 시 체크리스트"에 "커스텀 도메인 추가 시 CORS 화이트리스트도 함께 갱신" 항목
+  추가.
+- **ICP Insights(discovery questions 큐레이션) 완전 제거**: 서버 —
 - **ICP Insights(discovery questions 큐레이션) 완전 제거**: 서버 —
   `server/src/lib/discoveryQuestions.ts`/`server/src/routes/icpInsights.ts`/
   `server/scripts/testDiscoveryQuestions.ts` 파일 삭제, `claude.ts`의
@@ -96,8 +110,9 @@
   계열의 한도 — 9/1 이후 재검증 필요.
 
 ### 다음 세션 우선순위
-1. Render 배포 성공 여부 사용자 확인 후 Ben 채팅 실제 브라우저 검증(스트리밍/
-   대화 복원/폭 토글/모바일 드로어/레이트리밋)
+1. CORS 핫픽스(`f1851d7`) 배포 후 `ceostaffben.com`에서 로그인+히스토리/산업별
+   보기/기업분석 검색 정상 동작 재현 테스트(최우선) — 확인되면 Ben 채팅 실제
+   브라우저 검증(스트리밍/대화 복원/폭 토글/모바일 드로어/레이트리밋)으로 이어감
 
 ## Vision & Mission
 
