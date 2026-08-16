@@ -102,7 +102,7 @@ export default function BenPanel({ analysisData, widthPreset, setWidthPreset }: 
           </div>
         </div>
         {analysisData ? (
-          <p className="text-xs text-navy-500 mt-0.5 ml-5 font-medium">{analysisData.companyName}</p>
+          <p className="text-xs text-navy-500 mt-0.5 ml-5 font-medium">{uiT.contextLabel(analysisData.companyName)}</p>
         ) : (
           <p className="text-xs text-gray-400 mt-0.5 ml-5">{uiT.hint}</p>
         )}

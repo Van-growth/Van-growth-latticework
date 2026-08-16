@@ -176,6 +176,7 @@ interface UiStringDict {
     widthWide: string;
     openAria: string;
     hint: string;
+    contextLabel: (companyName: string) => string;
   };
   profileForm: {
     companyName: string;
@@ -378,6 +379,7 @@ const ko: UiStringDict = {
     widthWide: '넓게',
     openAria: 'Ben 열기',
     hint: '이 분석 결과를 기반으로 질문해보세요.',
+    contextLabel: (companyName: string) => `이 리포트: ${companyName}`,
   },
   profileForm: {
     companyName: '회사명',
@@ -580,6 +582,7 @@ Start each item with ✅ Good / ⚠️ Caution / ❌ Weak, followed by a one-lin
     widthWide: 'Wide',
     openAria: 'Open Ben',
     hint: 'Ask questions grounded in this report.',
+    contextLabel: (companyName: string) => `This report: ${companyName}`,
   },
   profileForm: {
     companyName: 'Company name',

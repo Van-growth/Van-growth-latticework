@@ -7,6 +7,7 @@
 // /api/chat 라우트(구 AiAssistantPanel.tsx)가 쓰던 "인증 없는 Next.js API route + 클라이언트
 // 노출 키" 패턴은 되살리지 않는다.
 import { Router, Request, Response } from 'express';
+import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from '../lib/supabase';
 import { resolveAuthUser } from '../lib/authUser';
 import { checkBenUsage, recordBenUsage, BEN_DAILY_LIMIT } from '../lib/benUsage';
@@ -124,7 +125,7 @@ router.post('/:id/ask', async (req: Request, res: Response) => {
       .maybeSingle();
     if (fetchErr) throw fetchErr;
     if (!analysis) {
-      send('error', {});
+      send('error', { reason: 'not_found' });
       res.end();
       return;
     }
@@ -188,7 +189,11 @@ router.post('/:id/ask', async (req: Request, res: Response) => {
     res.end();
   } catch (err) {
     console.error('[ben] POST /:id/ask FAIL', err);
-    send('error', {});
+    // 응답 바디 자체에 원인 카테고리를 남긴다 — 브라우저 Network 탭만으로도(서버 로그
+    // 없이) 왜 실패했는지 구분 가능하게(2026-08-16, "200인데 왜 에러냐" 제보 계기).
+    // 원본 메시지는 그대로 노출하지 않음 — 카테고리만.
+    const reason = err instanceof Anthropic.APIError ? 'upstream' : 'server';
+    send('error', { reason });
     res.end();
   }
 });

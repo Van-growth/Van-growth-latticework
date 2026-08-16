@@ -101,6 +101,11 @@ export function useBenChat(analysisId: string | null) {
               setRateLimited({ usedCount: payload.usedCount ?? 0, limit: payload.limit ?? 0, nextAvailableAt: payload.nextAvailableAt ?? null });
               setMessages(prev => prev.slice(0, -1));
             } else if (eventType === 'error') {
+              // reason은 화면에 노출하지 않고 콘솔에만 남긴다 — 서버 로그 없이도
+              // Network 탭 Response에서 원인 카테고리를 바로 확인할 수 있게(2026-08-16).
+              // 'upstream' = Claude API 호출 자체가 실패(계정 사용량 한도 등 외부 요인),
+              // 'not_found' = 분석을 못 찾음, 그 외(server) = 서버 내부 오류.
+              console.error('[useBenChat] server reported an error', payload.reason ?? 'unknown');
               setError(true);
               setMessages(prev => prev.slice(0, -1));
             }
