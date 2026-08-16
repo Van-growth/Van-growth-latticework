@@ -13,12 +13,14 @@
 Haiku vs Sonnet synthesis 비교 테스트 → 리서치 단계 비교 테스트 → Haiku 전환 미채택
 결정 기록 → PDF 개편 3종 → PDF/웹 배포 동기화 확인 질의 대응(코드는 정상, 배포/캐시
 확인은 사용자 몫으로 정리) → PDF 목차 누락 버그 수정 → 출처를 웹·PDF 공통으로 진짜
-최종 섹션으로 재배치 → PDF 생성 소요시간(2~3분) 원인 조사 + 안내 문구 추가)
+최종 섹션으로 재배치 → PDF 생성 소요시간(2~3분) 원인 조사 + 안내 문구 추가 → PDF
+성장 시나리오 섹션에 CAGR 배지+SVG 라인차트+최종연도 강조 추가)
 **커밋**: `f164f5c`(PDF 진행률 버그+콘텐츠 누락 4건+웹 디자인 동기화) → `ad1e861`
 (핸드오프 갱신) → `032e477`(PDF 목차 출처 누락 버그 수정 + 출처를 웹·PDF 공통
 최종 섹션으로 재배치, 사용자 확인 후 커밋) → `4f982b5`(핸드오프 커밋/push 상태
 정정) → `97d9e01`(PDF 생성 소요시간 원인 조사 + 안내 문구 추가, 사용자 확인 후
-커밋) — 여기까지 `git push` 완료, 이 시점 `git rev-parse HEAD` == `origin/main`
+커밋) → (PDF 성장 시나리오 CAGR+차트 추가 건은 아직 미커밋, 아래 "완료" 참고) —
+`97d9e01`까지는 `git push` 완료, 이 시점 `git rev-parse HEAD` == `origin/main`
 확인됨.
 **의도적으로 커밋에서 제외한 파일**(이 세션 이전부터 미커밋 상태였고 이번 작업과
 무관 — `git status` 기준 여전히 untracked로 남아있음, 삭제하지 않음):
@@ -38,7 +40,53 @@ PDF를 재생성해봤는데 색상/폰트/섹션순서가 예전 그대로였�
 패턴) 실제 배포 성공 여부·브라우저 캐시 여부는 사용자가 직접 확인해야 함 —
 다음 세션 우선순위 1번 참고.
 
-### 완료 (이번 세션 — `97d9e01`까지 커밋+push 완료)
+### 완료 (이번 세션 — `97d9e01`까지 커밋+push 완료, 성장 시나리오 CAGR+차트 건은 미커밋)
+- **PDF 성장 시나리오 섹션(10번)에 CAGR 배지 + SVG 라인차트 + 최종연도 강조 추가**:
+  사용자 확인 — 웹(`GrowthScenarioV2Tab`)엔 이미 CAGR 배지(recharts `ComposedChart`
+  라인차트 포함)가 있는데 PDF(`AnalysisPdf.tsx`의 `GrowthScenarioSection`)에는
+  연도별 표만 있고 CAGR/차트가 전혀 없었음(웹/PDF가 별도 렌더링 시스템이라 웹
+  구현이 PDF에 자동 반영되지 않는 구조). **계산 로직 중복 구현 금지 원칙에 따라
+  신규 `client/src/lib/growthScenario.ts` 공용 유틸 신설** — `calcCagr()`(첫→마지막
+  연도 CAGR), `fmtCagr()`, `fmtGrowthRevenue()` 3개 함수를 여기 한 곳으로 통합하고
+  웹(`AnalysisCard.tsx`)과 PDF(`AnalysisPdf.tsx`) 양쪽이 이 파일을 import —
+  `AnalysisCard.tsx`의 로컬 중복 정의(`GrowthScenarioV2Tab` 내부 `fmtCagr`/
+  `calcCagr`, `growthScenarioToMd` 내부 `fmtCagr`) 전부 제거. 이 작업 중 기존에
+  이미 존재하던 중복도 함께 정리했음 — `AnalysisPdf.tsx`의 `fmtPdfRevenue`가
+  "mirrors AnalysisCard.tsx fmtGrowthRevenue"라는 주석까지 달려 있으면서 실제로는
+  손으로 미러링된 별도 구현이었던 것(이번에 CAGR을 추가하며 최종연도 강조에도
+  이 포맷터가 필요해 3번째 중복이 생기기 전에 함께 해소). **PDF 신규 구현**: (1)
+  CAGR 3열 배지(`s.cagrRow`/`cagrCard`) — 보수적/예상/낙관적 각 라인의 CAGR을
+  웹과 동일한 카드 레이아웃으로. (2) SVG 라인차트(`GrowthScenarioChart`, 신규
+  `Svg`/`Polyline`/`Circle` — react-pdf엔 recharts 같은 차트 라이브러리가 없어
+  직접 좌표 계산(연도 인덱스→x, 값→y 선형 스케일)해 그림) — P50 실선(navy,
+  `C.blue`) + P10/P90 점선(라이트 navy 톤 `#8fa8c2`, `strokeDasharray` 지원
+  확인 후 사용) + 각 지점 Circle 도트 + 상단/하단 절대위치 min/max 값 라벨 +
+  Year+1~N 축 라벨 + 범례. (3) 최종연도(Year+N) P50 매출 강조 카드
+  (`s.finalYearCard`, navy tint 배경). 기존 연도별 표는 그대로 유지(정확한
+  수치 확인용, 차트는 추세 파악용으로 상호보완).
+  **검증(실 DB 데이터, 계산 로직 재사용 확인)**: 이 PDF 테스트 대상 분석
+  (에이피알, `aa601e3a-...`)은 비프리미엄이라 API가 `growth_scenario_v2`를
+  null로 필터링해서 응답하므로, prod DB에서 `supabase db query --linked`
+  (읽기 전용)로 같은 레코드의 실제 `growth_scenario_v2` 값을 직접 조회해
+  API 응답에 덮어씌운 뒤(합성 데이터 아님, 같은 분석의 실제 시뮬레이션
+  결과) 렌더 — 이 환경엔 poppler(`pdftoppm`)가 없어 Read 도구로 PDF를
+  이미지 렌더링할 수 없었음, 대신 `pdf-parse`(스크래치패드에 임시 설치,
+  저장소엔 미반영)로 텍스트를 추출해 계산값을 직접 검산: 보수적 CAGR
+  35.3%/예상 CAGR 40.6%/낙관적 CAGR 46.2%가 `calcCagr()` 공식으로 손계산한
+  값과 정확히 일치, 차트 min/max 라벨("9150억원"/"2.4조원")과 최종연도
+  강조("Year+3 예상 매출(P50) 2.0조원")도 `fmtGrowthRevenue()`로 손계산한
+  값과 정확히 일치 확인. 총 페이지 22(기존 21+성장시나리오 섹션 1페이지)로
+  정상 증가. **다만 이건 텍스트 추출 기반 수치 검증이지 SVG 라인/도트가
+  실제로 올바른 위치에 시각적으로 그려지는지의 육안 확인은 아님** — 생성된
+  테스트 PDF를 `SendUserFile`로 전달해 사용자에게 실제 육안 확인 요청함
+  (테스트 파일 자체는 저장소에 미반영, 검증 후 로컬에서도 삭제).
+  검증: `tsc --noEmit` 클린, `eslint`(src 대상) 신규 경고 0(기존 TABS/ticker
+  2건만 유지). 조사에 쓴 TEMP 스크립트(`renderTestGrowthPdf.ts`)는 재사용
+  도구가 아니라 삭제 — 부수적으로 기존 `renderTestPdf.ts`의 하드코딩된
+  `window.location.origin`이 `http://localhost:3000`으로 남아있어(이전 세션의
+  `.next` 캐시 오염 수정으로 클라이언트 dev 서버가 3001로 이동했는데 반영 안
+  돼있던 것 발견) `http://localhost:3001`로 갱신 — 재사용 검증 도구가 조용히
+  깨져 있던 걸 이번에 발견해 같이 고침.
 - **PDF 목차 "11 출처 목록" 누락 버그 수정 + 출처를 웹·PDF 공통으로 진짜 최종
   섹션으로 재배치**: (1) 사용자가 크로스인더스트리 넛지 출처 그룹을 추가했을 때
   본문 헤더 번호는 갱신했지만 목차(`getTocItems()`) 추가를 빠뜨린 걸 발견 —
@@ -410,6 +458,10 @@ PDF를 재생성해봤는데 색상/폰트/섹션순서가 예전 그대로였�
   "발견" 참고)에 걸려 라이브 검증은 못 함.
 
 ### 남음
+- **PDF 성장 시나리오 CAGR+차트 커밋/푸시 대기** — 사용자가 보낸 테스트 PDF를
+  육안 확인한 후 진행. 커밋 범위: `AnalysisPdf.tsx`, `AnalysisCard.tsx`, 신규
+  `client/src/lib/growthScenario.ts`, `client/scripts/renderTestPdf.ts`(포트
+  3000→3001 수정), `CLAUDE.md`
 - **(선택, 미확정) 백그라운드 폰트 프리페치 적용 여부 결정** — 페이지 로드 시
   `Font.load()`를 선호출해 클릭 시점을 "웜" 상태로 만들면 콜드 대비 최대 ~34%
   단축(실측 108.6s→71.3s) 가능하나, fontkit 파싱이 메인 스레드를 점유하는 동기
@@ -449,11 +501,12 @@ PDF를 재생성해봤는데 색상/폰트/섹션순서가 예전 그대로였�
   다음에 같은 요청이 오면 이 항목부터 먼저 사용자에게 확인할 것.
 
 ### 다음 세션 우선순위
-1. **Render 배포 확인(push는 `97d9e01`까지 완료) → PDF(진행률 바/색상·폰트·
-   섹션순서/현금흐름 빈 상태/목차·출처 최후미/소요시간 안내 문구)와 Ben 채팅
-   (2026-09-01 한도 해제 전이면 스트리밍 제외 나머지만) 실제 브라우저 재현
-   테스트.** 이번 세션은 코드 레벨 검증(tsc/eslint/실 데이터 PDF 렌더+타이밍
-   계측 + 웹 SSR 렌더 DOM 순서 실측)까지만 가능했고, 실제 배포 환경에서의 시각
+1. **PDF 성장 시나리오 CAGR+차트 커밋(사용자 육안 확인 대기 중, 최우선) → 이후
+   Render 배포 확인 → PDF(진행률 바/색상·폰트·섹션순서/현금흐름 빈 상태/목차·
+   출처 최후미/소요시간 안내 문구/성장시나리오 CAGR+차트)와 Ben 채팅(2026-09-01
+   한도 해제 전이면 스트리밍 제외 나머지만) 실제 브라우저 재현 테스트.** 이번
+   세션은 코드 레벨 검증(tsc/eslint/실 데이터 PDF 렌더+타이밍 계측+텍스트 추출
+   검산 + 웹 SSR 렌더 DOM 순서 실측)까지만 가능했고, 실제 배포 환경에서의 시각
    확인은 전부 다음 세션으로 이월된 상태.
 
 ## Vision & Mission

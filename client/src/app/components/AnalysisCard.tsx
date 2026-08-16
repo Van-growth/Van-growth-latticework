@@ -5,6 +5,7 @@ import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { buildAuthHeaders } from '@/lib/authHeaders';
 import { trackEvent } from '@/lib/analytics';
+import { calcCagr, fmtCagr, fmtGrowthRevenue } from '@/lib/growthScenario';
 import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
@@ -2503,31 +2504,11 @@ function SectionGenerating({ label, suffix }: { label: string; suffix: string })
 }
 
 // ── Growth Scenario (몬테카를로, 프리미엄 전용) ─────────────────────────────────
-
-function fmtGrowthRevenue(v: number, currency: 'KRW' | 'USD'): string {
-  const abs = Math.abs(v);
-  if (currency === 'KRW') {
-    if (abs >= 1_000_000_000_000) return `${(v / 1_000_000_000_000).toFixed(1)}조원`;
-    if (abs >= 100_000_000)       return `${(v / 100_000_000).toFixed(0)}억원`;
-    return `${Math.round(v).toLocaleString()}원`;
-  }
-  const b = abs / 1_000_000_000;
-  return b >= 1 ? `${(v / 1_000_000_000).toFixed(1)}B USD` : `${(v / 1_000_000).toFixed(0)}M USD`;
-}
+// CAGR 계산/포맷과 매출 포맷(fmtGrowthRevenue)은 PDF(AnalysisPdf.tsx)와 동일한 숫자를
+// 보여줘야 해서 client/src/lib/growthScenario.ts 공용 유틸에서 import(중복 구현 금지,
+// 2026-08-16 — 상세는 그 파일 헤더 주석 참고).
 
 const SCENARIO_LABEL = { p10: '보수적 시나리오', p50: '예상 시나리오', p90: '낙관적 시나리오' } as const;
-
-// 라인 자기 자신의 첫 연도 → 마지막 연도 구간 CAGR — 라인 간 교차 계산 없음(2026-08-17).
-// years는 항상 3이지만(server/src/services/monteCarloService.ts 기본값, 오버라이드하는
-// 호출부 없음) 배열 길이 기반으로 일반화해 나중에 바뀌어도 안전하게 뒀다.
-function calcCagr(values: number[]): number | null {
-  const n = values.length;
-  if (n < 2) return null;
-  const first = values[0];
-  const last = values[n - 1];
-  if (first <= 0 || last <= 0) return null;
-  return (last / first) ** (1 / (n - 1)) - 1;
-}
 
 function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
   const years = g.simulation.p50.length;
@@ -2537,7 +2518,6 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
     p50: calcCagr(g.simulation.p50),
     p90: calcCagr(g.simulation.p90),
   };
-  const fmtCagr = (v: number | null) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
   // 구버전 캐시(growth_scenario_v2에 confidenceLevel 필드가 없던 시절 저장분) 호환 —
   // 필드가 없으면 stats 모양(sampleSize 유무)으로 유추
   const isHigh = g.confidenceLevel ? g.confidenceLevel === 'high' : !('sampleSize' in stats);
@@ -2841,7 +2821,6 @@ function founderToMd(fo: FounderV2): string {
 
 function growthScenarioToMd(g: GrowthScenarioV2): string {
   const years = g.simulation.p50.length;
-  const fmtCagr = (v: number | null) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
   const body = mdJoin([
     g.narrative ?? '',
     `**CAGR (Year+1 → Year+${years})**: 보수적(P10) ${fmtCagr(calcCagr(g.simulation.p10))} · 예상(P50) ${fmtCagr(calcCagr(g.simulation.p50))} · 낙관적(P90) ${fmtCagr(calcCagr(g.simulation.p90))}`,

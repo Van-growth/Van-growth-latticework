@@ -9,6 +9,9 @@ import {
   StyleSheet,
   Font,
   Link,
+  Svg,
+  Polyline,
+  Circle,
 } from '@react-pdf/renderer';
 import type {
   AnalysisDetail,
@@ -30,6 +33,7 @@ import type {
   DataSource,
 } from '@/types';
 import { countFinancialsReliability, getFinancialYearCols } from '@/lib/financialsReliability';
+import { calcCagr, fmtCagr, fmtGrowthRevenue } from '@/lib/growthScenario';
 import type { Language } from '@/app/context/LanguageContext';
 
 // Absolute URL required: react-pdf fetches fonts via URL at render time,
@@ -537,6 +541,79 @@ const s = StyleSheet.create({
     color:    C.blue,
   },
 
+  // ── Growth scenario (CAGR 배지 + SVG 라인차트, 2026-08-16 신규 —
+  //     웹 GrowthScenarioV2Tab의 3열 CAGR 카드/라인차트와 동일한 숫자·시각 언어) ──
+  cagrRow: {
+    flexDirection: 'row',
+    marginBottom:  12,
+  },
+  cagrCard: {
+    flex:            1,
+    backgroundColor: C.bg,
+    borderRadius:    4,
+    paddingVertical: 8,
+    marginRight:     6,
+    alignItems:      'center',
+  },
+  cagrLabel: {
+    fontSize:   7,
+    color:      C.light,
+    marginBottom: 2,
+  },
+  cagrValue: {
+    fontSize:   11,
+    fontWeight: 700,
+    color:      C.dark,
+  },
+  chartWrap: {
+    marginBottom: 4,
+  },
+  chartAxisRow: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    marginTop:      3,
+  },
+  chartAxisLabel: {
+    fontSize: 7,
+    color:    C.light,
+  },
+  chartLegendRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    marginTop:     6,
+    marginBottom:  10,
+  },
+  chartLegendDot: {
+    width:        6,
+    height:       6,
+    borderRadius: 3,
+    marginRight:  4,
+  },
+  chartLegendLabel: {
+    fontSize:    7.5,
+    color:       C.light,
+    marginRight: 12,
+  },
+  finalYearCard: {
+    backgroundColor: C.blueLight,
+    borderRadius:    4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom:    10,
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'space-between',
+  },
+  finalYearLabel: {
+    fontSize: 8.5,
+    color:    C.blue,
+  },
+  finalYearValue: {
+    fontSize:   13,
+    fontWeight: 700,
+    color:      C.blue,
+  },
+
   // ── Footer ──
   footer: {
     position:   'absolute',
@@ -560,18 +637,6 @@ function pdfVal(v: string | number | null | undefined): string {
   if (!s || s === '-' || s === '확인 필요' || s === '공개 없음' || s === 'Not disclosed') return '—';
   if (/^-999([.,]\d+)?([%\s]|$)/.test(s)) return '—';
   return s;
-}
-
-// 성장 시나리오 표 숫자 포맷 (mirrors AnalysisCard.tsx fmtGrowthRevenue)
-function fmtPdfRevenue(v: number, currency: 'KRW' | 'USD'): string {
-  const abs = Math.abs(v);
-  if (currency === 'KRW') {
-    if (abs >= 1_000_000_000_000) return `${(v / 1_000_000_000_000).toFixed(1)}조원`;
-    if (abs >= 100_000_000)       return `${(v / 100_000_000).toFixed(0)}억원`;
-    return `${Math.round(v).toLocaleString()}원`;
-  }
-  const b = abs / 1_000_000_000;
-  return b >= 1 ? `${(v / 1_000_000_000).toFixed(1)}B USD` : `${(v / 1_000_000).toFixed(0)}M USD`;
 }
 
 // ── Primitives ───────────────────────────────────────────────────────────────
@@ -1660,8 +1725,11 @@ function FounderSection({ v, t }: { v: FounderV2; t: TFn }) {
 // ── Section 10: 성장 시나리오 ─────────────────────────────────────────────────
 // 프리미엄 필터링은 서버 응답 조립 단계에서 이미 끝난 상태로 넘어옴(growth_scenario_v2가
 // null이면 이 섹션 자체를 렌더링 안 함) — 여기서 별도 isPremium 체크 불필요.
-// react-pdf엔 차트 라이브러리가 없고 이 문서 전체가 표/텍스트 위주라 웹 탭의 라인차트/
-// 히스토그램 대신 연도별 p10/p50/p90 표로 대체.
+// CAGR 배지 + 라인차트는 웹 GrowthScenarioV2Tab과 동일한 숫자를 보여줘야 하므로
+// calcCagr/fmtGrowthRevenue를 client/src/lib/growthScenario.ts에서 그대로 import해
+// 쓴다(2026-08-16, 재구현 금지 — 연도별 표는 그대로 유지하되 차트/CAGR/최종연도 강조를
+// 추가). react-pdf엔 recharts 같은 차트 라이브러리가 없어 @react-pdf/renderer의
+// Svg/Polyline/Circle로 직접 그린다.
 
 function getScenarioRowLabel(t: TFn): Record<'p10' | 'p50' | 'p90', string> {
   return {
@@ -1671,6 +1739,66 @@ function getScenarioRowLabel(t: TFn): Record<'p10' | 'p50' | 'p90', string> {
   };
 }
 
+// P10/P90(범위) 라인 색상 — C.blue(navy, P50 실선)의 라이트 톤. 웹은 recharts 하드코딩
+// hex(#93c5fd)를 쓰지만 PDF는 3색 체계의 navy 계열로 통일(다른 섹션과 동일 원칙).
+const CHART_RANGE_COLOR = '#8fa8c2';
+
+function GrowthScenarioChart({
+  g, rowLabel, t,
+}: { g: GrowthScenarioV2; rowLabel: Record<'p10' | 'p50' | 'p90', string>; t: TFn }) {
+  const { p10, p50, p90 } = g.simulation;
+  const n = p50.length;
+  if (n < 2) return null;
+
+  const W = 470;
+  const H = 100;
+  const padY = 10;
+  const plotH = H - padY * 2;
+
+  const allVals = [...p10, ...p50, ...p90];
+  const minVal = Math.min(...allVals);
+  const maxVal = Math.max(...allVals);
+  const range = maxVal - minVal || Math.abs(maxVal) || 1;
+
+  const x = (i: number) => (i / (n - 1)) * W;
+  const y = (v: number) => padY + (1 - (v - minVal) / range) * plotH;
+  const toPoints = (vals: number[]) => vals.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+
+  return (
+    <View style={s.chartWrap}>
+      <View style={{ position: 'relative' }}>
+        <Text style={[s.chartAxisLabel, { position: 'absolute', top: 0, right: 0 }]}>
+          {fmtGrowthRevenue(maxVal, g.currency)}
+        </Text>
+        <Text style={[s.chartAxisLabel, { position: 'absolute', bottom: 0, right: 0 }]}>
+          {fmtGrowthRevenue(minVal, g.currency)}
+        </Text>
+        <Svg width={W} height={H}>
+          <Polyline points={toPoints(p90)} stroke={CHART_RANGE_COLOR} strokeWidth={1} strokeDasharray="3,2" fill="none" />
+          <Polyline points={toPoints(p10)} stroke={CHART_RANGE_COLOR} strokeWidth={1} strokeDasharray="3,2" fill="none" />
+          <Polyline points={toPoints(p50)} stroke={C.blue} strokeWidth={2} fill="none" />
+          {p90.map((v, i) => <Circle key={`p90-${i}`} cx={x(i)} cy={y(v)} r={1.6} fill={CHART_RANGE_COLOR} />)}
+          {p10.map((v, i) => <Circle key={`p10-${i}`} cx={x(i)} cy={y(v)} r={1.6} fill={CHART_RANGE_COLOR} />)}
+          {p50.map((v, i) => <Circle key={`p50-${i}`} cx={x(i)} cy={y(v)} r={2.6} fill={C.blue} />)}
+        </Svg>
+      </View>
+      <View style={s.chartAxisRow}>
+        {Array.from({ length: n }, (_, i) => (
+          <Text key={i} style={s.chartAxisLabel}>Year+{i + 1}</Text>
+        ))}
+      </View>
+      <View style={s.chartLegendRow}>
+        <View style={[s.chartLegendDot, { backgroundColor: C.blue }]} />
+        <Text style={s.chartLegendLabel}>{rowLabel.p50}(P50)</Text>
+        <View style={[s.chartLegendDot, { backgroundColor: CHART_RANGE_COLOR }]} />
+        <Text style={s.chartLegendLabel}>
+          {rowLabel.p10}~{rowLabel.p90} {t('범위', 'range')}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function GrowthScenarioSection({ g, t }: { g: GrowthScenarioV2; t: TFn }) {
   const isHigh = g.confidenceLevel === 'high';
   const sampleLabel = 'sampleSize' in g.stats
@@ -1678,6 +1806,12 @@ function GrowthScenarioSection({ g, t }: { g: GrowthScenarioV2; t: TFn }) {
     : t(`자체 공식 재무 시계열 ${g.stats.dataPoints + 1}개년`, `${g.stats.dataPoints + 1}yr own official financial history`);
   const years = g.simulation.p50.length;
   const rowLabel = getScenarioRowLabel(t);
+  const cagr = {
+    p10: calcCagr(g.simulation.p10),
+    p50: calcCagr(g.simulation.p50),
+    p90: calcCagr(g.simulation.p90),
+  };
+  const finalYearRevenue = g.simulation.p50[years - 1];
 
   return (
     <View style={s.section}>
@@ -1704,6 +1838,27 @@ function GrowthScenarioSection({ g, t }: { g: GrowthScenarioV2; t: TFn }) {
         </Text>
       )}
 
+      {/* CAGR 3열 배지 — 웹 GrowthScenarioV2Tab의 grid-cols-3 카드와 동일한 숫자
+          (calcCagr는 공용 유틸, 첫 연도→마지막 연도 구간 CAGR). */}
+      <View style={s.cagrRow}>
+        {(['p10', 'p50', 'p90'] as const).map(k => (
+          <View key={k} style={k === 'p90' ? [s.cagrCard, { marginRight: 0 }] : s.cagrCard}>
+            <Text style={s.cagrLabel}>{rowLabel[k]} CAGR</Text>
+            <Text style={s.cagrValue}>{fmtCagr(cagr[k])}</Text>
+          </View>
+        ))}
+      </View>
+
+      <GrowthScenarioChart g={g} rowLabel={rowLabel} t={t} />
+
+      {/* 최종 연도(Year+N) 매출 강조 — 예상(P50) 시나리오 기준. */}
+      <View style={s.finalYearCard}>
+        <Text style={s.finalYearLabel}>
+          {t(`Year+${years} 예상 매출(P50)`, `Year+${years} Expected Revenue (P50)`)}
+        </Text>
+        <Text style={s.finalYearValue}>{fmtGrowthRevenue(finalYearRevenue, g.currency)}</Text>
+      </View>
+
       <View style={s.table}>
         <View style={s.tHead}>
           <Text style={s.th}>{t('연차', 'Year')}</Text>
@@ -1714,9 +1869,9 @@ function GrowthScenarioSection({ g, t }: { g: GrowthScenarioV2; t: TFn }) {
         {Array.from({ length: years }, (_, i) => (
           <View key={i} style={i % 2 === 0 ? s.tRow : s.tRowAlt}>
             <Text style={s.td}>Year+{i + 1}</Text>
-            <Text style={s.td}>{fmtPdfRevenue(g.simulation.p10[i], g.currency)}</Text>
-            <Text style={s.td}>{fmtPdfRevenue(g.simulation.p50[i], g.currency)}</Text>
-            <Text style={s.td}>{fmtPdfRevenue(g.simulation.p90[i], g.currency)}</Text>
+            <Text style={s.td}>{fmtGrowthRevenue(g.simulation.p10[i], g.currency)}</Text>
+            <Text style={s.td}>{fmtGrowthRevenue(g.simulation.p50[i], g.currency)}</Text>
+            <Text style={s.td}>{fmtGrowthRevenue(g.simulation.p90[i], g.currency)}</Text>
           </View>
         ))}
       </View>

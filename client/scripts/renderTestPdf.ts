@@ -12,7 +12,7 @@ import type { AnalysisDetail } from '../src/types';
 async function main() {
   // 정적 import는 이 shim보다 먼저 평가되므로(호이스팅), AnalysisPdf.tsx의 모듈 레벨
   // Font.register가 window.location.origin을 읽기 전에 shim이 걸리도록 동적 import 사용.
-  (globalThis as any).window = { location: { origin: 'http://localhost:3000' } };
+  (globalThis as any).window = { location: { origin: 'http://localhost:3001' } };
   const { default: AnalysisPdf } = await import('../src/app/components/AnalysisPdf');
 
   const id = 'aa601e3a-3c36-4a8c-8e87-0c0aeff3490e'; // 에이피알
