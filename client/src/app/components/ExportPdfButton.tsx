@@ -115,6 +115,16 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
           ))}
         </div>
 
+        {/* 예상 소요시간 안내 — 2026-08-16 성능 조사로 확정: 한글 PDF(NotoSansKR+
+            NotoSerifKR CJK 풀 char셋 폰트 임베딩, ~21페이지)는 구조적으로 1~3분이
+            정상 범위(fontkit의 순수 JS 글리프 서브셋 처리 비용, 페이지/텍스트량보다
+            폰트 자체의 글리프 테이블 크기가 지배적 — 상세는 CLAUDE.md Architecture
+            섹션 참고). 진행률 바만으로는 "이게 정상인지 멈춘 건지" 판단이 안 되므로
+            사전 기대치를 명시. */}
+        <p className="text-[11px] text-gray-400 text-center -mt-1">
+          문서 분량에 따라 보통 1~3분 정도 걸려요
+        </p>
+
         {/* 프로그레스 바 — 완료 전엔 무한(indeterminate) CSS 애니메이션, 완료 시 100% 고정
             (숫자 %는 표시하지 않음 — react-pdf가 실제 진행률을 안 주므로 항상 허구였고,
             메인 스레드가 막혀도 이 애니메이션은 계속 움직여 "멈춘 것처럼 보이는" 문제가
