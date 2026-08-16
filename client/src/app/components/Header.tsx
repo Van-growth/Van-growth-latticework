@@ -1,7 +1,9 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Settings } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { getUiStrings } from '@/lib/i18n/uiStrings';
@@ -20,15 +22,28 @@ export function GoogleIcon() {
 
 export default function Header() {
   const pathname = usePathname();
-  const { user, loading, signInWithGoogle } = useAuth();
+  const { user, loading, signInWithGoogle, signOut } = useAuth();
   const { language } = useLanguage();
   const t = getUiStrings(language).header;
 
   // 최상단 내비게이션 — 기업분석/산업별 보기/히스토리/사용법 4개 nav 링크(로그인 여부
-  // 무관 항상 노출, 2026-08-18) + 우측 Ben 버튼(상시) → 아바타+이메일(표시 전용) → 설정
-  // 순서. 로그아웃은 더 이상 헤더에 없음 — 설정 페이지 안으로 이동(settings/page.tsx).
+  // 무관 항상 노출) + 우측 Ben 버튼(상시) → 아바타+톱니바퀴(설정) 순서(2026-08-18).
+  // 이메일은 nav 바에서는 숨기고 드롭다운 안에서만 표시 — 톱니바퀴 클릭 시 설정/
+  // 로그아웃 드롭다운이 열린다(아바타 자체는 비인터랙티브, 톱니바퀴가 트리거).
   const navLinkCls = (active: boolean) =>
     `text-sm ${active ? 'text-navy-600 font-medium' : 'text-gray-500 hover:text-gray-800'}`;
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [menuOpen]);
 
   return (
     <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
@@ -48,8 +63,8 @@ export default function Header() {
 
           {!loading && (
             user ? (
-              <>
-                <div className="flex items-center gap-2">
+              <div className="relative" ref={menuRef}>
+                <div className="flex items-center gap-1.5">
                   {user.user_metadata?.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -63,10 +78,42 @@ export default function Header() {
                       {(user.email ?? '?')[0].toUpperCase()}
                     </div>
                   )}
-                  <span className="text-xs text-gray-500 hidden sm:inline max-w-[160px] truncate">{user.email}</span>
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen(v => !v)}
+                    title={t.settings}
+                    aria-label={t.settings}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    className="text-gray-400 hover:text-navy-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+                  >
+                    <Settings size={16} />
+                  </button>
                 </div>
-                <Link href="/settings" className={navLinkCls(pathname === '/settings')}>{t.settings}</Link>
-              </>
+
+                {menuOpen && (
+                  <div role="menu" className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20">
+                    <div className="px-3 py-2 text-xs text-gray-400 truncate border-b border-gray-100">{user.email}</div>
+                    <Link
+                      href="/settings"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {t.settings}
+                    </Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setMenuOpen(false); signOut(); }}
+                      aria-label={t.logoutAria}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {t.logout}
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <button
                 onClick={() => signInWithGoogle()}
