@@ -9,143 +9,95 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-17 (같은 날 세션 계속 — 색상 팔레트+내비게이션 재편에 이어 UI/UX 개선 4건 추가)
-**커밋**: `fc222e2`(색상+내비게이션+즐겨찾기+Settings ICP폼 제거+섹션 카드 버튼+출처 순서+
-CAGR 전체 코드) + `7403c21`(CLAUDE.md 세션 핸드오프) — 둘 다 push 완료, `git rev-parse
-HEAD` == `origin/main` 확인.
-**Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI가 없어 확인 수단 자체가 없음
-(push는 확인됨, 실제 배포 성공 여부는 사용자가 대시보드에서 직접 확인 필요).
+**날짜**: 2026-08-18
+**커밋**: `7b70a84`(ICP Insights 제거 + Ben 채팅 어시스턴트 신규, 전체 코드) — 로컬 커밋만,
+push 안 함(사용자 확인 후 push 예정).
+**Render 배포**: 미확인 — 이번 세션 push 없음(로컬 커밋만).
 
-### 완료 (이번 세션 — 커밋 `fc222e2`/`7403c21`, push 완료)
-- **색상 팔레트 3색 체계 전환**: `globals.css`에 `@theme inline` 토큰 신설(`navy-50~800`
-  풀스케일 + `navy`/`navy-hover`/`navy-tint`/`navy-tint-border` alias, `success`/`success-bg`/
-  `success-border`, `risk`/`risk-bg`/`risk-border`, `source-official`/`source-reference`/
-  `source-estimate`+각 bg/border). client 전체(13개 파일, 약 350곳)에서 `blue-*`→`navy-*`
-  1:1 셰이드 매핑 기계적 치환, `indigo`/`purple`/`violet`/`orange`/`sky`/`teal` 등 장식적
-  단발 사용은 전부 navy/gray로 수렴. green/emerald/amber/red는 필드별로 직접 판정 — 진행완료
-  (sticky 그리드 체크마크, 진행중 스피너는 amber 아닌 navy로 신규 지정)/리스크(핵심 리스크·
-  리스크 분석·붕괴 시나리오·경쟁사 약점·재무 YoY 하락·rate-limit·에러 배너 등 20여 곳)/출처
-  신뢰도(L1·L2·L3 배지 + "(추정)" 인라인 마커 + financials_v2 신뢰도 요약 캐비닛)만 시맨틱
-  유지, 나머지(bull_case/무디 강도/펀딩단계 태그/차트 범례 등)는 navy 단색 그러데이션 또는
-  gray로 전환. Pain Diagnosis(cross_industry_nudge "업종 공통 Pain" + ReportSection emphasis
-  ring + 사이드그리드 isPain 링)의 기존 amber 차별화는 사전 조사 단계에서 4번째 keep-case로
-  명시해 승인받고 그대로 유지 — 3대 예외 외 유일한 보존 사례. **ICP Insights(discovery
-  questions) 탭 내부 색상은 지시대로 전혀 안 건드림**(별점 위젯/lightbulb/질문 카드 amber
-  그대로). AnalysisPdf.tsx(raw hex `StyleSheet.create`, Tailwind 미사용)는 스코프 제외 —
-  후속 세션 대상으로 남김. 검증: `bg-blue-|indigo-|purple-|violet-|orange-|sky-|teal-` 전체
-  0건 확인, 컴파일된 CSS에서 `.bg-navy-600`/`.text-risk`/`.bg-source-official` 실제 생성
-  확인(curl로 `/_next/static/css/app/layout.css` 직접 확인).
-- **최상단 내비게이션 1단 구조**: `기업분석`/`산업별 보기`/`히스토리`/`설정`/`로그아웃` 5개
-  동일 비중 nav 링크로 재편(`Header.tsx`) — 로그아웃도 아바타 옆 보조텍스트에서 나머지와
-  같은 위치의 링크로 승격. `HomeContent.tsx`의 `TOP_TABS`/`topTab`/`TopTabKey`/
-  `handleSelectIndustryCompany` 전부 제거, 이 컴포넌트 자체가 곧 "기업분석" 홈이 됨(별도
-  탭 개념 삭제). 신규 라우트 `client/src/app/industries/page.tsx` — `IndustryView`를
-  HomeContent 내부 조건부 렌더링에서 독립 페이지로 승격, 클릭 시 회사 선택은
-  `PENDING_INDUSTRY_SELECTION_KEY` sessionStorage 브릿지(기존 `PENDING_SELECTION_KEY`
-  로그인-재개 패턴과 동일 구조)로 `/`에 전달 → `HomeContent.tsx`의 신규 마운트 effect가
-  읽어서 자동 `handleSelectSuggestion` 이어감.
-- **히스토리 — 즐겨찾기 실기능 신규 구현(최근조회 통합)**: 신규 테이블
-  `analysis_favorites`(user_id/analysis_id UNIQUE, RLS 활성화 정책 0개 — 다른 테이블과 동일
-  기준, `supabase/migrations/20260817120000_analysis_favorites.sql`, **prod만 적용, CLI로
-  직접 적용 후 `migration repair --status applied`로 이력 정리** — dev는 기존 방침대로
-  잠정 미적용). 서버: `GET /api/analyses`가 `isFavorited` 필드 추가(이 유저의
-  `analysis_favorites` 집합과 대조), `GET /api/analyses/:id`도 동일, 신규
-  `POST`/`DELETE /api/analyses/:id/favorite`(하드 401만, 소유권 체크 없음 — 개인화 토글이라
-  본인이 조회한 어떤 분석이든 즐겨찾기 가능). `history/page.tsx`를 "★ 즐겨찾기"(항상 표시,
-  비어있으면 안내 문구) + "최근 조회"(즐겨찾기 항목 제외) 2섹션으로 재작성, 각 행에 별표
-  토글(낙관적 업데이트+실패 시 롤백). `AnalysisCard.tsx` 헤더에도 동일 별표 토글 추가
-  (`data.id` 없으면 비활성화 — 스트리밍 중 저장 전 방어, ICP Insight 404 버그와 동일 계열
-  가드 재사용). `isShareView`에서는 별표 버튼 자체를 숨김(공유 링크는 읽기 전용 유지).
-- **Settings 페이지 죽은 ICP 입력 폼 제거**: `curateDiscoveryQuestions()`가 이미 온보딩
-  ICP 대신 매 요청 purpose를 쓰도록 전환(`5eb58e0`)돼 있어 채워도 효과 없던 "ICP (이상적
-  고객 프로필)" 섹션(제품/타겟산업/타겟직무 3개 입력) 전체 제거. `ProfileForm.tsx`의
-  `showIcp` prop을 `showNickname`으로 rename(닉네임 입력 블록만 계속 게이트 — ICP와
-  무관한 별개 기능이라 분리), `ProfileFormValues`/`toFormValues()`/JSX에서 icp_* 3필드
-  전부 삭제, `settings/page.tsx`의 PATCH body에서도 제거. 서버 `PATCH /api/profile`은
-  이미 `if (icp_product !== undefined)` 패턴이라 필드를 안 보내면 기존 DB값이 그대로
-  보존됨(컬럼 삭제 없음, 서버/DB 변경 불필요 — 확인 후 무변경 결정). `uiStrings.ts`
-  `profileForm`의 icp* 8개 키(interface+ko+en)도 함께 제거.
-- **섹션 카드 헤더에 복사/맨위로 버튼**: `ReportSection`에 `getMarkdown`/`uiT` prop 추가
-  — 자체 `copied` state로 클립보드 복사(아이콘만, `title`로 툴팁 — 기존 `CopyButton`과
-  동일 로직 별도 아이콘 전용 렌더) + `window.scrollTo({top:0})`으로 맨 위 이동, 2버튼
-  모두 12개 `ReportSection` 호출부(Pain Diagnosis emphasis 섹션 포함) 전체에 적용.
-  마크다운 소스가 없던 3곳 신규 작성 — `crossIndustryNudgeToMd()`, `mdSourcesBlock()`을
-  `label` 파라미터로 확장한 뒤 `AllSourcesSummary`의 groups 빌드 로직을
-  `buildSourceGroups()` 공용 함수로 추출해 신규 `sourcesToMd()`가 재사용, `icpInsightToMd()`
-  (큐레이션 로직은 안 건드리고 이미 선별된 질문+rationale만 포맷팅, `isShareView` 여부로
-  `data.icpDiscoveryQuestions`/`icpInsightResult` 중 소스만 분기). `pain_diagnosis`는
-  기존 `industryHistoryToMd`+`techEvolutionToMd`를 `mdJoin`으로 합성.
-- **출처 섹션을 맨 끝으로**: 렌더 순서를 요약→밸류체인→비즈니스모델→경쟁사→넛지→재무→
-  전략→창업자→Pain Diagnosis→출처(→growth_scenario/icp_insight, 기존처럼 그리드 밖
-  스택 끝 유지)로 조정 — 구 순서(창업자 바로 다음 출처)에서 출처를 Pain Diagnosis
-  뒤로 이동.
-- **성장 시나리오 라인별 CAGR**: `calcCagr(values)` 헬퍼(배열 길이 기반 일반화,
-  `(last/first)**(1/(n-1))-1`, `years`가 항상 3이지만 하드코딩 안 함 — `server/src/
-  services/monteCarloService.ts`의 `years=3` 기본값을 오버라이드하는 호출부가 코드
-  전체에 없음을 확인) 추가. "연도별 매출 시나리오" 제목과 차트 사이에 보수적/예상/
-  낙관적 3개 CAGR 배지(회색 라벨+진한 숫자, 기존 KPI 카드 톤 재사용 — 별도 시맨틱
-  색 안 씀) 표시, `growthScenarioToMd()`에도 동일 CAGR 라인 추가해 복사 결과 반영.
-- 서버+클라이언트 `tsc --noEmit` 전 구간 클린(양쪽 라운드 전부), eslint 0 errors(기존
-  경고 2건은 이번 세션 무관 사전 존재분 — `TABS`/`ticker` unused, `ProfileForm.tsx`
-  등 이번에 손댄 파일은 경고 0). dev 서버(3000/4000) 핫리로드로 전 구간 무오류 확인,
-  `/`/`/industries`/`/history`/`/settings` 전부 200 확인.
+### 완료 (이번 세션 — 커밋 `7b70a84`, push 전)
+- **ICP Insights(discovery questions 큐레이션) 완전 제거**: 서버 —
+  `server/src/lib/discoveryQuestions.ts`/`server/src/routes/icpInsights.ts`/
+  `server/scripts/testDiscoveryQuestions.ts` 파일 삭제, `claude.ts`의
+  `curateDiscoveryQuestions()`/`generateBenchmarkDiscoveryQuestion()`과 9개 섹션
+  스키마(summary_v2~founder_v2)의 `discovery_questions` 필드+타입+기본값 전부 제거
+  (SEC 벤치마크 막대비교/해석 텍스트 `sec_benchmark_comparison`은 그대로 유지, 그
+  서브 기능이던 벤치마크 이탈 질문 1개만 제거). `analyze.ts`의
+  `POST /:id/icp-insight` 라우트 제거, `share.ts`의 `icpDiscoveryQuestions`/
+  `icpOwnerLabel` 응답 필드 제거, `index.ts`의 `/api/icp-insights` mount 제거.
+  **`icp_insights` 테이블/기존 마이그레이션 2건은 삭제하지 않음**(데이터 보존,
+  런타임 참조만 중단). `analyses.purpose_category`/`purpose_detail`을 9개 섹션
+  프롬프트에 주입하는 로직은 ICP 큐레이션과 무관한 별개 기능이라 그대로 유지.
+  클라이언트 — `AnalysisCard.tsx`의 `IcpInsightTab`/`IcpRatingWidget`/
+  `SharedIcpQuestionsTab`/`icpInsightToMd()`/관련 state·탭 엔트리 전부 삭제,
+  `types/index.ts`의 `DiscoveryQuestionItem`/`IcpInsightResponse`/9개 섹션의
+  `discovery_questions` 필드 삭제(Settings 페이지의 별개 기능인
+  `UserProfile.icp_product` 등은 스코프 밖이라 미변경), `uiStrings.ts`의
+  `icpInsight` 네임스페이스 삭제, `AnalysisPdf.tsx` 표지의 ICP 문구 블록 삭제.
+- **"Ben" 채팅 어시스턴트 신규**: 예전에 만들다 만 AI 비서 패널(죽은
+  `AiAssistantPanel.tsx` + `AppShell.tsx`에 주석 처리돼있던 리사이즈 가능 우측
+  레일 레이아웃, 인증 없이 410 Gone만 반환하던 `/api/chat` Next.js 라우트)이
+  이 저장소에 그대로 남아있던 걸 확인하고 되살려 재작성. 단발 POST → SSE
+  스트리밍, 드래그 리사이즈 → "기본"/"넓게" 2단 폭 토글(localStorage
+  `ben_panel_width`), 하드코딩 한국어 → `uiT.ben`(ko/en) 전면 다국어화,
+  클라이언트 측 truncated 컨텍스트 조립 → 서버가 9개 섹션 전체로 조립. 죽은
+  `/api/chat`(Next.js, 무인증)은 되살리지 않고 완전 삭제 — 신규 Express
+  라우트(`server/src/routes/ben.ts`, `GET`/`POST`/`DELETE
+  /api/analyses/:id/ask`)로 이전, `resolveAuthUser` 하드 401(다른 Claude 호출
+  라우트와 동일 패턴) + 일 40메시지 롤링 레이트리밋(`server/src/lib/
+  benUsage.ts`, `analysis_usage`와 별개 카운터 — 그 테이블은 History 페이지
+  데이터 소스도 겸하고 있어 채팅 메시지가 섞이면 안 됨, 이유는 코드 주석 참고).
+  시스템 프롬프트는 `server/src/lib/benContext.ts`가 정적 톤/역할 규칙(9개 섹션
+  프롬프트가 공유하는 `sectionSystem()`의 톤 규칙 계승 — 투자자 언어 금지,
+  Bull/Bear 대신 성장모멘텀/핵심리스크) + 분석 데이터(9개 섹션 JSON, `sources[]`
+  제외)를 **2개의 독립된 `cache_control` 브레이크포인트**로 분리(이 저장소에서
+  첫 2-브레이크포인트 캐싱 사례 — 기존 `callSection()`은 단일 블록만 캐싱).
+  대화는 분석당 1개만 저장(`ben_conversations` 테이블, `UNIQUE(analysis_id,
+  user_id)`) — Harry(far-study-app, 완전 별개 프로젝트)의 `context_type`/
+  `context_id` 멀티컨텍스트 히스토리와 달리 Ben의 컨텍스트는 항상 "이 분석
+  하나"라 단순화, 별도 히스토리 목록 UI 없이 자동 복원+초기화 버튼만. 패널은
+  공유 링크(`/share/*`) 제외 전 페이지에 전역 노출(죽은 코드의 기존 패턴
+  그대로), 분석 없으면 `BenPanel` 내부가 빈 상태만 표시.
+- **신규 마이그레이션**: `supabase/migrations/20260818090000_ben_chat.sql`
+  (`ben_conversations`/`ben_message_usage`, RLS 활성화+정책 0개 — 기존 컨벤션과
+  동일). **Supabase MCP가 OAuth 미인증 상태라 CLI로 우회** — `supabase db query
+  --linked -f <파일>`로 DDL 직접 실행 후 컬럼/RLS 실제 생성을 읽기 전용 쿼리로
+  확인, `supabase migration repair --status applied 20260818090000`으로 이력만
+  기록(재실행 없음). prod(`rtpcmbxijcxhzvortwxf`)에만 적용 — dev는 기존 방침대로
+  잠정 미적용.
+- 서버+클라이언트 `tsc --noEmit` 양쪽 클린, 클라이언트 eslint 0 errors(경고 4건
+  전부 이번 세션 무관 사전 존재분 — `TABS`/`ticker`/`HomeContent.tsx` 훅
+  의존성 2건, 이번에 새로 만든 `BenPanel.tsx`/`useBenChat.ts`/`benContext.ts`/
+  `benUsage.ts`/`ben.ts`는 경고 0). dev 서버 기동 후 curl로 3개 신규 엔드포인트
+  전부 무인증 401, 삭제된 구 ICP 라우트 2개 전부 404 확인. 실제 DB의 완료된
+  분석(Apple Inc.) 레코드로 `buildBenAnalysisContext()`를 직접 호출해 9개 섹션이
+  정상 직렬화되는 것(24KB 컨텍스트, purpose 블록 포함) 확인 — 단, 그 다음 단계인
+  실제 Claude 스트리밍 호출은 계정 API 사용량 한도(2026-09-01 재개 예정, 아래
+  "발견" 참고)에 걸려 라이브 검증은 못 함.
 
 ### 남음
-- **Render 배포 확인** — 커밋 `fc222e2`/`7403c21` push 완료(확인됨), 실제 배포 성공
-  여부는 이 환경에 Render API 토큰/CLI가 없어 미확인 — 사용자가 대시보드에서 직접 확인 필요
-- **실제 브라우저 시각 검증** — 이번에도 브라우저 자동화 도구가 없어 코드리뷰+tsc+eslint+
-  컴파일된 CSS 직접 확인+curl 라우트 응답 코드로만 검증(2026-08-16부터 이월 중인 동일 한계).
-  색상 그러데이션 자연스러움, 즐겨찾기 별표 토글 실클릭, 섹션 카드 복사/맨위로 버튼 실동작,
-  성장 시나리오 CAGR 배지 레이아웃 전부 미확인
-- **AnalysisPdf.tsx 색상 팔레트 정리** — 이번 스코프에서 의도적으로 제외(raw hex
-  `StyleSheet.create`, Tailwind 클래스 아님), 필요 시 별도 세션
-- Settings 페이지의 구 AE용 ICP 입력폼(icp_product 등) 처리 방향 — ICP Insights 큐레이션은
-  이미 purpose로 전환됐으므로 이 폼 자체를 없앨지 다른 용도로 재정의할지만 남음
-- 산업별 보기 — 산업명 검색 기능(영문 SIC description 기준, 한글 매핑 필요 여부 별도 결정)
-- 구글 로그인 + 온보딩 설문 실사용 검증 — 여러 세션째 최대 병목, 이번 세션 미착수
-- FCF도 EBITDA와 동일 원칙으로 제거할지 판단 — 이번 세션 미반영
-- 공유 링크 로딩 이슈(`/share/C2ud9AuX`) 실제 브라우저 재확인 — 이월
-- `latticework-daily-cron`(Render 대시보드) 삭제 처리 여부 확인 — 이월
-- NVIDIA/Johnson & Johnson 재무 실행별 결정론성 재검증
-  (`server/scripts/testEdgarReanalysisConsistency.ts`) — 이월
-- 창업자탭 legacy 기업 / 탭이동시 취소버그 / 재방문시 결과 유지 3건 — 이월, 착수 전
-- 언어 토글 마스터 계정 전환 / 비상장 기업 검색 실제 동작 테스트 — 이월
-- CLAUDE.md 문서화 3건(재현성 방어 원칙/핵심 포지셔닝+검증 테스트 설계) — 이월
-- dev/ops 서버 분리(Render) — 이월
-- Reddit GTM 반응 확인/AE 인터뷰 추가 진행 — 별도 세션(GTM)
-- Job posting/채용 트렌드 기능은 보류 확정(재검토 조건 백로그 명시) — 액션 불필요
+- **(이월) Render 배포 확인 + 2026-08-17 세션 전체 작업 실제 브라우저 시각 검증**
+  — 지난 세션(색상 팔레트+내비게이션 1단 구조+즐겨찾기+Settings ICP폼 제거+
+  섹션 카드 복사/맨위로 버튼+출처 순서 이동+CAGR) 우선순위가 이번 세션에서
+  다뤄지지 않아 그대로 이월 — 다음 세션
+- **Ben 채팅 실제 브라우저 검증** — 이번 세션은 브라우저 자동화 도구가 없고 API
+  사용량 한도까지 겹쳐 스트리밍 자체를 라이브로 못 봄. 확인 필요: 메시지 전송 시
+  토큰 단위 스트리밍, 새로고침 후 대화 자동 복원, 초기화 버튼, "기본"/"넓게"
+  토글 및 새로고침 후 유지, 모바일 폭에서 FAB+슬라이드오버 전환, 로그아웃
+  상태에서 로그인 유도, `/share/*`에서 패널 미노출, 레이트리밋 40개 초과 시
+  안내 문구 — 다음 세션(push+배포 후)
+- **커밋 push 여부 사용자 확인** — 로컬 커밋(`7b70a84`)만 되어있고 원격 미반영,
+  push 시점은 사용자 판단 — 다음 세션
 
 ### 발견 (미처리)
-- `AllSourcesSummary`(신규 "출처" 섹션)의 빈 상태 문구("아직 표시할 출처가 없습니다")를
-  하드코딩 한국어로 추가함 — AnalysisCard.tsx 탭 내부 콘텐츠 일부가 이미 의도적으로
-  미번역인 기존 문서화된 스코프(아래 항목)와 동일 계열로 판단해 별도 i18n 처리 안 함,
-  투명성 위해 기록만
-- golden-set `summary.company에 기업명 없음` 경고가 법인격 접미사가 붙은 companyName
-  (예: "Etsy Inc")에서 방향이 반대인 substring 체크(`summary_v2.company.includes
-  (companyName)`, "Etsy"가 "Etsy Inc"를 포함할 수 없음) 때문에 항상 오탐 — `console.warn`만
-  찍고 흐름은 안 막아 낮은 우선순위, 수정 안 함(`server/src/lib/claude.ts` golden-set 검증부)
-- Render 대시보드에 `render.yaml` 밖 인프라가 있을 수 있음(Security Principles 실전 발견
-  이력 17번) — 라우트 제거 시 항상 대시보드도 확인할 것
-- NVIDIA strategy_v2 `stop_reason=end_turn`인데 JSON 깨지는 원인 미특정 — 재발 시
-  `callSection()` FAIL 로그 + `server/debug-logs/parse-failures/` 확인
-- 회사명 캐시 키 분절 버그 — 재작업 금지 대상, 상세는 git log 참고
-- Quality Gate 재현성 체크 설계 미정으로 구현 보류
-- SEC 링크 유효성 자동 검증 — 스코프 밖 보류
-- `layout.tsx` `<html lang="en">`/metadata가 SSR이라 언어 선호값 미반영 — a11y 사소, 의도적 보류
-- AnalysisCard.tsx 탭 내부 콘텐츠 일부 의도적 미번역, AE Skills는 계속 한국어 고정
-- `DataSourceBadge` 하드코딩 한국어라 언어 토글 미적용 — 기존 격차, 범위 밖 유지
-- PDF `pdftotext` 한글 구간 깨짐(시각 렌더링엔 무영향) — 별도 확인 필요
-- react-pdf 테이블 행 `wrap={false}` 없음 — 페이지 경계 잘림 가능성, 실측 미재현
-- `GrowthScenarioV2Tab`(성장 시나리오 탭) 내부 라벨("연도별 매출 시나리오", `SCENARIO_LABEL`
-  등)이 `uiT` 안 거치고 하드코딩 한국어 — 이번 세션에 CAGR 배지 추가하며 발견, 위
-  "AnalysisCard.tsx 탭 내부 콘텐츠 일부 의도적 미번역"과 같은 계열로 판단해 이번 스코프
-  에서 손 안 댐(신규 CAGR 라벨도 기존 톤 그대로 하드코딩 한국어로 추가, 새 불일치 만들지
-  않음) — 별도 i18n 손볼 때 같이 처리
+- Anthropic API 계정 사용량 한도 도달 — Ben 채팅 라이브 검증 중
+  `You have reached your specified API usage limits. You will regain access on
+  2026-09-01 at 00:00 UTC.` 확인. 코드 문제 아님(요청 자체는 정상 구성됐고
+  API가 계정 레벨에서 차단), 2026-08-15 Amprius Technologies 조사 때와 동일
+  계열의 한도 — 9/1 이후 재검증 필요.
 
 ### 다음 세션 우선순위
-1. Render 배포 성공 여부 사용자 확인 후, 이번 세션 전체 작업(색상 팔레트+내비게이션 1단
-   구조+즐겨찾기+Settings ICP폼 제거+섹션 카드 복사/맨위로 버튼+출처 순서 이동+CAGR)을
-   실제 브라우저로 시각 검증
+1. 커밋 `7b70a84` push 여부 확인 → push 시 Render 배포 확인 → Ben 채팅 실제
+   브라우저 검증(스트리밍/대화 복원/폭 토글/모바일 드로어/레이트리밋)
 
 ## Vision & Mission
 
