@@ -3179,11 +3179,14 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           { key: 'financials',           label: uiT.tabs.financials.label,           done: hasTabData('financials', data, financialsV2Local) },
           { key: 'strategy',             label: uiT.tabs.strategy.label,             done: hasTabData('strategy', data, financialsV2Local) },
           { key: 'founder',              label: uiT.tabs.founder.label,              done: hasTabData('founder', data, financialsV2Local) },
-          { key: 'sources' as TabKey,    label: uiT.home.progressCardSources,        done: completedBatches.has(4) },
           {
             key: 'pain_diagnosis', label: uiT.home.progressCardPainDiagnosis, isPain: true,
             done: hasTabData('industry_history', data, financialsV2Local) && hasTabData('tech_evolution', data, financialsV2Local),
           },
+          // 출처는 실제 스크롤 순서상 스택 최후미(성장시나리오 뒤)라 내비 그리드에서도
+          // 마지막에 배치 — 그리드 클릭 순서와 실제 스크롤 순서가 어긋나면 안 됨
+          // (2026-08-16, PDF 목차 누락 버그와 동일 계열의 "표시 순서 ≠ 실제 순서" 재발 방지).
+          { key: 'sources' as TabKey,    label: uiT.home.progressCardSources,        done: completedBatches.has(4) },
         ];
         return (
           <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-100 px-4 py-3">
@@ -3348,22 +3351,24 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           </div>
         </ReportSection>
 
-        {/* 출처(신규, 2026-08-17) — 각 섹션 하단에 이미 개별 표시되는 출처와 별개로,
-            전 섹션 출처를 한 곳에 모은 통합 목록(PDF의 "마지막 페이지 통합 출처 목록"과
-            동일한 개념). data.sources는 이미 있는 필드라 데이터 신규 추가 없음. 창업자→
-            Pain Diagnosis 다음, 스택 최후미(2026-08-17 순서 조정 — 출처는 항상 맨 끝). */}
-        <ReportSection id="sources" title={uiT.home.progressCardSources} icon={BookOpen} uiT={uiT} getMarkdown={() => sourcesToMd(data, uiT)}>
-          <AllSourcesSummary data={data} uiT={uiT} />
-        </ReportSection>
-
-        {/* growth_scenario: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 스택
-            맨 끝에 유지 — 기존 인터랙션(PRO 배지/생성 버튼) 그대로. */}
+        {/* growth_scenario: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 출처 바로
+            앞에 유지 — 기존 인터랙션(PRO 배지/생성 버튼) 그대로. */}
         <ReportSection id="growth_scenario" title={uiT.tabs.growth_scenario.label} icon={TrendingUp} uiT={uiT} getMarkdown={() => data.growth_scenario_v2 ? growthScenarioToMd(data.growth_scenario_v2) : ''}>
           {!isPremium ? <GrowthScenarioLocked /> :
           !batchDone(TAB_BATCH.growth_scenario) ? <SectionGenerating label={uiT.tabs.growth_scenario.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.growth_scenario_v2
             ? <GrowthScenarioV2Tab g={data.growth_scenario_v2} />
             : <p className="text-sm text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>}
+        </ReportSection>
+
+        {/* 출처(신규, 2026-08-17) — 각 섹션 하단에 이미 개별 표시되는 출처와 별개로,
+            전 섹션 출처를 한 곳에 모은 통합 목록(PDF의 "마지막 페이지 통합 출처 목록"과
+            동일한 개념). data.sources는 이미 있는 필드라 데이터 신규 추가 없음. **진짜
+            최종 섹션(2026-08-16 재조정 — 이전엔 Pain Diagnosis 다음·성장시나리오
+            앞이었으나, 출처는 항상 스택의 마지막이어야 한다는 재검토로 성장시나리오
+            뒤로 이동).** */}
+        <ReportSection id="sources" title={uiT.home.progressCardSources} icon={BookOpen} uiT={uiT} getMarkdown={() => sourcesToMd(data, uiT)}>
+          <AllSourcesSummary data={data} uiT={uiT} />
         </ReportSection>
       </div>
     </div>

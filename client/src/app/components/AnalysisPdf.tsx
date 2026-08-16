@@ -701,9 +701,23 @@ function CoverPage({ data, shareUrl, language, t }: { data: AnalysisDetail; shar
 // id는 각 섹션의 SectionHeader에 넘기는 id와 매칭되는 내부 링크 목적지(#없는 형태).
 // present는 실제 렌더링 조건(Document 본문의 `data.xxx_v2 &&`)과 반드시 동일하게 유지 —
 // 안 그러면 목차에는 있는데 실제로는 없는 섹션으로 가는 죽은 링크가 생긴다.
+// SourcesPage의 실제 렌더 여부 판정과 반드시 동일한 로직을 공유한다 — 이 함수 하나만
+// TOC의 "11 출처 목록" present 체크와 SourcesPage의 조기 return(null) 양쪽에서 호출해,
+// 두 곳이 각자 판정 로직을 따로 들고 있다가 어긋나는 사고(2026-08-16 발견 — 본문엔
+// "11 출처 목록" 헤더가 실제로 뜨는데 TOC엔 항목 자체가 없던 버그)를 원천 차단한다.
+function hasSourcesContent(
+  sources: AnalysisSources | null | undefined,
+  founderSources: Source[] | null | undefined,
+  nudgeSources: Source[] | null | undefined,
+): boolean {
+  const hasGrouped = sources ? Object.values(sources).some(srcs => Array.isArray(srcs) && srcs.length > 0) : false;
+  return hasGrouped || !!(founderSources?.length) || !!(nudgeSources?.length);
+}
+
 // 순서/번호는 웹의 sticky 그리드+스크롤 레이아웃(AnalysisCard.tsx)과 동일하게 맞춤
-// (2026-08-16) — 요약→밸류체인→비즈니스모델→경쟁사→넛지→재무→전략→창업자→
-// Pain Diagnosis→(출처는 부록 취급, 목차 미포함, 기존 컨벤션 유지)→성장시나리오.
+// (2026-08-16, 출처=진짜 최종 섹션으로 재조정) — 요약→밸류체인→비즈니스모델→
+// 경쟁사→넛지→재무→전략→창업자→Pain Diagnosis→성장시나리오(프리미엄 전용,
+// 있으면 여기)→출처(항상 스택 최후미).
 function getTocItems(t: TFn): Array<{ num: number; id: string; title: string; present: (d: AnalysisDetail) => boolean }> {
   return [
     { num: 1,  id: 'sec-1',  title: t('기업 개요', 'Company Overview'),               present: d => !!d.summary_v2 },
@@ -716,6 +730,7 @@ function getTocItems(t: TFn): Array<{ num: number; id: string; title: string; pr
     { num: 8,  id: 'sec-8',  title: t('창업자 분석', 'Founder Analysis'),             present: d => !!d.founder_v2 },
     { num: 9,  id: 'sec-9',  title: t('Pain Diagnosis (산업 역사 · 기술 진화)', 'Pain Diagnosis (Industry History · Tech Evolution)'), present: d => !!(d.industry_history_v2 || d.tech_evolution_v2) },
     { num: 10, id: 'sec-10', title: t('성장 시나리오', 'Growth Scenario'),            present: d => !!d.growth_scenario_v2 },
+    { num: 11, id: 'sec-11', title: t('출처 목록', 'Sources'),                        present: d => hasSourcesContent(d.sources, d.founder_v2?.sources, d.cross_industry_nudge_v1?.sources) },
   ];
 }
 
@@ -1762,13 +1777,13 @@ function SourcesPage({ sources, founderSources, nudgeSources, company, t }: { so
   // cross_industry_nudge_v1.sources는 AnalysisSources 스키마 밖(자체 섹션 JSON에 내장) —
   // 웹의 buildSourceGroups()와 동일하게 founder와 같은 방식으로 별도 그룹 처리(2026-08-16).
   const hasNudge = !!(nudgeSources && nudgeSources.length > 0);
-  if (filled.length === 0 && !hasFounder && !hasNudge) return null;
+  if (!hasSourcesContent(sources, founderSources, nudgeSources)) return null;
   const srcTabLabels = getSrcTabLabels(t);
 
   return (
     <Page size="A4" style={s.page}>
       <View style={s.section}>
-        <SectionHeader num={11} title={t('출처 목록', 'Sources')} />
+        <SectionHeader num={11} title={t('출처 목록', 'Sources')} id="sec-11" />
         {filled.map(([key, srcs]) => (
           <View key={key}>
             <Text style={s.srcGroupLabel}>{srcTabLabels[key] ?? key}</Text>
@@ -1860,7 +1875,16 @@ export default function AnalysisPdf({ data: rawData, shareUrl }: { data: Analysi
         <PageFooter company={data.companyName} t={t} />
       </Page>
 
-      {/* Sources — 웹과 동일하게 Pain Diagnosis 다음, 최후미의 성장 시나리오보다 앞 */}
+      {/* 성장 시나리오 — 프리미엄 전용, Pain Diagnosis 다음·출처 앞에 배치
+          (2026-08-16 재조정 — 출처를 웹과 동일하게 진짜 최종 섹션으로 이동). */}
+      {data.growth_scenario_v2 && (
+        <Page size="A4" style={s.page}>
+          <GrowthScenarioSection g={data.growth_scenario_v2} t={t} />
+          <PageFooter company={data.companyName} t={t} />
+        </Page>
+      )}
+
+      {/* Sources — 웹과 동일하게 스택의 진짜 최후미(성장 시나리오 뒤) */}
       {data.sources && (
         <SourcesPage
           sources={data.sources}
@@ -1869,14 +1893,6 @@ export default function AnalysisPdf({ data: rawData, shareUrl }: { data: Analysi
           company={data.companyName}
           t={t}
         />
-      )}
-
-      {/* 성장 시나리오 — 프리미엄 전용, 웹과 동일하게 스택 최후미(출처 뒤)에 배치 */}
-      {data.growth_scenario_v2 && (
-        <Page size="A4" style={s.page}>
-          <GrowthScenarioSection g={data.growth_scenario_v2} t={t} />
-          <PageFooter company={data.companyName} t={t} />
-        </Page>
       )}
     </Document>
   );

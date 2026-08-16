@@ -11,20 +11,72 @@
 
 **날짜**: 2026-08-16 (같은 날 세션 계속 — Ben 채팅 실패 진단 이후: 8월 비용 실측 →
 Haiku vs Sonnet synthesis 비교 테스트 → 리서치 단계 비교 테스트 → Haiku 전환 미채택
-결정 기록 → PDF 개편 3종(진행률 버그+콘텐츠 누락 4건+웹 디자인 동기화))
-**커밋**: `f164f5c`(PDF 진행률 버그+콘텐츠 누락 4건+웹 디자인 동기화 — Haiku 비교
-테스트 스크립트 2건 포함) → 이 문서 갱신 커밋(뒤따름). `git push` 완료,
-`git rev-parse HEAD` == `origin/main` 확인. **의도적으로 커밋에서 제외한 파일**
-(이 세션 이전부터 미커밋 상태였고 이번 작업과 무관 — `git status` 기준 여전히
-untracked로 남아있음, 삭제하지 않음): `server/scripts/testDartQuickCheck.ts`/
-`testDartReanalysisConsistency.ts`/`ceo_staff_ben_guide.html`, 그리고 이번 세션의
-Haiku 비교 테스트 산출물(`haiku_vs_sonnet_apr.html/json`,
-`haiku_vs_sonnet_research_apr.html/json` — 생성된 리포트 산출물이라 소스코드가
-아니므로 저장소에 안 넣음, 사용자에게는 이미 전달 완료).
-**Render 배포**: push까지 확인됨 — 이 환경엔 Render API 토큰/CLI가 없어 실제 배포
-성공 여부는 확인 불가(반복돼온 제약, 사용자 직접 확인 필요).
+결정 기록 → PDF 개편 3종 → PDF/웹 배포 동기화 확인 질의 대응(코드는 정상, 배포/캐시
+확인은 사용자 몫으로 정리) → PDF 목차 누락 버그 수정 → 출처를 웹·PDF 공통으로 진짜
+최종 섹션으로 재배치)
+**커밋**: `f164f5c`(PDF 진행률 버그+콘텐츠 누락 4건+웹 디자인 동기화) → `ad1e861`
+(핸드오프 갱신) — 여기까지 `git push` 완료, 이 시점 `git rev-parse HEAD` ==
+`origin/main` 확인됨. **이후 목차 버그 수정 + 출처 순서 재배치는 아직 미커밋**
+(사용자가 "커밋은 확인 후 진행"이라 명시 — 이번 문서 갱신과 함께 커밋 대기 중).
+**의도적으로 커밋에서 제외한 파일**(이 세션 이전부터 미커밋 상태였고 이번 작업과
+무관 — `git status` 기준 여전히 untracked로 남아있음, 삭제하지 않음):
+`server/scripts/testDartQuickCheck.ts`/`testDartReanalysisConsistency.ts`/
+`ceo_staff_ben_guide.html`, 그리고 이번 세션의 Haiku 비교 테스트 산출물
+(`haiku_vs_sonnet_apr.html/json`, `haiku_vs_sonnet_research_apr.html/json` —
+생성된 리포트 산출물이라 소스코드가 아니므로 저장소에 안 넣음, 사용자에게는 이미
+전달 완료).
+**Render 배포**: `f164f5c`/`ad1e861`까지는 push 확인됨 — 이 환경엔 Render API
+토큰/CLI가 없어 실제 배포 성공 여부는 확인 불가(반복돼온 제약). 사용자가 배포 후
+PDF를 재생성해봤는데 색상/폰트/섹션순서가 예전 그대로였다고 제보 — 조사 결과
+`AnalysisPdf.tsx`는 스타일을 `data`(분석 콘텐츠)에서 전혀 읽지 않는 순수 코드
+하드코딩 구조임을 grep으로 재확인(스냅샷 저장 메커니즘 자체가 없음), 로컬
+프로덕션 빌드(`next build`)도 클린 성공 — 즉 **코드 문제 아님, 배포/브라우저
+캐시 쪽 문제로 좁혀짐**. 이 환경엔 Render 대시보드 접근 수단이 없어(client/server
+웹서비스가 `render.yaml`에 없고 대시보드에서 직접 관리되는 것으로 반복 확인된
+패턴) 실제 배포 성공 여부·브라우저 캐시 여부는 사용자가 직접 확인해야 함 —
+다음 세션 우선순위 1번 참고.
 
 ### 완료 (이번 세션 — 전부 미커밋)
+- **PDF 목차 "11 출처 목록" 누락 버그 수정 + 출처를 웹·PDF 공통으로 진짜 최종
+  섹션으로 재배치**: (1) 사용자가 크로스인더스트리 넛지 출처 그룹을 추가했을 때
+  본문 헤더 번호는 갱신했지만 목차(`getTocItems()`) 추가를 빠뜨린 걸 발견 —
+  목차와 본문이 "출처를 보여줄지" 판정을 각자 따로 들고 있어 어긋난 것이 원인.
+  `hasSourcesContent()` 함수 하나로 통합해 목차·본문 양쪽이 같은 함수를 호출하도록
+  수정(같은 계열 버그 재발 원천 차단). (2) 이후 사용자가 "Pain Diagnosis→출처→
+  성장시나리오" 순서(직전에 의도된 설계로 확인했던 순서)를 재검토해 "출처는 항상
+  진짜 최종 섹션이어야 한다"로 결정 번복 — PDF(`AnalysisPdf.tsx`의 `getTocItems()`
+  +본문 렌더 순서+섹션 번호 10/11 스왑)와 웹(`AnalysisCard.tsx`의 `ReportSection`
+  렌더 순서 + 상단 sticky 내비 그리드의 `navCards` 배열 순서, 후자는 사용자가
+  명시하진 않았지만 그리드 클릭 순서와 실제 스크롤 순서가 어긋나면 안 된다는
+  동일 원칙으로 같이 수정) 둘 다 "...Pain Diagnosis→성장시나리오(프리미엄, 있으면)
+  →출처(항상 최후미)"로 재배치.
+  **검증(사용자가 "렌더 스크립트만으로 완료 보고하지 말 것"이라 명시해 한 단계
+  더 실측에 가까운 방법 사용)**: 이 세션엔 브라우저 자동화 도구가 없어(claude-in-
+  chrome 확장 미설치 상태 유지) 실제 클릭/스크롤은 여전히 불가능 — 대신 (a) PDF는
+  기존 `renderTestPdf.ts`로 실 DB 데이터 재렌더, 목차 "09→11"(이 분석은 비프리미엄이라
+  10번 성장시나리오 자체가 없어 건너뜀 — 정상 동작)과 본문 "11 출처 목록"이 정확히
+  마지막에 옴을 확인. (b) 웹은 신규 `client/scripts/renderTestWebSections.tsx`로
+  `react-dom/server`의 `renderToStaticMarkup()`을 이용해 **실제 `AnalysisCard`
+  컴포넌트를 실제 API 응답 데이터로 직접 렌더**해 최종 DOM의 `id="section-*"` 앵커
+  등장 순서를 실측 — `summary→...→founder→pain_diagnosis→growth_scenario→sources`
+  확인(isPremium을 강제로 true로 켜서 이 분석엔 없는 growth_scenario 위치까지 함께
+  검증). `AnalysisCardInner`가 쓰는 `useAuth`/`useLanguage`/`useAnalysis` 3개 Context는
+  전부 `createContext(default)`에 기본값이 있어 Provider 래핑 없이도 동작함을 이용 —
+  Provider 트리 재구성 없이 컴포넌트 자체를 격리 실행. 이 과정에서 (i) `tsx`가 `.env.local`을
+  자동 로드하지 않아 `AuthContext`→`supabaseClient` 모듈 로드 시점 에러 발생(공개
+  anon key를 스크립트에 직접 주입해 해결), (ii) `client/tsconfig.json`의
+  `jsx:"preserve"`(Next 전용 설정)를 `tsx`가 그대로 물려받아 클래식 JSX 트랜스폼으로
+  해석돼 `ReferenceError: React is not defined` 발생(`client/scripts/
+  tsconfig.script.json`을 신규 작성해 `jsx:"react-jsx"`로 오버라이드, `--tsconfig` 플래그로
+  지정해 해결 — 실제 프로덕션 `tsconfig.json`은 미변경) — 두 문제 모두 해결 완료.
+  **이 검증도 실제 브라우저 클릭/스크롤은 아님을 명확히 함** — 실제 컴포넌트+실제
+  데이터로 렌더한 최종 DOM 순서를 확인한 것으로, 소스 코드 diff 리뷰보다는 한 단계
+  더 실측에 가깝지만 사용자가 요청한 "다운로드 버튼/스크롤 직접 확인"의 완전한 대체는
+  아님 — 최종 확인은 여전히 사용자 몫.
+  검증: `tsc --noEmit`/`eslint` 클린(신규 경고 0). 부수 정리: `.next` 빌드 캐시가
+  직전 턴의 프로덕션 빌드 조사로 오염돼 클라이언트 dev 서버가 500 에러를 내던 것
+  발견 — `.next` 삭제 후 재기동으로 해결(포트 3000이 이전 프로세스에 붙잡혀 있어
+  강제 종료 후 3001로 재기동, 이번 작업과 무관한 환경 정리).
 - **모델 티어링 검토 완료 — Haiku 4.5 전환 미채택, Sonnet 5 유지 확정**: 사용자 요청으로
   synthesis 단계(9개 섹션, `server/scripts/testHaikuVsSonnetApr.ts`)와 리서치 단계
   (gatherResearch1/2, `server/scripts/testHaikuVsSonnetResearch.ts`) 두 차례 실측
@@ -309,12 +361,21 @@ Haiku 비교 테스트 산출물(`haiku_vs_sonnet_apr.html/json`,
   "발견" 참고)에 걸려 라이브 검증은 못 함.
 
 ### 남음
+- **목차 버그 수정 + 출처 재배치 커밋/푸시 대기** — 사용자가 "커밋은 확인 후
+  진행"이라 명시해 아직 로컬에만 있음. 확인 후 커밋 범위: `AnalysisPdf.tsx`,
+  `AnalysisCard.tsx`, 신규 `client/scripts/renderTestWebSections.tsx`+
+  `tsconfig.script.json`, `CLAUDE.md` — 다음 턴(사용자 확인 즉시)
 - **(이월) Render 배포 확인 + 2026-08-17 세션 전체 작업 실제 브라우저 시각 검증**
   — 지난 세션(색상 팔레트+내비게이션 1단 구조+즐겨찾기+Settings ICP폼 제거+
   섹션 카드 복사/맨위로 버튼+출처 순서 이동+CAGR) 우선순위가 계속 이월 중
-- **PDF 개편 실제 브라우저 검증** — 진행률 바가 실제로 안 멈추는지(CSS 애니메이션
-  전환 확인), 다운로드 버튼 클릭→파일 저장 전체 플로우, 폰트/색상이 실제 PDF 뷰어
-  에서 의도대로 보이는지(렌더 스크립트로는 텍스트 추출 기반 확인만 함) — 다음 세션
+- **PDF/웹 개편 실제 브라우저 검증** — 진행률 바가 실제로 안 멈추는지(CSS
+  애니메이션 전환 확인), 다운로드 버튼 클릭→파일 저장 전체 플로우, 폰트/색상이
+  실제 PDF 뷰어에서 의도대로 보이는지, 목차/섹션순서/출처 최후미 배치가 실제
+  배포 사이트에서도 그대로인지(렌더 스크립트로 소스 실행 결과는 확인했으나 실제
+  클릭/스크롤은 여전히 미검증, 이번 세션도 브라우저 자동화 도구 없음) — 다음 세션.
+  **PDF 스타일이 배포 후에도 예전 그대로였다는 사용자 제보는 코드 문제가 아님을
+  확인 완료(위 배포 섹션 참고)** — 이 항목의 핵심은 "배포가 실제로 새 코드를
+  반영했는가"이지 추가 코드 수정이 아님.
 - **Ben 채팅 실제 브라우저 검증** — 이번 세션도 브라우저 자동화 도구 없음. 확인
   필요: 메시지 전송 시 토큰 단위 스트리밍, 새로고침 후 대화 자동 복원, 초기화
   버튼, 폭 토글, 모바일 FAB, 로그아웃 유도, `/share/*` 미노출, 레이트리밋 안내
@@ -338,11 +399,12 @@ Haiku 비교 테스트 산출물(`haiku_vs_sonnet_apr.html/json`,
   다음에 같은 요청이 오면 이 항목부터 먼저 사용자에게 확인할 것.
 
 ### 다음 세션 우선순위
-1. **Render 배포 확인(push는 완료됨, `f164f5c`) → PDF(진행률 바가 실제로 안
-   멈추는지/색상·폰트·섹션순서가 의도대로 보이는지/현금흐름 빈 상태 문구)와
-   Ben 채팅(2026-09-01 한도 해제 전이면 스트리밍 제외 나머지만) 실제 브라우저
-   재현 테스트.** 이번 세션은 코드 레벨 검증(tsc/eslint/실 데이터 PDF 렌더)까지만
-   가능했고, 실제 배포 환경에서의 시각 확인은 전부 다음 세션으로 이월된 상태.
+1. **목차 버그 수정 + 출처 최종 재배치 커밋(사용자 확인 대기 중, 최우선) → 이후
+   Render 배포 확인 → PDF(진행률 바/색상·폰트·섹션순서/현금흐름 빈 상태/목차·
+   출처 최후미)와 Ben 채팅(2026-09-01 한도 해제 전이면 스트리밍 제외 나머지만)
+   실제 브라우저 재현 테스트.** 이번 세션은 코드 레벨 검증(tsc/eslint/실 데이터
+   PDF 렌더 + 웹 SSR 렌더 DOM 순서 실측)까지만 가능했고, 실제 배포 환경에서의
+   시각 확인은 전부 다음 세션으로 이월된 상태.
 
 ## Vision & Mission
 
