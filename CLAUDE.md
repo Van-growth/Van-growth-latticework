@@ -9,37 +9,44 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-16
-**커밋**: `a83e61c`(백엔드 배치5+purpose 배관), `6866422`(프론트 4탭/목적입력/산업별보기/
-진행카드) — 이번 세션 push는 아직 안 함.
-**Render 배포**: 미확인 — 이번 세션 push 없음.
+**날짜**: 2026-08-17 (2026-08-16 세션에서 이어짐)
+**커밋**: `a83e61c`/`6866422`(배치5+purpose+4탭+산업별보기, 2026-08-16 push 완료) →
+`bfffd24`(목적 섹션 시각 강조+discovery_questions 섹션별 캡, push 완료) → `5eb58e0`
+(sticky 그리드+스크롤 레이아웃 전환, ICP Insights 입력소스 purpose 전환+rationale —
+**이번 세션 마지막 커밋, 아직 push 안 함**).
+**Render 배포**: `bfffd24`까지는 push+배포 확인 요청받아 진행함(사용자가 직접 확인).
+`5eb58e0`은 미push — 다음 세션 시작 시 push 여부 확인 필요.
 
 ### 완료
-- Purpose 입력 배관: `analyses.purpose_category`/`purpose_detail` 신설(TEXT+CHECK, prod
-  적용 완료) + `analyzeCompany()`/`reanalyzeSingleSection()` 컨텍스트에 주입, 검색화면에
-  목적 선택+상세 입력 UI. 톤 분기 로직은 다음 단계.
-- Pain Diagnosis 배치5 승격: 구 "pain 진단 시작" 버튼/전용 엔드포인트
-  (`POST /:id/pain-diagnosis`) 삭제, industry_history_v2/tech_evolution_v2가 9개 섹션과
-  동일하게 분석 시작 즉시 병렬 실행(180초 전용 타임아웃). `analyzeCompany()` 직접 호출로
-  실측 검증(배치 도착 순서 `[1,3,5,2,4]`, 정상 병렬 확인).
-- 최상위 탭 3→4개 재구성: Company Intelligence/Pain Diagnosis/AE Skills →
-  기업분석/산업별 보기/최근 조회/즐겨찾기. AE Skills는 진입점만 제거, 컴포넌트는 코드에 남김.
-- 신규 산업별 보기: `GET /api/industries`, `GET /api/industries/:sicCode/companies` —
-  `cik_master.sic_code`+`financial_cache.raw_edgar`(EDGAR 전용, 신규 매핑테이블/배치 없음)
-  재사용, `IndustryView.tsx` 신규. 서버 직접 curl로 실데이터 검증(반도체 SIC Top10 매출
-  내림차순 정확).
-- 실행 상태 카드 그리드: 기존 5항목 넛지 필 → 9섹션+Pain Diagnosis(앰버 강조) 10카드로
-  일반화, `hasTabData()` export해서 재사용.
-- CLAUDE.md 아키텍처 문서(분석 배치 구조/Pain 진단/UI원칙/DB schema/버전히스토리) 갱신.
-- 서버+클라이언트 `tsc --noEmit` 전 구간 클린.
+- 분석 목적 섹션 시각 강조: 검색창+목적버튼+상세입력 카드형 통합, 라벨/대비 강화(`bfffd24`).
+- discovery_questions 캡을 전체 총량(5개) → 섹션별(`capPerSection()`, 섹션당 최대 5개)로
+  전환 — 합성 후보 30개로 검증, 5개→18개(섹션당 3개 고르게)로 정상 확장 확인(`bfffd24`).
+- 기업분석 탭 좌우 스크롤 탭바 완전 제거 → 상단 sticky 상태 그리드(기존 진행 카드 재사용)
+  + 세로 스크롤 문서 레이아웃 전환(`5eb58e0`) — 그리드 클릭 시 `scrollIntoView` 앵커 이동,
+  전 섹션 동시 마운트로 전환(성능 원칙 "탭 unmount 유지"는 의도적으로 뒤집힘, CLAUDE.md
+  반영). `activeGroup`/`TAB_GROUPS`/`firstTabOfGroup` 죽은 코드 정리. 신규 "출처" 통합
+  섹션 추가. `ShareContent.tsx`는 코드 변경 없이 동일 개선 혜택.
+- ICP Insights 큐레이션 입력소스를 온보딩 ICP(`profiles.icp_*`, CEO 타겟 유저는 항상
+  비어있어 결정론적 경로로만 빠지고 있었음— 코드 확인으로 재검증)에서 매 요청
+  purpose(`analyses.purpose_category`/`purpose_detail`)로 전환(`5eb58e0`). `icp_insights`
+  스키마 변경 없음(purpose는 `signals_used` JSONB에 기록). 질문마다 "왜 이 질문이 나왔는지"
+  rationale 추가(source_facts 인용 강제) — 합성 후보로 검증, 실제 근거만 인용하고 근거
+  없는 후보는 자동 제외됨을 확인.
+- CLAUDE.md 아키텍처 문서(신규 섹션 2개 + ICP 통합 섹션 업데이트 + 성능 원칙 + 버전
+  히스토리 v2.11.0) 갱신, 백로그 6개 항목 중 4개 완료 처리.
+- 서버+클라이언트 `tsc --noEmit` 전 구간 클린(이번 세션 전체).
 
 ### 남음
-- **오늘 만든 UI(목적입력/4탭/산업별보기/진행카드)의 실제 브라우저 시각 검증** — 이번
-  세션에 브라우저 자동화 도구가 없어 코드리뷰+서버 API 직접호출로만 확인함 — 다음 세션
+- **오늘 만든 sticky 그리드+스크롤 레이아웃/ICP rationale UI의 실제 브라우저 시각 검증** —
+  이번 세션에도 브라우저 자동화 도구가 없어 코드리뷰+서버 API/직접 함수호출 검증으로만
+  확인함(2026-08-16부터 이월 중인 동일 한계) — 다음 세션 최우선
+- Settings 페이지의 구 AE용 ICP 입력폼(icp_product 등) 처리 방향 — ICP Insights 큐레이션은
+  이미 purpose로 전환됐으므로 이 폼 자체를 없앨지 다른 용도로 재정의할지만 남음
+- 산업별 보기 — 산업명 검색 기능(영문 SIC description 기준, 한글 매핑 필요 여부 별도 결정)
+- 최근 조회 / 즐겨찾기 기능 설계 및 구현 — 스코프 큼, 별도 세션(현재 UI만 빈 상태)
 - 구글 로그인 + 온보딩 설문 실사용 검증 — 여러 세션째 최대 병목, 이번 세션 미착수
 - FCF도 EBITDA와 동일 원칙으로 제거할지 판단 — 이번 세션 미반영
 - 공유 링크 로딩 이슈(`/share/C2ud9AuX`) 실제 브라우저 재확인 — 이월
-- discovery_questions 노출 개수 확장(2단계 필터링 제거) 착수 여부 판단 — 이월
 - `latticework-daily-cron`(Render 대시보드) 삭제 처리 여부 확인 — 이월
 - NVIDIA/Johnson & Johnson 재무 실행별 결정론성 재검증
   (`server/scripts/testEdgarReanalysisConsistency.ts`) — 이월
@@ -51,11 +58,14 @@
 - Job posting/채용 트렌드 기능은 보류 확정(재검토 조건 백로그 명시) — 액션 불필요
 
 ### 발견 (미처리)
+- `AllSourcesSummary`(신규 "출처" 섹션)의 빈 상태 문구("아직 표시할 출처가 없습니다")를
+  하드코딩 한국어로 추가함 — AnalysisCard.tsx 탭 내부 콘텐츠 일부가 이미 의도적으로
+  미번역인 기존 문서화된 스코프(아래 항목)와 동일 계열로 판단해 별도 i18n 처리 안 함,
+  투명성 위해 기록만
 - golden-set `summary.company에 기업명 없음` 경고가 법인격 접미사가 붙은 companyName
   (예: "Etsy Inc")에서 방향이 반대인 substring 체크(`summary_v2.company.includes
-  (companyName)`, "Etsy"가 "Etsy Inc"를 포함할 수 없음) 때문에 항상 오탐 — 이번 세션 직접
-  호출 테스트로 발견, `console.warn`만 찍고 흐름은 안 막아 낮은 우선순위, 이번 스코프에서
-  수정 안 함(`server/src/lib/claude.ts` golden-set 검증부)
+  (companyName)`, "Etsy"가 "Etsy Inc"를 포함할 수 없음) 때문에 항상 오탐 — `console.warn`만
+  찍고 흐름은 안 막아 낮은 우선순위, 수정 안 함(`server/src/lib/claude.ts` golden-set 검증부)
 - Render 대시보드에 `render.yaml` 밖 인프라가 있을 수 있음(Security Principles 실전 발견
   이력 17번) — 라우트 제거 시 항상 대시보드도 확인할 것
 - NVIDIA strategy_v2 `stop_reason=end_turn`인데 JSON 깨지는 원인 미특정 — 재발 시
@@ -70,7 +80,8 @@
 - react-pdf 테이블 행 `wrap={false}` 없음 — 페이지 경계 잘림 가능성, 실측 미재현
 
 ### 다음 세션 우선순위
-1. 오늘 구현한 목적입력/4탭/산업별보기/진행카드 UI를 실제 브라우저로 시각 검증
+1. `5eb58e0` push 여부 확인 후, sticky 그리드+스크롤 레이아웃/ICP rationale UI를 실제
+   브라우저로 시각 검증
 
 ## Vision & Mission
 
@@ -679,10 +690,14 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### 성능 원칙
 - 외부 실시간 위젯 (iframe) 금지 — 정적 이미지로 대체
-- 탭 콘텐츠 조건부 렌더링 (unmount) 유지
+- **(2026-08-17 폐기)** ~~탭 콘텐츠 조건부 렌더링 (unmount) 유지~~ — 기업분석 탭이
+  sticky 그리드+스크롤 문서 레이아웃으로 전환되며 전 섹션이 항상 동시 마운트된다(스크롤
+  레이아웃의 전제조건, Architecture 섹션 "기업분석 탭 sticky 그리드+스크롤 레이아웃
+  전환" 참고). 데이터는 이미 메모리에 있는 `data` prop 렌더링일 뿐이라 실측 리스크는
+  낮다고 판단(ICP 인사이트의 `/api/profile` 단발성 GET 정도만 추가 비용). 지연 마운트
+  (IntersectionObserver)는 필요해지면 별도 세션에서 재검토.
 - 긴 리스트/테이블은 가상화 적용
 - 스켈레톤 UI: 데이터 로딩 전 레이아웃 미리 표시
-- 탭 전환 목표: 100ms 이하
 - 최초 요약 탭 표시 목표: 3초 이하
 - 전체 분석 완료 목표: 60초 이하
 
@@ -1130,36 +1145,16 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
     DoorDash가 403/400 즉시 차단) 또는 Greenhouse/Lever가 아닌 다른 3rd-party ATS
     임베드(4/30, 13% — Workday/Phenom 등, 결국 그 ATS를 별도로 봐야 함). **Greenhouse/
     Lever API 방식(13.3%)보다도 낮은 커버리지** — "회사 자체 페이지" 방식도 기각.
-- [ ] **기업분석 탭 결과 화면 레이아웃 전환** (2026-08-17 신규, 스코프 큼 — 별도 세션) —
-  현재 좌우 스크롤 가능한 섹션 탭바(가로 스크롤 UX)를, 상단 sticky 상태 그리드(현재
-  실행 상태 카드 스타일 그대로 유지 — 완료/진행중/대기 색 구분 박스) + 그 아래로 완료
-  순서대로 이어지는 스크롤형 단일 문서 섹션(요약→밸류체인→...)으로 전환하는 방향
-  검토 중. 그리드 클릭 시 해당 섹션으로 스무스 스크롤하는 앵커 역할을 겸함. 산업별
-  보기/최근 조회/즐겨찾기 탭은 영향 없음 — 기업분석 탭 전용 변경.
-- [ ] **분석 목적 섹션 시각적 강조** (2026-08-17 진행 중) — 상세는 해당 세션 커밋 참고.
 - [ ] **산업별 보기 — 산업명 검색 기능** — 영문 SIC description 기준 검색, 한글 매핑
   필요 여부는 별도 결정.
 - [ ] **최근 조회 / 즐겨찾기 기능 설계 및 구현** (스코프 큼 — 별도 세션) — 현재는
   최상위 탭에 UI 빈 상태만 자리 잡아둔 상태(로직 없음).
 - [ ] **Settings/온보딩 ICP 구조 재정비** (AE 기준 → CEO 목적 기준) — 방향 미정:
   A안(설정에 배경정보 저장 후 분석 시 자동 적용) vs B안(완전 단발성, 저장 없이 매번
-  목적 입력만 — 현재 분석 요청 목적 입력이 이 방향). 다음 세션에서 방향 결정부터 시작.
-- [ ] **ICP Insights(discovery questions) 입력 소스를 온보딩 ICP → 매 요청 purpose로
-  전환** (2026-08-17 신규 — 위 "Settings/온보딩 ICP 구조 재정비" 항목과 연결된 결정)
-  — 현재 `curateDiscoveryQuestions()`(`server/src/lib/claude.ts`)가 온보딩에서 저장한
-  `icp_product`/`icp_target_industry`/`icp_target_role`을 입력으로 쓰는지부터 확인 필요.
-  이 앱의 타겟이 AE에서 CEO 목적 기준으로 이동하면서 CEO 타겟 유저는 온보딩 ICP
-  필드를 채우지 않을 가능성이 높아, 이 필드 기반 로직이 사실상 항상 빈 경로
-  (`pickDefaultDiscoveryQuestions`, 결정론적 선택)로만 빠질 위험 — 대신 매 분석
-  요청마다 입력받는 `purpose_category`/`purpose_detail`(2026-08-16 신설)을 큐레이션
-  입력으로 대체하고 기존 온보딩 ICP 필드 의존성을 제거하는 방향 검토. "왜 이 질문이
-  나왔는지" 근거 연결 문구도 이 전환과 함께 처리(purpose 기반 근거로 작성 — ICP
-  기준 근거보다 매 요청 목적과 더 직접 연결됨). 섹션별 3-5개 캡 확인도 이 작업에
-  포함 — **단, 캡 로직 자체(`capPerSection()`, 전체 총량 캡 제거 → 섹션당 최대 5개)는
-  2026-08-17 세션에 이미 구현+검증 완료**(합성 후보 풀 6섹션×5개=30개로 직접 테스트,
-  Claude 큐레이션이 18개를 섹션당 3개씩 고르게 선택함을 확인) — 이번 항목에서는 입력
-  소스가 purpose로 바뀐 뒤에도 그 캡 동작이 그대로 유지되는지 재확인만 하면 됨(캡
-  로직 자체 재작성 불필요).
+  목적 입력만 — 현재 분석 요청 목적 입력이 이 방향). ICP Insights 큐레이션 입력은
+  2026-08-17에 purpose로 이미 전환됐으므로(아래 "완료" 참고) 이 항목은 순수하게
+  "Settings 페이지에 아직 남아있는 구 AE용 ICP 입력폼을 어떻게 할지"만 남음 — 폼 자체를
+  없앨지, 다른 용도로 재정의할지 다음 세션에서 판단.
 
 ### ✅ 완료
 - [x] 창업자 탭 추가
@@ -1431,6 +1426,32 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   **브라우저 실사용 검증은 미완료** — 이 세션에 브라우저 자동화 도구가 없어 진행 상태
   카드/목적 입력/산업별 보기 UI는 코드 리뷰 + 서버 직접 호출 검증으로 갈음(기존 세션들과
   동일한 한계, Security Principles 참고).
+- [x] 분석 목적 섹션 시각 강조 + discovery_questions 섹션별 캡 수정 (2026-08-17,
+  커밋 `bfffd24`) — (1) 검색창+목적버튼+상세입력을 카드형 통합 블록으로 묶고, "분석 목적"
+  라벨을 섹션 타이틀급으로 강화, pill 버튼 미선택 상태 보더/배경 대비 강화. (2)
+  `pickDefaultDiscoveryQuestions()`/`curateDiscoveryQuestions()`가 전체 총량 5개로
+  캡하던 것을 섹션별 최대 5개(`capPerSection()`)로 전환 — 합성 후보 풀(6섹션×5개=30개)로
+  직접 검증, 구 동작(5개 총량)이 신 동작(18개, 섹션당 3개 고르게)으로 바뀜을 확인.
+- [x] 기업분석 탭 sticky 그리드+스크롤 레이아웃 전환 + ICP Insights 입력소스
+  purpose 전환 (2026-08-17) — 상세는 아래 Architecture 섹션 "기업분석 탭 sticky
+  그리드+스크롤 레이아웃 전환" 및 "ICP 인사이트 입력소스 온보딩 ICP→purpose 전환" 참고.
+  요약: (1) `AnalysisCard.tsx`의 좌우 스크롤 탭바(`overflow-x-auto`) 완전 제거, 상단
+  sticky 상태 그리드(기존 진행 카드 스타일 재사용, `hasTabData()` 기반)가 유일한 섹션
+  내비게이션이 되고 클릭 시 `scrollIntoView`로 해당 섹션 앵커까지 스무스 스크롤.
+  탭 콘텐츠는 요약→밸류체인→비즈니스모델→경쟁사→넛지→재무→전략→창업자→출처(신규)
+  →Pain Diagnosis 순서로 전부 동시 마운트되는 세로 스택으로 전환(growth_scenario/
+  icp_insight는 그리드 밖, 스택 맨 끝에 유지). `activeGroup`/`TAB_GROUPS`/
+  `firstTabOfGroup` 등 구 탭-그룹 필터링 로직 전부 제거(모든 호출부가 이미 안 쓰고
+  있었음, 죽은 코드 정리). (2) `POST /:id/icp-insight`가 `profiles.icp_product/
+  icp_target_industry/icp_target_role`(CEO 타겟 유저는 채울 일이 거의 없어 항상 빈
+  경로로만 빠지고 있었음, 코드 확인으로 재검증) 대신 `analyses.purpose_category/
+  purpose_detail`을 큐레이션 입력으로 사용하도록 전환 — `icp_insights` 테이블 스키마
+  변경 없음(purpose는 `signals_used` JSONB에 기록, 신규 컬럼/마이그레이션 불필요).
+  질문마다 "왜 이 질문이 나왔는지" 1문장 rationale 추가(source_facts 인용 강제, 없는
+  사실 지어내기 금지) — 합성 후보(capex announcement + 인수 이력)로 직접 검증,
+  실제 근거만 인용하고 근거 없는 후보는 자동 제외됨을 확인. **성능 원칙과 상충**:
+  "탭 콘텐츠 조건부 렌더링(unmount) 유지" 원칙이 이번 변경으로 뒤집힘(전 섹션 동시
+  마운트가 스크롤 레이아웃의 전제) — 아래 "성능 원칙" 섹션에 반영.
 
 ## Security Principles (SSOT)
 
@@ -2220,6 +2241,55 @@ override가 실제로 걸렸는지)부터 먼저 확인할 것.
   때만 채워진다. 배치가 채운 `financial_cache`를 그대로 쓰는 캐시 히트 상태에서는 "매출 구성"
   섹션이 계속 안 보이는 게 정상 동작이며, 버그로 오인하지 말 것.
 
+### 기업분석 탭 sticky 그리드+스크롤 레이아웃 전환 (2026-08-17)
+
+**배경**: 기존 `AnalysisCard.tsx`는 좌우 스크롤 가능한 섹션 탭바(`overflow-x-auto`, 12개
+탭 버튼) + 클릭한 탭 하나만 마운트하는 구조였다. UX 피드백으로 "가로 스크롤 자체를
+없애는 게 핵심 요구사항" — 상단에 상태 그리드(이미 있던 실행 상태 카드 그리드,
+`HomeContent.tsx`에 있었음)를 sticky로 고정해 유일한 내비게이션으로 삼고, 본문은 전
+섹션이 이어지는 세로 스크롤 문서로 바꾸기로 결정.
+
+**구현**: `AnalysisCardInner`의 `tab` state는 유지하되 의미가 바뀐다 — 더 이상 "지금
+보이는 탭"이 아니라 "그리드에서 마지막으로 클릭한 섹션"만 추적, 헤더의 "이 섹션 복사"
+버튼(`getActiveTabMarkdown`)이 이 값을 참조한다. 새 `jumpToSection(key)` 헬퍼가 `tab`을
+갱신하고 `document.getElementById('section-'+key)?.scrollIntoView({behavior:'smooth'})`로
+스크롤 — React ref를 섹션마다 따로 관리하지 않고 DOM id 직접 조회로 단순화했다.
+
+- **상단 sticky 그리드**: 기존 좌우 스크롤 탭바를 완전히 삭제하고 그 자리에
+  `sticky top-0` 그리드를 렌더 — `HomeContent.tsx`에 있던 실행 상태 카드 그리드
+  (9섹션+Pain Diagnosis, `hasTabData()`/`completedBatches` 기반 대기/진행중/완료 3색상)를
+  그대로 이관해 재사용(로직 재작성 없음). 스트리밍 중이든 완료된 캐시 리포트를 바로
+  열든 항상 보이고, 구 넛지 그리드에 있던 "완료 3초 후 자동 숨김"(`nudgeDismissed`)은
+  제거 — 이제 진행상황 표시가 아니라 상시 내비게이션이라 사라지면 안 됨.
+- **새 `ReportSection` 컴포넌트**(`AnalysisCard.tsx`) — 구 탭 콘텐츠 패널을 대체하는
+  섹션 카드 래퍼(`id="section-{key}"` 앵커 + 아이콘 + 타이틀 + `scroll-mt-20`으로 sticky
+  그리드에 안 가려지게). Pain Diagnosis만 `emphasis` prop으로 앰버 강조 테두리.
+- **탭 콘텐츠**: `{tab === 'X' && (...)}` 조건부 분기를 전부 무조건 렌더로 전환하고
+  요약→밸류체인→비즈니스모델→경쟁사→넛지→재무→전략→창업자→출처(신규)→Pain
+  Diagnosis 순서로 재배열. 각 블록 내부의 `!batchDone → SectionGenerating :
+  hasTabData ? <Tab/> : <EmptySectionState/>` 게이트/재분석 버튼 로직은 전부 그대로
+  재사용 — 조건문만 "탭 선택 시" → "항상"으로 바뀜, 신규 로직 없음.
+- **출처(신규 섹션)**: 각 V2Tab이 이미 자기 섹션 하단에 `<SourcesList>`로 개별 출처를
+  렌더링 중이던 것과 별개로, 전 섹션 출처를 한 곳에 모은 통합 목록을 새로 추가
+  (`AllSourcesSummary`, PDF의 "마지막 페이지 통합 출처 목록"과 동일한 개념) — 각 섹션의
+  실제 렌더링 컴포넌트가 쓰는 것과 동일한 출처 소스(자체 `.sources` 필드 우선, 없으면
+  `data.sources` 폴백)를 그대로 재사용, 신규 데이터 없이 신규 렌더링만 추가.
+- **growth_scenario/icp_insight**: 유저가 나열한 10개 순서 밖이라 그리드 셀에는 없지만
+  스택 맨 끝에 유지 — 기존 인터랙션(PRO 배지/생성 버튼) 그대로, 기능 제거 없음.
+- **죽은 코드 정리**: `activeGroup` prop, `TAB_GROUPS`, `firstTabOfGroup()`, 탭 호버
+  툴팁 스트립 전부 삭제 — `activeGroup`은 이미 어떤 호출부도 안 넘기고 있던 상태였음
+  (2026-08-16 최상위 4탭 전환 때 `HomeContent.tsx`가 넘기던 걸 이미 제거했었고,
+  `ShareContent.tsx`는 애초부터 안 넘김). `uiStrings.ts`의 `tabGroups` 네임스페이스도
+  같이 제거(더 이상 참조하는 곳 없음).
+- **`ShareContent.tsx` 영향 없음**: `isShareView` 경로는 코드 변경 없이 탭 바 제거의
+  혜택을 자동으로 물려받는다(탭 바가 `AnalysisCard.tsx` 공용 렌더였으므로 별도 분기
+  불필요) — 가로 스크롤 문제가 공유 링크 페이지에서도 같이 해소됨.
+- **성능 원칙 상충**: "탭 콘텐츠 조건부 렌더링(unmount) 유지" 원칙을 이번 변경으로
+  뒤집었다 — 전 섹션 동시 마운트가 스크롤 레이아웃의 전제조건이기 때문(위 "성능 원칙"
+  섹션에 반영). 데이터는 이미 메모리에 있는 `data` prop 렌더링일 뿐이라 실측 성능
+  리스크는 낮다고 판단, `IcpInsightTab`의 `/api/profile` 단발성 GET 정도만 추가 비용.
+  지연 마운트(IntersectionObserver)는 이번 스코프 밖 — 필요해지면 별도 세션.
+
 ### ICP 인사이트 discovery_questions 2단계 통합 (2026-08-15)
 
 **배경**: ICP 인사이트 탭이 5카테고리(financial/investment/technology/competitive/market)
@@ -2248,19 +2318,48 @@ competitors_v2/value_chain_v2/strategy_v2/industry_history_v2/tech_evolution_v2/
 **2단계(유저 단위, 온디맨드, 캐시 정책 기존 그대로)**: `POST /api/analyze/:id/icp-insight`가
 `collectDiscoveryQuestionCandidates()`(`server/src/lib/discoveryQuestions.ts`, 옛
 `icpSignals.ts`의 `collectIcpSignals` 대체)로 9개 섹션 + 넛지의 질문을 하나의 후보 풀로
-모은다(id/section/question/sources). ICP(icp_product/icp_target_industry/icp_target_role)가
-3개 다 비어있으면 `pickDefaultDiscoveryQuestions()`가 Claude 호출 없이 결정론적으로 최대
-5개를 고른다(재무 벤치마크 이탈 있으면 financials_v2 후보를 앞으로, 없으면 섹션 노출 순서
-그대로) — 불필요한 Claude 호출을 피하는 기존 원칙과 동일 계열. 하나라도 있으면
-`curateDiscoveryQuestions()`(claude.ts)가 후보 풀 전체를 id와 함께 Claude에 넘겨 ICP에
-맞는 3-5개를 선별(문구 경미한 재구성 허용)하게 하고, **반환된 id가 실제로 넘긴 후보 풀에
+모은다(id/section/question/sources). purpose_category가 비어있으면(2026-08-17부터 —
+아래 업데이트 참고) `pickDefaultDiscoveryQuestions()`가 Claude 호출 없이 결정론적으로
+고른다(재무 벤치마크 이탈 있으면 financials_v2 후보를 앞으로, 없으면 섹션 노출 순서
+그대로) — 불필요한 Claude 호출을 피하는 기존 원칙과 동일 계열. purpose가 있으면
+`curateDiscoveryQuestions()`(claude.ts)가 후보 풀 전체를 id와 함께 Claude에 넘겨
+선별(문구 경미한 재구성 허용)하게 하고, **반환된 id가 실제로 넘긴 후보 풀에
 있는지 서버가 다시 검증**해 Claude가 근거 없는 id/문장을 끼워 넣을 방법을 코드 레벨에서
 차단한다(원본 섹션 데이터 근거를 벗어나지 않을 것 원칙의 서버측 강제). `icp_insights` 테이블 +
 `analysis_id`/`icp_fingerprint` 캐시 조회 로직은 기존 그대로 재사용(신규 테이블 없음) —
-응답 `content`만 카테고리 키 객체에서 `{ questions: [{question, section, sources}] }`
+응답 `content`만 카테고리 키 객체에서 `{ questions: [{question, section, sources, rationale?}] }`
 배열로 형태만 바뀜. 프론트(`AnalysisCard.tsx`의 `IcpInsightTab`)도 카테고리별 카드 5장을
 질문 리스트 1장(불릿, `SectionCard`/`SourcesList` 재사용, 새 컴포넌트 없음)으로 교체 —
 별점 위젯(`IcpRatingWidget`)은 카드당 하나씩 중복 렌더링되던 걸 리스트당 1개로 정리.
+
+**2026-08-17 업데이트 — 입력소스를 온보딩 ICP에서 purpose로 전환 + 섹션별 캡 + rationale**:
+위 문단은 원 설계(icp_product/icp_target_industry/icp_target_role, "최대 5개") 기준으로
+작성됐던 내용 — 이후 두 가지가 바뀌었다:
+1. **입력소스 전환**: `curateDiscoveryQuestions(companyName, candidates, icp, language)`의
+   `icp` 파라미터가 `purpose: {category, detail}`로 교체됨(`analyses.purpose_category/
+   purpose_detail` — 분석 요청 시 이미 입력받은 값, 새 유저 입력 없음). 계기: 이 앱의
+   타겟이 AE에서 CEO 목적 기준으로 이동하면서 `profiles.icp_*`(설정 페이지, AE 시절
+   설계)를 CEO 타겟 유저는 채울 일이 사실상 없어 `pickDefaultDiscoveryQuestions()`
+   (결정론적 경로)로만 항상 빠지고 있었다(코드 확인으로 재검증됨). purpose는 분석 생성
+   시 1회 고정이라 같은 회사를 보는 모든 유저가 같은 fingerprint로 수렴 — 결과적으로
+   `icp_insights` 캐시가 유저별이 아닌 분석별 공용 캐시가 되는 부수효과. `icp_insights`
+   테이블 스키마 변경 없음(icp_product 등 컬럼은 이제 항상 null, purpose는 `signals_used`
+   JSONB에 기록 — "생성 시점에 실제 참조한 신호 원본 요약(재현성 확인용)"이라는 그 필드의
+   기존 용도와 정확히 일치).
+2. **전체 총량 캡("최대 5개") 제거 → 섹션별 캡**: `pickDefaultDiscoveryQuestions()`/
+   `curateDiscoveryQuestions()` 둘 다 `capPerSection()`(`discoveryQuestions.ts`, 섹션당
+   방어적 상한 5개, 전체 총량 캡 없음)으로 전환 — 9개 섹션이 각자 3-5개씩 만들어둔
+   후보 풀(최대 ~45개)이 최종 노출 단계에서 항상 5개로 뭉개지던 문제 해결. 합성 후보
+   (6섹션×5개=30개)로 검증: 구 동작(5개 총량) → 신 동작(18개, 섹션당 3개 고르게 분포).
+3. **rationale 신규**: "왜 이 질문이 나왔는지" 1문장을 `curateDiscoveryQuestions()`가
+   질문과 함께 생성 — 각 후보의 `sources[].content`(섹션이 discovery_questions 생성
+   당시 근거로 삼았던 출처 스니펫, 이미 있는 필드)를 `source_facts`로 프롬프트에 같이
+   넘기고, "1-2개 source_facts를 구체적으로 인용, 없는 사실 지어내기 금지"를 지시.
+   합성 후보(capex 발표 + 인수 이력)로 검증 — 실제 근거만 인용, source_facts가 없는
+   후보는 아예 선택에서 배제됨을 확인(비검증 rationale 생성 리스크 없음). purpose가
+   비어있는 결정론적 경로(`pickDefaultDiscoveryQuestions()`)는 Claude를 호출하지 않는
+   원칙을 그대로 지켜 rationale을 생성하지 않음 — 프론트는 `item.rationale`이 있을
+   때만 질문 위에 회색 연결 문구로 렌더링(`DiscoveryQuestionItem.rationale?: string`).
 
 **남은 한계 (기존 financial_cache 스테일 패턴과 동일 계열)**: financial_cache의 fin_preview
 빠른 경로(`buildFinancialsV2FromRaw`, EDGAR/DART raw로 직접 조립, Claude 미호출)와 이전에
@@ -2427,4 +2526,12 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
   (SIC 기준 매출 Top10, `cik_master`+`financial_cache` 재사용, EDGAR 전용) + 실행 상태 카드
   그리드(9섹션+Pain Diagnosis). 상세는 "분석 배치 구조"/"Pain 진단"/"UI/UX 원칙"/"완료"
   백로그 참고. |
+| v2.11.0 | 2026-08-17 — 기업분석 탭 좌우 스크롤 탭바 → 상단 sticky 상태 그리드+세로
+  스크롤 문서 레이아웃 전환(가로 스크롤 UX 완전 제거, `activeGroup`/`TAB_GROUPS` 등 구
+  탭-그룹 로직 정리) + ICP Insights 큐레이션 입력소스를 온보딩 ICP(`profiles.icp_*`)에서
+  매 요청 purpose(`analyses.purpose_category`/`purpose_detail`)로 전환 + discovery_questions
+  전체 총량 캡(5개) → 섹션별 캡(`capPerSection()`) + 질문마다 근거 연결 rationale 추가 +
+  분석 목적 섹션 시각 강조(카드형 통합, 라벨/대비 강화). 상세는 Architecture 섹션
+  "기업분석 탭 sticky 그리드+스크롤 레이아웃 전환"/"ICP 인사이트 discovery_questions
+  2단계 통합" 2026-08-17 업데이트 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |
