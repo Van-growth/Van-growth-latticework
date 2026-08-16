@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { getUiStrings } from '@/lib/i18n/uiStrings';
@@ -24,20 +23,40 @@ export default function Header() {
   const { language } = useLanguage();
   const t = getUiStrings(language).header;
 
+  // 최상단 내비게이션 1단 구조(2026-08-17) — 기업분석/산업별 보기/히스토리/설정/로그아웃
+  // 5개 항목을 동일한 시각적 비중으로 나열. 로그아웃도 더 이상 아바타 옆 보조 텍스트가
+  // 아니라 나머지 4개와 같은 위치·굵기의 nav 링크로 승격.
+  const navLinkCls = (active: boolean) =>
+    `text-sm ${active ? 'text-navy-600 font-medium' : 'text-gray-500 hover:text-gray-800'}`;
+
   return (
     <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-      <div className="max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="font-bold text-gray-900 text-lg">1min</span>
-          <div className="flex gap-4 text-sm">
-            <Link href="/" className={pathname === '/' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-800'}>{t.analysis}</Link>
-            <Link href="/history" className={pathname === '/history' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-800'}>{t.history}</Link>
+      <div className="max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-6 min-w-0">
+          <span className="font-bold text-gray-900 text-lg shrink-0">1min</span>
+          <div className="flex gap-4 flex-wrap">
+            <Link href="/" className={navLinkCls(pathname === '/')}>{t.analysis}</Link>
+            <Link href="/industries" className={navLinkCls(pathname === '/industries')}>{t.industries}</Link>
+            <Link href="/history" className={navLinkCls(pathname === '/history')}>{t.history}</Link>
+            {!loading && user && (
+              <>
+                <Link href="/settings" className={navLinkCls(pathname === '/settings')}>{t.settings}</Link>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="text-sm text-gray-500 hover:text-gray-800"
+                  aria-label={t.logoutAria}
+                >
+                  {t.logout}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {!loading && (
           user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 shrink-0">
               {user.user_metadata?.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -47,30 +66,16 @@ export default function Header() {
                   className="w-7 h-7 rounded-full"
                 />
               ) : (
-                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold flex items-center justify-center">
+                <div className="w-7 h-7 rounded-full bg-navy-100 text-navy-700 text-xs font-semibold flex items-center justify-center">
                   {(user.email ?? '?')[0].toUpperCase()}
                 </div>
               )}
               <span className="text-xs text-gray-500 hidden sm:inline max-w-[160px] truncate">{user.email}</span>
-              <Link
-                href="/settings"
-                className={`text-xs ${pathname === '/settings' ? 'text-blue-600 font-medium' : 'text-gray-400 hover:text-gray-700'} transition-colors`}
-              >
-                {t.settings}
-              </Link>
-              <button
-                onClick={() => signOut()}
-                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors"
-                aria-label={t.logoutAria}
-              >
-                <LogOut size={14} />
-                {t.logout}
-              </button>
             </div>
           ) : (
             <button
               onClick={() => signInWithGoogle()}
-              className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3.5 py-1.5 shadow-sm hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3.5 py-1.5 shadow-sm hover:bg-gray-50 transition-colors shrink-0"
             >
               <GoogleIcon />
               {t.loginWithGoogle}

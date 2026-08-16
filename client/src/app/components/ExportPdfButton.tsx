@@ -78,8 +78,8 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
       <div className="bg-white rounded-2xl shadow-xl border border-gray-100 px-8 py-7 max-w-sm w-full mx-4 flex flex-col items-center gap-5">
 
         {/* 아이콘 */}
-        <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
-          <FileText size={24} className="text-blue-600" />
+        <div className="w-12 h-12 rounded-full bg-navy-50 flex items-center justify-center">
+          <FileText size={24} className="text-navy-600" />
         </div>
 
         {/* 메시지 (fade + slide 애니메이션) */}
@@ -105,7 +105,7 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
               <div
                 className={`flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-all duration-300 ${
                   i === stageIdx
-                    ? 'bg-blue-50 text-blue-600'
+                    ? 'bg-navy-50 text-navy-600'
                     : i < stageIdx
                     ? 'text-gray-400 line-through'
                     : 'text-gray-300'
@@ -130,7 +130,7 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
           </div>
           <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-500 rounded-full"
+              className="h-full bg-navy-500 rounded-full"
               style={{
                 width:      `${progress}%`,
                 transition: completed ? 'width 0.4s ease-out' : 'width 0.4s ease-out',
@@ -221,7 +221,7 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
           flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
           border transition-colors
           ${error
-            ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100'
+            ? 'border-risk-border text-risk bg-risk-bg hover:bg-risk-bg'
             : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50 hover:border-gray-300'
           }
           disabled:opacity-50 disabled:cursor-not-allowed

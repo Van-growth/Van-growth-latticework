@@ -117,11 +117,11 @@ export default function OnboardingModal() {
           {t.intro}
         </p>
         {error && (
-          <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-4">
+          <p className="text-xs text-risk bg-risk-bg border border-risk-border rounded-lg px-3 py-2 mb-4">
             {error}
           </p>
         )}
-        <ProfileForm initial={profile} submitting={submitting} submitLabel={t.submitLabel} onSubmit={submit} showIcp={false} />
+        <ProfileForm initial={profile} submitting={submitting} submitLabel={t.submitLabel} onSubmit={submit} showNickname={false} />
         <button
           onClick={skip}
           disabled={submitting}

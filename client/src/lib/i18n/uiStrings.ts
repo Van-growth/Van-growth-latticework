@@ -9,6 +9,7 @@ import type { Language } from '@/app/context/LanguageContext';
 interface UiStringDict {
   header: {
     analysis: string;
+    industries: string;
     history: string;
     settings: string;
     logout: string;
@@ -33,6 +34,10 @@ interface UiStringDict {
     loginRequired: string;
     empty: string;
     emptyCta: string;
+    favoritesTitle: string;
+    favoritesEmpty: string;
+    recentTitle: string;
+    recentEmpty: string;
   };
   loginModal: {
     closeAria: string;
@@ -57,12 +62,8 @@ interface UiStringDict {
     viewNow: string;
     reanalyze: string;
     reanalyzeNew: string;
-    topTabCompany: string;
-    topTabIndustry: string;
-    topTabRecent: string;
-    topTabFavorites: string;
-    recentEmptyState: string;
-    favoritesEmptyState: string;
+    favoriteAdd: string;
+    favoriteRemove: string;
     purposeSectionTitle: string;
     purposeMa: string;
     purposeInvestment: string;
@@ -148,6 +149,8 @@ interface UiStringDict {
     copyTab: string;
     copyTabShort: string;
     copied: string;
+    copySection: string;
+    scrollToTop: string;
     sectionGeneratingSuffixShort: string;
     sectionFailedEmpty: string;
     // 재무제표 자체가 없는 기업(EDGAR/DART 둘 다 미공시, 예: 비상장/비영리) 전용 — 재분석해도
@@ -193,21 +196,14 @@ interface UiStringDict {
     nickname: string;
     nicknameHelperText: string;
     nicknamePlaceholder: string;
-    icpSectionTitle: string;
-    icpHelperText: string;
-    icpProduct: string;
-    icpProductPlaceholder: string;
-    icpTargetIndustry: string;
-    icpTargetIndustryPlaceholder: string;
-    icpTargetRole: string;
-    icpTargetRolePlaceholder: string;
     saving: string;
   };
 }
 
 const ko: UiStringDict = {
   header: {
-    analysis: '분석',
+    analysis: '기업분석',
+    industries: '산업별 보기',
     history: '히스토리',
     settings: '설정',
     logout: '로그아웃',
@@ -226,12 +222,16 @@ const ko: UiStringDict = {
     languageEn: 'English',
   },
   history: {
-    title: '분석 히스토리',
+    title: '히스토리',
     loadError: '분석 목록을 불러오지 못했습니다.',
     loading: '불러오는 중...',
     loginRequired: '로그인 후 이용할 수 있습니다.',
     empty: '아직 분석 결과가 없습니다.',
     emptyCta: '첫 번째 기업을 분석해보세요 →',
+    favoritesTitle: '★ 즐겨찾기',
+    favoritesEmpty: '즐겨찾기한 분석이 없습니다. 분석 결과 화면에서 ★ 버튼으로 추가해보세요.',
+    recentTitle: '최근 조회',
+    recentEmpty: '아직 조회한 분석이 없습니다.',
   },
   loginModal: {
     closeAria: '닫기',
@@ -256,12 +256,8 @@ const ko: UiStringDict = {
     viewNow: '바로 보기',
     reanalyze: '재분석하기',
     reanalyzeNew: '새로 분석하기',
-    topTabCompany: '기업분석',
-    topTabIndustry: '산업별 보기',
-    topTabRecent: '최근 조회',
-    topTabFavorites: '즐겨찾기',
-    recentEmptyState: '최근 조회 기능은 준비 중이에요.',
-    favoritesEmptyState: '즐겨찾기 기능은 준비 중이에요.',
+    favoriteAdd: '즐겨찾기에 추가',
+    favoriteRemove: '즐겨찾기 해제',
     purposeSectionTitle: '분석 목적',
     purposeMa: '인수합병',
     purposeInvestment: '투자',
@@ -355,6 +351,8 @@ const ko: UiStringDict = {
     copyTab: '이 탭 복사',
     copyTabShort: '탭 복사',
     copied: '복사됨',
+    copySection: '이 섹션 복사',
+    scrollToTop: '맨 위로 이동',
     sectionGeneratingSuffixShort: ' 생성 중... (최대 1~2분 정도 소요될 수 있어요)',
     sectionFailedEmpty: '이 섹션은 생성에 실패했습니다. 재분석을 시도해보세요.',
     financialsNoOfficialData: '이 기업은 SEC(EDGAR)나 DART에 공식 재무제표를 공시하지 않아 재무 데이터를 제공할 수 없어요.',
@@ -406,21 +404,14 @@ const ko: UiStringDict = {
     nickname: '닉네임',
     nicknameHelperText: '공유 링크/PDF에서 이 분석을 만든 사람을 표시할 때 쓰여요 (이메일은 노출되지 않아요). 비워두면 이름 없이 표시돼요.',
     nicknamePlaceholder: '예: Ben',
-    icpSectionTitle: 'ICP (이상적 고객 프로필)',
-    icpHelperText: '구체적으로 작성할수록 더 정확한 인사이트를 받을 수 있어요',
-    icpProduct: '제품/서비스',
-    icpProductPlaceholder: '예: 영업 인력용 AI 콜 코칭 SaaS',
-    icpTargetIndustry: '타겟 산업',
-    icpTargetIndustryPlaceholder: '예: 핀테크, 헬스케어',
-    icpTargetRole: '타겟 직무/역할',
-    icpTargetRolePlaceholder: '예: VP Sales, RevOps 리더',
     saving: '저장 중...',
   },
 };
 
 const en: UiStringDict = {
   header: {
-    analysis: 'Analyze',
+    analysis: 'Company Analysis',
+    industries: 'By Industry',
     history: 'History',
     settings: 'Settings',
     logout: 'Log out',
@@ -439,12 +430,16 @@ const en: UiStringDict = {
     languageEn: 'English',
   },
   history: {
-    title: 'Analysis history',
+    title: 'History',
     loadError: 'Failed to load your analysis list.',
     loading: 'Loading...',
     loginRequired: 'Please log in to view your history.',
     empty: "You don't have any analyses yet.",
     emptyCta: 'Analyze your first company →',
+    favoritesTitle: '★ Favorites',
+    favoritesEmpty: 'No favorites yet. Tap the ★ button on a report to add one.',
+    recentTitle: 'Recent',
+    recentEmpty: "You haven't viewed any analyses yet.",
   },
   loginModal: {
     closeAria: 'Close',
@@ -469,12 +464,8 @@ const en: UiStringDict = {
     viewNow: 'View now',
     reanalyze: 'Re-analyze',
     reanalyzeNew: 'Start new analysis',
-    topTabCompany: 'Company Analysis',
-    topTabIndustry: 'By Industry',
-    topTabRecent: 'Recent',
-    topTabFavorites: 'Favorites',
-    recentEmptyState: 'Recent view is coming soon.',
-    favoritesEmptyState: 'Favorites is coming soon.',
+    favoriteAdd: 'Add to favorites',
+    favoriteRemove: 'Remove from favorites',
     purposeSectionTitle: 'Purpose of this analysis',
     purposeMa: 'M&A',
     purposeInvestment: 'Investment',
@@ -568,6 +559,8 @@ const en: UiStringDict = {
     copyTab: 'Copy this tab',
     copyTabShort: 'Copy tab',
     copied: 'Copied',
+    copySection: 'Copy this section',
+    scrollToTop: 'Scroll to top',
     sectionGeneratingSuffixShort: ' generating... (can take up to 1-2 minutes)',
     sectionFailedEmpty: 'This section failed to generate. Try re-analyzing it.',
     financialsNoOfficialData: "This company doesn't file official financials with SEC (EDGAR) or DART, so financial data isn't available.",
@@ -619,14 +612,6 @@ const en: UiStringDict = {
     nickname: 'Nickname',
     nicknameHelperText: "Shown as the author on shared links/PDFs (your email is never exposed). Leave it blank to show no name.",
     nicknamePlaceholder: 'e.g. Ben',
-    icpSectionTitle: 'ICP (Ideal Customer Profile)',
-    icpHelperText: 'The more specific you are, the more accurate your insights will be',
-    icpProduct: 'Product/service',
-    icpProductPlaceholder: 'e.g. AI call coaching SaaS for sales teams',
-    icpTargetIndustry: 'Target industry',
-    icpTargetIndustryPlaceholder: 'e.g. Fintech, Healthcare',
-    icpTargetRole: 'Target role',
-    icpTargetRolePlaceholder: 'e.g. VP Sales, RevOps lead',
     saving: 'Saving...',
   },
 };

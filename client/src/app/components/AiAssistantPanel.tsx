@@ -139,11 +139,11 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-100 shrink-0">
         <div className="flex items-center gap-2">
-          <MessageCircle size={14} className="text-blue-500" />
+          <MessageCircle size={14} className="text-navy-500" />
           <span className="text-sm font-semibold text-gray-900">AI 비서</span>
         </div>
         {analysisData ? (
-          <p className="text-xs text-blue-500 mt-0.5 ml-5 font-medium">{analysisData.companyName}</p>
+          <p className="text-xs text-navy-500 mt-0.5 ml-5 font-medium">{analysisData.companyName}</p>
         ) : (
           <p className="text-xs text-gray-400 mt-0.5 ml-5">분석 결과 기반 Q&A</p>
         )}
@@ -178,7 +178,7 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
                 <div
                   className={`max-w-[88%] rounded-xl px-3 py-2 text-xs ${
                     msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-sm leading-relaxed'
+                      ? 'bg-navy-600 text-white rounded-br-sm leading-relaxed'
                       : 'bg-gray-100 text-gray-800 rounded-bl-sm'
                   }`}
                 >
@@ -245,7 +245,7 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
                   key={q}
                   onClick={() => sendMessage(q)}
                   disabled={isLoading}
-                  className="text-left text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="text-left text-xs text-navy-600 hover:text-navy-800 hover:bg-navy-50 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {q}
                 </button>
@@ -253,7 +253,7 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
               <button
                 onClick={() => sendMessage(MUNGER_PROMPT)}
                 disabled={isLoading}
-                className="text-left text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-50 border border-amber-200 bg-amber-50 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-0.5"
+                className="text-left text-xs text-navy-700 hover:text-navy-900 hover:bg-navy-100 border border-navy-200 bg-navy-50 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-0.5"
               >
                 멍거 체크리스트
               </button>
@@ -273,13 +273,13 @@ export default function AiAssistantPanel({ analysisData }: { analysisData: Analy
               placeholder="질문을 입력하세요... (Enter 전송)"
               rows={1}
               disabled={isLoading}
-              className="flex-1 resize-none text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 text-gray-900 disabled:opacity-50 leading-relaxed"
+              className="flex-1 resize-none text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy-400 placeholder-gray-400 text-gray-900 disabled:opacity-50 leading-relaxed"
               style={{ maxHeight: '80px', overflowY: 'auto' }}
             />
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              className="shrink-0 w-8 h-8 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="shrink-0 w-8 h-8 flex items-center justify-center bg-navy-600 hover:bg-navy-700 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Send size={13} />
             </button>

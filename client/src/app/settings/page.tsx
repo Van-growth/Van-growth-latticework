@@ -50,9 +50,6 @@ export default function SettingsPage() {
           purpose: values.purpose,
           purpose_other: values.purpose_other || null,
           region: values.region || null,
-          icp_product: values.icp_product || null,
-          icp_target_industry: values.icp_target_industry || null,
-          icp_target_role: values.icp_target_role || null,
           nickname: values.nickname || null,
         }),
       });
@@ -90,8 +87,8 @@ export default function SettingsPage() {
                     onClick={() => setLanguage(lang)}
                     className={`text-xs font-medium py-2 rounded-lg border transition-colors ${
                       language === lang
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                        ? 'bg-navy-600 text-white border-navy-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-navy-300'
                     }`}
                   >
                     {lang === 'ko' ? t.languageKo : t.languageEn}
@@ -102,7 +99,7 @@ export default function SettingsPage() {
 
             <div className="bg-white border border-gray-100 rounded-2xl p-6">
               <ProfileForm initial={profile} submitting={submitting} submitLabel={t.saveLabel} onSubmit={handleSave} />
-              {saved && <p className="text-xs text-green-600 mt-3">{t.saveSuccess}</p>}
+              {saved && <p className="text-xs text-success mt-3">{t.saveSuccess}</p>}
             </div>
           </div>
         )}

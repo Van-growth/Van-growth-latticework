@@ -22,7 +22,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-navy-50">
       <OnboardingModal />
       {children}
     </div>
@@ -109,20 +109,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 //   }
 //
 //   return (
-//     <div className="lg:flex lg:items-start min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+//     <div className="lg:flex lg:items-start min-h-screen bg-gradient-to-br from-slate-50 to-navy-50">
 //       {leftContent}
 //       <div className="hidden lg:flex shrink-0 sticky top-0 h-screen" style={{ width: panelWidth }}>
 //         <div onMouseDown={handleMouseDown} onTouchStart={handleTouchStart}
 //           className="relative w-2 shrink-0 h-full cursor-col-resize group">
 //           <div className={`absolute left-0.5 top-0 h-full w-1 rounded-full transition-colors ${
-//             isDragging ? 'bg-blue-400' : 'bg-gray-200 group-hover:bg-blue-400'
+//             isDragging ? 'bg-navy-400' : 'bg-gray-200 group-hover:bg-navy-400'
 //           }`} />
 //         </div>
 //         <div className="flex-1 min-w-0 h-full py-3 pr-3 overflow-hidden">
 //           <AiAssistantPanel analysisData={analysisData} />
 //         </div>
 //       </div>
-//       <button className="lg:hidden fixed bottom-6 right-4 z-30 w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center"
+//       <button className="lg:hidden fixed bottom-6 right-4 z-30 w-12 h-12 bg-navy-600 text-white rounded-full shadow-lg flex items-center justify-center"
 //         onClick={() => setShowPanel(v => !v)} aria-label="AI 비서 열기">
 //         {showPanel ? <X size={20} /> : <MessageCircle size={20} />}
 //       </button>

@@ -38,6 +38,45 @@
   --color-foreground: var(--foreground);
   --font-sans: 'Noto Sans KR', 'Noto Sans', sans-serif;
   --font-mono: var(--font-geist-mono);
+
+  /* ── 1min 색상 토큰 (2026-08-17, 흰색/검은색/네이비 3색 기본 체계) ──────────
+     장식적 UI 색상(버튼/링크/보더/배경/선택상태, 구 blue/indigo/purple/장식용
+     amber·emerald)은 전부 navy 단일 색상군(50~800, 구 Tailwind blue 스케일과
+     1:1 대응)으로 통일. 시맨틱 예외 3가지만 별도 토큰 유지: 진행완료(success)/
+     리스크(risk)/출처 신뢰도 3단계(source-official/reference/estimate).
+     라이트 테마 고정 정책(UI/UX 원칙 SSOT)이라 dark-mode 분기 없음. */
+  --color-navy-50: #eef2f7;
+  --color-navy-100: #dbe4ee;
+  --color-navy-200: #d3dee8;
+  --color-navy-300: #a8bed3;
+  --color-navy-400: #6f8fae;
+  --color-navy-500: #3d6084;
+  --color-navy-600: #1e3a5f;
+  --color-navy-700: #16293f;
+  --color-navy-800: #0f1c2c;
+  /* 이름 없는 기본값(bg-navy 등) = navy-600, 손으로 새로 쓰는 코드용 alias */
+  --color-navy: #1e3a5f;
+  --color-navy-hover: #16293f;
+  --color-navy-tint: #eef2f7;
+  --color-navy-tint-border: #d3dee8;
+
+  --color-success: #059669;
+  --color-success-bg: #ecfdf5;
+  --color-success-border: #a7f3d0;
+
+  --color-risk: #dc2626;
+  --color-risk-bg: #fef2f2;
+  --color-risk-border: #fecaca;
+
+  --color-source-official: #059669;
+  --color-source-official-bg: #ecfdf5;
+  --color-source-official-border: #a7f3d0;
+  --color-source-reference: #d97706;
+  --color-source-reference-bg: #fffbeb;
+  --color-source-reference-border: #fde68a;
+  --color-source-estimate: #6b7280;
+  --color-source-estimate-bg: #f3f4f6;
+  --color-source-estimate-border: #e5e7eb;
 }
 
 @media (prefers-color-scheme: dark) {

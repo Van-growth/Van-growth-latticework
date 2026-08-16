@@ -5,11 +5,11 @@ import { useState, useEffect } from 'react';
 // ── 메시지 데이터 ──────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { message: 'DART/EDGAR에서 공시 데이터 수집 중...', color: 'text-emerald-600', dot: 'bg-emerald-500' },
-  { message: 'AI가 산업 역사 분석 중...',              color: 'text-blue-600',    dot: 'bg-blue-500'    },
-  { message: '밸류체인 구조 파악 중...',               color: 'text-violet-600',  dot: 'bg-violet-500'  },
-  { message: '경쟁사 스캔 중...',                      color: 'text-orange-500',  dot: 'bg-orange-500'  },
-  { message: '재무 전망 분석 중...',                   color: 'text-sky-600',     dot: 'bg-sky-500'     },
+  { message: 'DART/EDGAR에서 공시 데이터 수집 중...', color: 'text-navy-700', dot: 'bg-navy-700' },
+  { message: 'AI가 산업 역사 분석 중...',              color: 'text-navy-600', dot: 'bg-navy-600' },
+  { message: '밸류체인 구조 파악 중...',               color: 'text-navy-500', dot: 'bg-navy-500' },
+  { message: '경쟁사 스캔 중...',                      color: 'text-navy-600', dot: 'bg-navy-600' },
+  { message: '재무 전망 분석 중...',                   color: 'text-navy-700', dot: 'bg-navy-700' },
 ] as const;
 
 const SUB_MESSAGES = [
@@ -37,8 +37,8 @@ function AnimatedBars() {
   }, []);
 
   const colors = [
-    'bg-blue-200', 'bg-blue-300', 'bg-blue-400',
-    'bg-blue-600', 'bg-blue-400', 'bg-blue-300', 'bg-blue-200',
+    'bg-navy-200', 'bg-navy-300', 'bg-navy-400',
+    'bg-navy-600', 'bg-navy-400', 'bg-navy-300', 'bg-navy-200',
   ];
 
   return (
@@ -107,7 +107,7 @@ export default function AnalysisLoader({ companyName }: Props) {
           <AnimatedBars />
           {/* pulse 링 */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="w-20 h-20 rounded-full bg-blue-100 opacity-30 animate-ping" />
+            <span className="w-20 h-20 rounded-full bg-navy-100 opacity-30 animate-ping" />
           </div>
         </div>
 
@@ -146,7 +146,7 @@ export default function AnalysisLoader({ companyName }: Props) {
         <div className="w-full max-w-sm space-y-1.5">
           <div className="flex justify-between text-xs">
             <span className="text-gray-400">분석 진행률</span>
-            <span className="font-semibold text-blue-600">{Math.round(progress)}%</span>
+            <span className="font-semibold text-navy-600">{Math.round(progress)}%</span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
             <div

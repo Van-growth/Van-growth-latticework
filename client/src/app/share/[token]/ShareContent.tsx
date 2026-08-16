@@ -35,11 +35,11 @@ export default function ShareContent({ token }: { token: string }) {
     : '';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-navy-50">
       {/* Nav */}
       <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="font-bold text-gray-900 text-lg hover:text-blue-600 transition-colors">
+          <Link href="/" className="font-bold text-gray-900 text-lg hover:text-navy-600 transition-colors">
             ← 1min
           </Link>
           <div className="flex items-center gap-2">
@@ -56,7 +56,7 @@ export default function ShareContent({ token }: { token: string }) {
             </button>
             <button
               onClick={() => showToast('준비 중입니다')}
-              className="text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-colors"
+              className="text-xs text-white bg-navy-600 hover:bg-navy-700 px-3 py-1.5 rounded-lg transition-colors"
             >
               회원가입
             </button>
@@ -76,7 +76,7 @@ export default function ShareContent({ token }: { token: string }) {
             <p className="text-gray-400 text-sm mb-6">링크가 만료되었거나 공유가 해제되었을 수 있습니다.</p>
             <Link
               href="/"
-              className="inline-block px-5 py-2.5 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition-colors"
+              className="inline-block px-5 py-2.5 bg-navy-600 text-white text-sm rounded-xl hover:bg-navy-700 transition-colors"
             >
               직접 분석해보기 →
             </Link>

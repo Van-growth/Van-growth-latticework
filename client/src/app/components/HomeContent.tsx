@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useMemo, FormEvent, KeyboardEvent } from '
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw, Target } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
-import IndustryView from './IndustryView';
 import LoginPromptModal from './LoginPromptModal';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
@@ -26,21 +25,15 @@ const API_URL = (() => {
 // 못 살리므로, 로그인 후 마운트 시 이 키를 읽어 자동으로 resolve를 이어간다.
 const PENDING_SELECTION_KEY = 'pending_company_selection';
 
-// 최상위 4탭 (2026-08-16 — 기존 Company Intelligence/Pain Diagnosis/AE Skills 3탭 대체).
-// Pain Diagnosis가 배치5로 승격되어 자동 생성되므로 별도 최상위 모드가 필요 없어졌다 —
-// "기업분석" 탭이 기존 검색+리포트 플로우를 그대로 이어받는다(2026-08-17부터는 AnalysisCard
-// 내부 탭 전환 자체가 sticky 그리드+스크롤 문서로 바뀌어 activeGroup 개념 자체가 삭제됨,
-// company+pain 두 그룹은 스크롤 문서 안에 항상 함께 보임). AE Skills는 이번 스코프에서 내비게이션
-// 진입점만 빠지고 컴포넌트(AeSkillsView.tsx)는 코드에 남아있다. 산업별 보기/최근 조회/
-// 즐겨찾기 중 산업별 보기만 실제 데이터 연동, 나머지 둘은 빈 상태 스텁.
-type TopTabKey = 'company' | 'industry' | 'recent' | 'favorites';
-const TOP_TABS: { key: TopTabKey }[] = [
-  { key: 'company' },
-  { key: 'industry' },
-  { key: 'recent' },
-  { key: 'favorites' },
-];
+// /industries 페이지에서 회사를 클릭하면 이 키에 선택값을 저장하고 "/"로 이동한다 —
+// 페이지 이동으로 React state가 끊기므로 sessionStorage로 넘긴다(위 PENDING_SELECTION_KEY와
+// 동일한 브릿지 패턴, client/src/app/industries/page.tsx 참고).
+const PENDING_INDUSTRY_SELECTION_KEY = 'pending_industry_company_selection';
 
+// 최상위 내비게이션이 1단 구조(기업분석/산업별 보기/히스토리/설정/로그아웃, 2026-08-17)로
+// 재편되며 "기업분석" 탭 개념 자체가 사라졌다 — 이 컴포넌트는 이제 그 자체가 기업분석
+// 홈(검색+목적입력+리포트 플로우)이다. 산업별 보기는 /industries 라우트로, 최근 조회/
+// 즐겨찾기는 /history 라우트로 각각 독립.
 const PURPOSE_CATEGORIES = ['ma', 'investment', 'partnership', 'customer', 'other'] as const;
 type PurposeCategory = (typeof PURPOSE_CATEGORIES)[number];
 
@@ -105,7 +98,7 @@ function AnalysisLoadingScreen({ companyName, isFirstLookup }: { companyName: st
       {/* Scanning magnifier — 64px icon on a track */}
       <div className="relative mb-14" style={{ width: 212, height: 64, overflow: 'hidden' }}>
         {/* track line */}
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-0.5 bg-blue-100 rounded-full" />
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-0.5 bg-navy-100 rounded-full" />
         {/* moving magnifier */}
         <div className="anim-scan-lr absolute top-0 left-0">
           <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -124,16 +117,16 @@ function AnalysisLoadingScreen({ companyName, isFirstLookup }: { companyName: st
       </p>
 
       {isFirstLookup && (
-        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-3 py-1 mt-3">
+        <p className="text-xs text-navy-600 bg-navy-50 border border-navy-100 rounded-full px-3 py-1 mt-3">
           {t.firstLookupHint}
         </p>
       )}
 
       {/* Bouncing dots — CSS class 기반 (inline animation 미작동 방지) */}
       <div className="flex gap-2.5 mt-8 items-end h-6">
-        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 dot-b1 inline-block" />
-        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 dot-b2 inline-block" />
-        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 dot-b3 inline-block" />
+        <span className="w-2.5 h-2.5 rounded-full bg-navy-400 dot-b1 inline-block" />
+        <span className="w-2.5 h-2.5 rounded-full bg-navy-500 dot-b2 inline-block" />
+        <span className="w-2.5 h-2.5 rounded-full bg-navy-400 dot-b3 inline-block" />
       </div>
     </div>
   );
@@ -148,8 +141,6 @@ export default function HomeContent() {
   const { language } = useLanguage();
   const t = getUiStrings(language).home;
 
-  // 새로고침 시 항상 Company Intelligence로 리셋(URL에 반영 안 함 — 2026-08 결정).
-  const [topTab, setTopTab] = useState<TopTabKey>('company');
   const [companyName, setCompanyName] = useState('');
   // 분석 요청마다 매번 입력받는 목적 — 온보딩 저장값 아님, 요청 시점 body에만 실린다.
   const [purposeCategory, setPurposeCategory] = useState<PurposeCategory | null>(null);
@@ -234,6 +225,21 @@ export default function HomeContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  // /industries에서 회사를 클릭하고 "/"로 돌아온 경우 — sessionStorage에 저장해둔
+  // 선택을 자동으로 이어서 resolve. 로그인 여부와 무관하게 마운트 시 1회만 확인.
+  useEffect(() => {
+    const raw = sessionStorage.getItem(PENDING_INDUSTRY_SELECTION_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PENDING_INDUSTRY_SELECTION_KEY);
+    try {
+      const s = JSON.parse(raw) as CompanySuggestion;
+      if (s?.name) handleSelectSuggestion(s);
+    } catch {
+      // 저장된 값이 깨졌으면 조용히 무시 — 유저가 다시 검색하면 그만
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (result) {
@@ -704,16 +710,6 @@ export default function HomeContent() {
     }
   }
 
-  // 산업별 보기 탭에서 회사 클릭 → 기업분석 탭으로 전환하고 기존 typeahead 클릭과
-  // 동일한 resolve 플로우를 그대로 재사용(신규 분석 플로우 안 만듦).
-  function handleSelectIndustryCompany(company: { cik: string; name: string; ticker: string | null }) {
-    setTopTab('company');
-    handleSelectSuggestion({
-      name: company.name,
-      listings: [{ source: 'EDGAR', identifier: company.cik, ticker: company.ticker }],
-    });
-  }
-
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (!showDropdown || suggestions.length === 0) return;
     if (e.key === 'ArrowDown') {
@@ -739,42 +735,6 @@ export default function HomeContent() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* 최상위 4탭 (2026-08-16) — 기업분석만 실제 검색+리포트 플로우, 산업별 보기는
-          IndustryView 연동, 최근 조회/즐겨찾기는 빈 상태 스텁(요청사항 스코프). */}
-      <div className="flex justify-center gap-1 mb-8">
-        {TOP_TABS.map(tab => {
-          const active = topTab === tab.key;
-          const label = tab.key === 'company' ? t.topTabCompany
-            : tab.key === 'industry' ? t.topTabIndustry
-            : tab.key === 'recent' ? t.topTabRecent
-            : t.topTabFavorites;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setTopTab(tab.key)}
-              className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
-                active ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-gray-700'
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {topTab === 'industry' ? (
-        <IndustryView onSelectCompany={handleSelectIndustryCompany} />
-      ) : topTab === 'recent' ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-16 text-center text-gray-400 text-sm">
-          {t.recentEmptyState}
-        </div>
-      ) : topTab === 'favorites' ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 py-16 text-center text-gray-400 text-sm">
-          {t.favoritesEmptyState}
-        </div>
-      ) : (
-      <>
       {/* Hero */}
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold text-gray-900 mb-3">{t.heroTitle}</h1>
@@ -794,7 +754,7 @@ export default function HomeContent() {
               onKeyDown={handleSearchKeyDown}
               onBlur={() => setShowDropdown(false)}
               placeholder={t.searchPlaceholder}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900 placeholder-gray-400"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-navy-400 text-gray-900 placeholder-gray-400"
               disabled={loading}
               autoComplete="off"
               role="combobox"
@@ -809,7 +769,7 @@ export default function HomeContent() {
                     <button
                       type="button"
                       onMouseDown={e => { e.preventDefault(); handleSelectSuggestion(s); }}
-                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors ${i === activeSuggestion ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors ${i === activeSuggestion ? 'bg-navy-50' : 'hover:bg-gray-50'}`}
                     >
                       <span className="text-sm text-gray-900 truncate">{s.name}</span>
                       <span className="flex items-center gap-2 text-xs text-gray-400 shrink-0">
@@ -827,7 +787,7 @@ export default function HomeContent() {
                 <button
                   type="button"
                   onMouseDown={e => { e.preventDefault(); handleSelectSuggestion({ name: companyName.trim(), listings: [] }); }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors"
+                  className="w-full text-left px-4 py-2.5 text-sm text-navy-700 hover:bg-navy-50 transition-colors"
                 >
                   {t.adminFreeTextOption(companyName.trim())}
                 </button>
@@ -838,7 +798,7 @@ export default function HomeContent() {
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              className="px-6 py-3 rounded-xl bg-navy-600 text-white font-medium shadow-sm hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
             >
               {loading ? t.analyzing : t.startNew}
             </button>
@@ -860,7 +820,7 @@ export default function HomeContent() {
           같은 카드 안에 두고 구분선만으로 나눔(2026-08-17 UX 피드백 — 시각적 강조 강화). */}
       <div className="mt-5 pt-5 border-t border-gray-100">
         <div className="flex items-center gap-1.5 mb-3">
-          <Target size={16} className="text-blue-600" />
+          <Target size={16} className="text-navy-600" />
           <p className="text-sm font-semibold text-gray-900">{t.purposeSectionTitle}</p>
         </div>
         <div className="flex flex-wrap gap-2 mb-3" role="radiogroup" aria-label={t.purposeSectionTitle}>
@@ -877,8 +837,8 @@ export default function HomeContent() {
                 onClick={() => setPurposeCategory(prev => prev === cat ? null : cat)}
                 className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border-2 transition-colors disabled:opacity-50 ${
                   active
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                    : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-blue-300 hover:bg-blue-50'
+                    ? 'bg-navy-600 border-navy-600 text-white shadow-sm'
+                    : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-navy-300 hover:bg-navy-50'
                 }`}
               >
                 {label}
@@ -892,22 +852,22 @@ export default function HomeContent() {
           disabled={loading}
           placeholder={t.purposeDetailPlaceholder}
           rows={2}
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white text-sm text-gray-900 placeholder-gray-400 resize-none disabled:opacity-50"
+          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-navy-400 focus:bg-white text-sm text-gray-900 placeholder-gray-400 resize-none disabled:opacity-50"
         />
       </div>
       </div>
 
       {/* 캐시 있음 — 서버 응답(resolveResult.cached)에 따라서만 보여짐, 유저가 고르는 토글 아님 */}
       {selectedCompany && resolveResult?.cached && !loading && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-4 mb-6 max-w-2xl mx-auto">
-          <span className="text-sm text-blue-800">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-navy-50 border border-navy-100 rounded-2xl px-5 py-4 mb-6 max-w-2xl mx-auto">
+          <span className="text-sm text-navy-800">
             {t.lastAnalyzedLabel(selectedCompany.name, daysAgo(resolveResult.lastAnalyzedAt))}
           </span>
           <div className="flex gap-2 shrink-0">
             <button
               type="button"
               onClick={() => resolveResult.analysisId && router.push(`/?id=${resolveResult.analysisId}`)}
-              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
+              className="px-4 py-2 rounded-xl bg-navy-600 text-white text-xs font-medium hover:bg-navy-700 transition-colors whitespace-nowrap"
             >
               {t.viewNow}
             </button>
@@ -915,7 +875,7 @@ export default function HomeContent() {
               type="button"
               disabled={loading}
               onClick={() => handleForceRefresh(selectedCompany.companyId, selectedCompany.name)}
-              className="px-4 py-2 rounded-xl border border-blue-300 bg-white text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50 transition-colors whitespace-nowrap"
+              className="px-4 py-2 rounded-xl border border-navy-300 bg-white text-navy-700 text-xs font-medium hover:bg-navy-50 disabled:opacity-50 transition-colors whitespace-nowrap"
             >
               {t.reanalyze}
             </button>
@@ -949,7 +909,7 @@ export default function HomeContent() {
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              className="h-full bg-navy-500 rounded-full transition-all duration-500"
               style={{ width: `${Math.round((progress.completed / progress.total) * 100)}%` }}
             />
           </div>
@@ -963,19 +923,19 @@ export default function HomeContent() {
 
       {/* Rate limit block — 무료 분석 횟수 소진 */}
       {rateLimitInfo && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <p className="text-sm text-amber-800">{rateLimitInfo.message}</p>
+        <div className="bg-risk-bg border border-risk-border rounded-2xl p-5 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <p className="text-sm text-risk">{rateLimitInfo.message}</p>
           <div className="flex gap-2 shrink-0">
             <button
               type="button"
-              className="px-4 py-2 rounded-xl border border-amber-300 bg-white text-amber-700 text-xs font-medium hover:bg-amber-50 transition-colors whitespace-nowrap"
+              className="px-4 py-2 rounded-xl border border-risk-border bg-white text-risk text-xs font-medium hover:bg-risk-bg transition-colors whitespace-nowrap"
               onClick={handleRequestFreeTrial}
             >
               {t.requestFreeTrial}
             </button>
             <button
               type="button"
-              className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors whitespace-nowrap"
+              className="px-4 py-2 rounded-xl bg-navy-600 text-white text-xs font-medium hover:bg-navy-700 transition-colors whitespace-nowrap"
               onClick={() => showToast(t.premiumComingSoon)}
             >
               {t.upgradeUnlimited}
@@ -992,7 +952,7 @@ export default function HomeContent() {
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-red-700 text-sm">
+        <div className="bg-risk-bg border border-risk-border rounded-2xl p-5 text-risk text-sm">
           {error}
         </div>
       )}
@@ -1002,14 +962,14 @@ export default function HomeContent() {
         <div>
           {/* Cache banner */}
           {result && isCached && (
-            <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 mb-3">
-              <span className="text-xs text-amber-700">
+            <div className="flex items-center justify-between bg-navy-50 border border-navy-100 rounded-xl px-4 py-2.5 mb-3">
+              <span className="text-xs text-navy-700">
                 {t.previousResultBanner(new Date(result.createdAt).toLocaleString(language === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'short', timeStyle: 'short' }))}
               </span>
               <button
                 onClick={() => handleForceRefresh()}
                 disabled={loading}
-                className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 font-medium disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-800 font-medium disabled:opacity-50"
               >
                 <RefreshCw size={12} />
                 {t.reanalyzeNew}
@@ -1022,13 +982,13 @@ export default function HomeContent() {
             <div className="flex items-center justify-end gap-2 mb-3">
               {isShared ? (
                 <>
-                  <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                  <span className="text-xs text-success font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
                     {t.sharingActive}
                   </span>
                   <button
                     onClick={handleCopyLink}
-                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-800 bg-navy-50 hover:bg-navy-100 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     <Link size={12} />
                     {t.copyLink}
@@ -1065,9 +1025,6 @@ export default function HomeContent() {
               바뀌면서 기업분석/pain 진단 두 그룹이 항상 함께 이어져 보인다. */}
           <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} isPremium={usage?.isPremium ?? false} />
         </div>
-      )}
-
-      </>
       )}
 
       {pendingSuggestion && (

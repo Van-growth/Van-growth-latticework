@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Star } from 'lucide-react';
 import Header from '@/app/components/Header';
 import LoginPromptModal from '@/app/components/LoginPromptModal';
 import { AnalysisSummary, AnalysisDetail } from '@/types';
@@ -23,7 +24,8 @@ export default function HistoryPage() {
   const { setAnalysisData } = useAnalysis();
   const { session, loading: authLoading, signInWithGoogle } = useAuth();
   const { language } = useLanguage();
-  const t = getUiStrings(language).history;
+  const uiT = getUiStrings(language);
+  const t = uiT.history;
   const [list, setList] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,12 @@ export default function HistoryPage() {
       .finally(() => setLoading(false));
   }, [session, t.loadError]);
 
+  // ★ 즐겨찾기(고정 상단) / 최근 조회(그 아래) 2섹션 — 서버가 isFavorited 플래그만 실어
+  // 보내는 단일 목록을 클라이언트에서 나눈다(별도 엔드포인트 없음). 즐겨찾기에 이미 뜬
+  // 항목은 최근 조회에서 중복 노출하지 않는다.
+  const favorites = useMemo(() => list.filter(item => item.isFavorited), [list]);
+  const recent = useMemo(() => list.filter(item => !item.isFavorited), [list]);
+
   async function handleSelect(id: string) {
     if (!session) return;
     // Fetch detail and update context so panel reflects the selected analysis
@@ -55,6 +63,56 @@ export default function HistoryPage() {
       // Context update is best-effort; navigation proceeds regardless
     }
     router.push(`/?id=${id}`);
+  }
+
+  async function handleToggleFavorite(e: React.MouseEvent, item: AnalysisSummary) {
+    e.stopPropagation();
+    if (!session) return;
+    const next = !item.isFavorited;
+    // 낙관적 업데이트 — 실패 시 원상복구
+    setList(prev => prev.map(x => (x.id === item.id ? { ...x, isFavorited: next } : x)));
+    try {
+      const res = await fetch(`${API_URL}/api/analyses/${item.id}/favorite`, {
+        method: next ? 'POST' : 'DELETE',
+        headers: buildAuthHeaders(null, session.access_token),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setList(prev => prev.map(x => (x.id === item.id ? { ...x, isFavorited: !next } : x)));
+    }
+  }
+
+  function ListItem({ item }: { item: AnalysisSummary }) {
+    return (
+      <button
+        onClick={() => handleSelect(item.id)}
+        className="w-full text-left bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm hover:shadow-md hover:border-navy-200 transition-all"
+      >
+        <div className="flex items-center justify-between">
+          <div className="min-w-0">
+            <span className="font-semibold text-gray-900">{item.companyName}</span>
+            <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">{item.summary}</p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 ml-4">
+            <span className="text-xs text-gray-400">
+              {new Date(item.createdAt).toLocaleDateString(language === 'ko' ? 'ko-KR' : 'en-US')}
+            </span>
+            <button
+              type="button"
+              onClick={e => handleToggleFavorite(e, item)}
+              aria-label={item.isFavorited ? uiT.home.favoriteRemove : uiT.home.favoriteAdd}
+              className="p-0.5"
+            >
+              <Star
+                size={16}
+                className={item.isFavorited ? 'fill-source-reference text-source-reference' : 'text-gray-300 hover:text-gray-400'}
+              />
+            </button>
+            <span className="text-gray-400 text-sm">→</span>
+          </div>
+        </div>
+      </button>
+    );
   }
 
   return (
@@ -73,37 +131,40 @@ export default function HistoryPage() {
         ) : (
           <>
             {loading && <p className="text-gray-500">{t.loading}</p>}
-            {error && <p className="text-red-600 text-sm">{error}</p>}
+            {error && <p className="text-risk text-sm">{error}</p>}
 
             {!loading && list.length === 0 && (
               <div className="text-center py-20 text-gray-400">
                 <p className="text-lg mb-2">{t.empty}</p>
-                <Link href="/" className="text-blue-600 text-sm hover:underline">{t.emptyCta}</Link>
+                <Link href="/" className="text-navy-600 text-sm hover:underline">{t.emptyCta}</Link>
               </div>
             )}
 
-            <div className="space-y-3">
-              {list.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => handleSelect(item.id)}
-                  className="w-full text-left bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm hover:shadow-md hover:border-blue-200 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-semibold text-gray-900">{item.companyName}</span>
-                      <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">{item.summary}</p>
+            {!loading && list.length > 0 && (
+              <div className="space-y-10">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-700 mb-3">{t.favoritesTitle}</h2>
+                  {favorites.length === 0 ? (
+                    <p className="text-sm text-gray-400">{t.favoritesEmpty}</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {favorites.map(item => <ListItem key={item.id} item={item} />)}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0 ml-4">
-                      <span className="text-xs text-gray-400">
-                        {new Date(item.createdAt).toLocaleDateString(language === 'ko' ? 'ko-KR' : 'en-US')}
-                      </span>
-                      <span className="text-gray-400 text-sm">→</span>
+                  )}
+                </div>
+
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-700 mb-3">{t.recentTitle}</h2>
+                  {recent.length === 0 ? (
+                    <p className="text-sm text-gray-400">{t.recentEmpty}</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {recent.map(item => <ListItem key={item.id} item={item} />)}
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

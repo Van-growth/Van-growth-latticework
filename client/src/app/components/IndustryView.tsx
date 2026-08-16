@@ -35,8 +35,9 @@ function formatRevenue(v: number): string {
 }
 
 // SIC 기준 산업 목록 → 선택 시 financial_cache(EDGAR) 최신 매출 기준 Top10 리스트.
-// 클릭 시 onSelectCompany로 기존 기업분석 플로우(HomeContent.handleSelectIndustryCompany)로
-// 넘겨준다 — 새 분석 플로우를 만들지 않는다.
+// /industries 라우트(client/src/app/industries/page.tsx)에서 마운트 — 클릭 시
+// onSelectCompany로 회사를 넘기면 sessionStorage 브릿지를 거쳐 "/"(기업분석 홈)의
+// 기존 typeahead 선택(resolve) 플로우로 이어진다. 새 분석 플로우를 만들지 않는다.
 export default function IndustryView({ onSelectCompany }: {
   onSelectCompany: (company: { cik: string; name: string; ticker: string | null }) => void;
 }) {
@@ -74,7 +75,7 @@ export default function IndustryView({ onSelectCompany }: {
         <button
           type="button"
           onClick={() => { setSelected(null); setCompanies(null); }}
-          className="text-sm text-blue-600 hover:text-blue-800 mb-4"
+          className="text-sm text-navy-600 hover:text-navy-800 mb-4"
         >
           {t.back}
         </button>
@@ -88,7 +89,7 @@ export default function IndustryView({ onSelectCompany }: {
               disabled={n !== 10}
               className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
                 n === 10
-                  ? 'bg-blue-600 border-blue-600 text-white'
+                  ? 'bg-navy-600 border-navy-600 text-white'
                   : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
               }`}
             >
@@ -166,7 +167,7 @@ export default function IndustryView({ onSelectCompany }: {
               key={ind.sicCode}
               type="button"
               onClick={() => setSelected(ind)}
-              className="flex items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 text-left hover:border-blue-200 hover:bg-blue-50/40 transition-colors"
+              className="flex items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 text-left hover:border-navy-200 hover:bg-navy-50/40 transition-colors"
             >
               <span className="text-sm font-medium text-gray-900">{ind.sicDescription}</span>
               <span className="text-xs text-gray-400 shrink-0">{t.industryCompanyCount(ind.companyCount)}</span>

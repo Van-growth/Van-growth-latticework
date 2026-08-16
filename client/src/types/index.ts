@@ -514,6 +514,7 @@ export interface AnalysisSummary {
   companyName: string;
   summary: string;
   createdAt: string;
+  isFavorited: boolean;
 }
 
 export interface UserProfile {
@@ -581,6 +582,7 @@ export interface AnalysisDetail {
   id: string;
   companyName: string;
   language?: 'ko' | 'en';
+  isFavorited?: boolean;
   // Legacy fields
   summary: string;
   metrics?: Metric[];

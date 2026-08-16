@@ -69,7 +69,16 @@ router.get('/', async (req: Request, res: Response) => {
       .filter((x): x is { id: string; companyName: string; summary: string; createdAt: string } => x !== null)
       .slice(0, 50);
 
-    res.json(items);
+    // 즐겨찾기 여부 — 히스토리 페이지가 이 하나의 응답을 즐겨찾기/최근조회 두 섹션으로
+    // 클라이언트에서 나눠 렌더링한다(별도 엔드포인트 없음, analysis_favorites 참고).
+    const { data: favRows, error: favErr } = await supabase
+      .from('analysis_favorites')
+      .select('analysis_id')
+      .eq('user_id', userId);
+    if (favErr) throw favErr;
+    const favoriteIds = new Set((favRows ?? []).map(r => r.analysis_id));
+
+    res.json(items.map(item => ({ ...item, isFavorited: favoriteIds.has(item.id) })));
   } catch (err) {
     console.error('[GET /api/analyses]', err);
     res.status(500).json({ error: '목록을 불러오지 못했습니다.' });
@@ -103,11 +112,24 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // 즐겨찾기 여부 — 비로그인이면 항상 false(개인화 상태라 authUser 없이는 판정 불가)
+    let isFavorited = false;
+    if (authUser) {
+      const { data: favRow } = await supabase
+        .from('analysis_favorites')
+        .select('id')
+        .eq('user_id', authUser.id)
+        .eq('analysis_id', id)
+        .maybeSingle();
+      isFavorited = !!favRow;
+    }
+
     const row = analysisRes.data;
     res.json({
       id: row.id,
       companyName: (row.companies as unknown as CompanyRef)?.name ?? '',
       language: row.language ?? 'en',
+      isFavorited,
       // Legacy fields
       summary: row.summary,
       metrics: row.metrics ?? [],
@@ -265,6 +287,52 @@ router.post('/:id/refresh-financials', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[POST /api/analyses/:id/refresh-financials]', err);
     res.status(500).json({ error: '재무 데이터 새로고침에 실패했습니다.' });
+  }
+});
+
+// POST /api/analyses/:id/favorite — 즐겨찾기 추가. share/refresh-financials와 달리
+// 이 액션은 공용 캐시 갱신이 아니라 유저 개인화 상태라 소유권(created_by) 체크 없이도
+// 하드 401만으로 충분 — 로그인한 유저라면 본인이 조회한 어떤 분석이든 즐겨찾기할 수 있다.
+router.post('/:id/favorite', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('analysis_favorites')
+      .upsert({ user_id: authUser.id, analysis_id: id }, { onConflict: 'user_id,analysis_id' });
+    if (error) throw error;
+    res.json({ isFavorited: true });
+  } catch (err) {
+    console.error('[POST /api/analyses/:id/favorite]', err);
+    res.status(500).json({ error: '즐겨찾기 추가에 실패했습니다.' });
+  }
+});
+
+// DELETE /api/analyses/:id/favorite — 즐겨찾기 해제
+router.delete('/:id/favorite', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('analysis_favorites')
+      .delete()
+      .eq('user_id', authUser.id)
+      .eq('analysis_id', id);
+    if (error) throw error;
+    res.json({ isFavorited: false });
+  } catch (err) {
+    console.error('[DELETE /api/analyses/:id/favorite]', err);
+    res.status(500).json({ error: '즐겨찾기 해제에 실패했습니다.' });
   }
 });
 

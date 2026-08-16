@@ -10,7 +10,7 @@ import type { Session } from '@supabase/supabase-js';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
-  TrendingUp, Lock, Copy, Check, Lightbulb,
+  TrendingUp, Lock, Copy, Check, Lightbulb, Star, ArrowUp,
 } from 'lucide-react';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
 import {
@@ -90,15 +90,8 @@ function flagOf(country: string): string {
 
 function Tag({ label, color = 'gray' }: { label: string; color?: string }) {
   const map: Record<string, string> = {
-    gray:    'bg-gray-100 text-gray-600',
-    blue:    'bg-blue-50 text-blue-700',
-    green:   'bg-green-50 text-green-700',
-    emerald: 'bg-emerald-50 text-emerald-700',
-    amber:   'bg-amber-50 text-amber-700',
-    red:     'bg-red-50 text-red-700',
-    violet:  'bg-violet-50 text-violet-700',
-    purple:  'bg-purple-50 text-purple-700',
-    orange:  'bg-orange-50 text-orange-700',
+    gray: 'bg-gray-100 text-gray-600',
+    navy: 'bg-navy-50 text-navy-700',
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${map[color] ?? map.gray}`}>
@@ -147,7 +140,7 @@ function DataValue({ text, className = '' }: { text: string | null | undefined; 
     const idx = str.indexOf(estimateMarker);
     return (
       <span className={className}>
-        {str.slice(0, idx)}<span className="text-amber-500">{estimateMarker}</span>{str.slice(idx + estimateMarker.length)}
+        {str.slice(0, idx)}<span className="text-source-reference">{estimateMarker}</span>{str.slice(idx + estimateMarker.length)}
       </span>
     );
   }
@@ -194,9 +187,9 @@ function MetricCard({ value, label, trend, sourceIndex }: { value: string; label
   const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || cleaned === 'Not disclosed' || cleaned === 'Not applicable' || isPlaceholder(cleaned);
   const displayValue = isPlaceholder(cleaned) ? '—' : cleaned;
   const trendEl = trend === 'up'
-    ? <span className="text-green-500 text-sm font-bold ml-1 leading-none shrink-0">▲</span>
+    ? <span className="text-navy-600 text-sm font-bold ml-1 leading-none shrink-0">▲</span>
     : trend === 'down'
-    ? <span className="text-red-500 text-sm font-bold ml-1 leading-none shrink-0">▼</span>
+    ? <span className="text-risk text-sm font-bold ml-1 leading-none shrink-0">▼</span>
     : trend === 'flat'
     ? <span className="text-gray-400 text-sm ml-1 leading-none shrink-0">→</span>
     : null;
@@ -209,7 +202,7 @@ function MetricCard({ value, label, trend, sourceIndex }: { value: string; label
         </span>
         {!isUnknown && trendEl}
         {!isUnknown && sourceIndex != null && (
-          <sup className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-bold ml-0.5 align-top mt-0.5 shrink-0">
+          <sup className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-navy-100 text-navy-700 text-[9px] font-bold ml-0.5 align-top mt-0.5 shrink-0">
             {sourceIndex}
           </sup>
         )}
@@ -218,7 +211,7 @@ function MetricCard({ value, label, trend, sourceIndex }: { value: string; label
   );
 }
 
-function ProgressBar({ value, color = 'bg-blue-400', height = 'h-2' }: {
+function ProgressBar({ value, color = 'bg-navy-400', height = 'h-2' }: {
   value: number;
   color?: string;
   height?: string;
@@ -255,17 +248,17 @@ function CfMetricCard({ label, value, dotColor }: { label: string; value: string
 }
 
 const LEVEL_BADGE: Record<string, { label: string; cls: string }> = {
-  L1: { label: '🟢 공식', cls: 'bg-green-50 text-green-700 border border-green-200' },
-  L2: { label: '🟡 참고', cls: 'bg-amber-50 text-amber-600 border border-amber-200' },
-  L3: { label: '⚪ 추정', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
+  L1: { label: '🟢 공식', cls: 'bg-source-official-bg text-source-official border border-source-official-border' },
+  L2: { label: '🟡 참고', cls: 'bg-source-reference-bg text-source-reference border border-source-reference-border' },
+  L3: { label: '⚪ 추정', cls: 'bg-source-estimate-bg text-source-estimate border border-source-estimate-border' },
 };
 
 // 출처 종류(EDGAR/DART/웹검색)가 아니라 신뢰도(L1/L2/L3) 기준으로 점 색상 결정 —
 // EDGAR/DART는 둘 다 L1이므로 항상 동일한 색으로 렌더링됨
 const LEVEL_DOT: Record<SourceLevel, string> = {
-  L1: 'bg-green-500',
-  L2: 'bg-amber-500',
-  L3: 'bg-gray-400',
+  L1: 'bg-source-official',
+  L2: 'bg-source-reference',
+  L3: 'bg-source-estimate',
 };
 
 function SourcesList({ sources }: { sources: Source[] | undefined }) {
@@ -291,11 +284,11 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
                 {s.date && <span className="text-gray-400 ml-1">{s.date}</span>}
                 {' — '}
                 <span>{s.content}</span>
-                {s.isEstimate && <span className="ml-1 text-amber-600 font-medium">(추정)</span>}
+                {s.isEstimate && <span className="ml-1 text-source-reference font-medium">(추정)</span>}
               </span>
               {s.url && (
                 <a href={s.url} target="_blank" rel="noopener noreferrer"
-                  className="shrink-0 mt-0.5 text-blue-400 hover:text-blue-600">
+                  className="shrink-0 mt-0.5 text-navy-400 hover:text-navy-600">
                   <ExternalLink size={10} />
                 </a>
               )}
@@ -340,7 +333,7 @@ function KeyBulletsBlock({ bullets }: { bullets?: string[] | null }) {
       <ul className="space-y-1.5">
         {bullets.map((b, i) => (
           <li key={i} className="text-white text-sm font-medium leading-snug flex items-start gap-2">
-            <span className="text-blue-400 shrink-0 mt-0.5">•</span>
+            <span className="text-navy-400 shrink-0 mt-0.5">•</span>
             <span>{b}</span>
           </li>
         ))}
@@ -360,7 +353,7 @@ function CitedText({ text, className = '' }: { text: string | null | undefined; 
       {parts.map((part, i) => {
         const m = part.match(/^\[(\d+)\]$/);
         if (m) return (
-          <sup key={i} className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-bold ml-0.5 align-top mt-0.5">
+          <sup key={i} className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-navy-100 text-navy-700 text-[9px] font-bold ml-0.5 align-top mt-0.5">
             {m[1]}
           </sup>
         );
@@ -431,46 +424,46 @@ function extractMetrics(text: string): Metric[] {
 // ── V2 Config Maps ────────────────────────────────────────────────────────────
 
 const HYPE_LEVEL_CFG: Record<string, { label: string; cls: string }> = {
-  emerging:   { label: 'Emerging',   cls: 'bg-blue-50 text-blue-600' },
-  hype:       { label: 'Peak Hype',  cls: 'bg-amber-50 text-amber-700' },
-  trough:     { label: 'Trough',     cls: 'bg-red-50 text-red-600' },
-  recovery:   { label: 'Recovery',   cls: 'bg-green-50 text-green-700' },
+  emerging:   { label: 'Emerging',   cls: 'bg-navy-50 text-navy-600' },
+  hype:       { label: 'Peak Hype',  cls: 'bg-navy-100 text-navy-700' },
+  trough:     { label: 'Trough',     cls: 'bg-gray-100 text-gray-500' },
+  recovery:   { label: 'Recovery',   cls: 'bg-navy-50 text-navy-600' },
   mainstream: { label: 'Mainstream', cls: 'bg-gray-100 text-gray-600' },
 };
 
 const PRICING_POWER_CFG: Record<string, { label: string; cls: string }> = {
-  high:   { label: 'High Pricing Power', cls: 'bg-green-50 text-green-700' },
-  medium: { label: 'Medium',             cls: 'bg-amber-50 text-amber-700' },
-  low:    { label: 'Low',                cls: 'bg-red-50 text-red-700' },
+  high:   { label: 'High Pricing Power', cls: 'bg-navy-100 text-navy-700' },
+  medium: { label: 'Medium',             cls: 'bg-navy-50 text-navy-600' },
+  low:    { label: 'Low',                cls: 'bg-gray-100 text-gray-500' },
 };
 
 const MOAT_STRENGTH_CFG: Record<string, { label: string; cls: string; barColor: string; width: string }> = {
-  strong: { label: 'Strong', cls: 'bg-green-50 text-green-700',  barColor: 'bg-green-400', width: 'w-[90%]' },
-  medium: { label: 'Medium', cls: 'bg-amber-50 text-amber-700',  barColor: 'bg-amber-400', width: 'w-[60%]' },
-  weak:   { label: 'Weak',   cls: 'bg-red-50 text-red-700',      barColor: 'bg-red-400',   width: 'w-[30%]' },
+  strong: { label: 'Strong', cls: 'bg-navy-100 text-navy-700', barColor: 'bg-navy-600', width: 'w-[90%]' },
+  medium: { label: 'Medium', cls: 'bg-navy-50 text-navy-600',  barColor: 'bg-navy-400', width: 'w-[60%]' },
+  weak:   { label: 'Weak',   cls: 'bg-gray-100 text-gray-500', barColor: 'bg-gray-300', width: 'w-[30%]' },
 };
 
 const GROWTH_MOTION_CFG: Record<string, { label: string; cls: string }> = {
-  PLG:    { label: 'Product-Led Growth',  cls: 'bg-purple-100 text-purple-700' },
-  SLG:    { label: 'Sales-Led Growth',    cls: 'bg-blue-100 text-blue-700' },
-  FLG:    { label: 'Finance-Led Growth',  cls: 'bg-emerald-100 text-emerald-700' },
-  hybrid: { label: 'Hybrid',              cls: 'bg-amber-100 text-amber-700' },
+  PLG:    { label: 'Product-Led Growth',  cls: 'bg-navy-100 text-navy-700' },
+  SLG:    { label: 'Sales-Led Growth',    cls: 'bg-navy-100 text-navy-700' },
+  FLG:    { label: 'Finance-Led Growth',  cls: 'bg-navy-100 text-navy-700' },
+  hybrid: { label: 'Hybrid',              cls: 'bg-navy-100 text-navy-700' },
 };
 
 const COMPETITIVE_POSITION_CFG: Record<string, { label: string; cls: string }> = {
-  leader:     { label: 'Market Leader', cls: 'bg-blue-100 text-blue-700' },
-  challenger: { label: 'Challenger',    cls: 'bg-orange-100 text-orange-700' },
-  niche:      { label: 'Niche Player',  cls: 'bg-violet-100 text-violet-700' },
+  leader:     { label: 'Market Leader', cls: 'bg-navy-100 text-navy-700' },
+  challenger: { label: 'Challenger',    cls: 'bg-navy-50 text-navy-600' },
+  niche:      { label: 'Niche Player',  cls: 'bg-navy-50 text-navy-600' },
   follower:   { label: 'Follower',      cls: 'bg-gray-100 text-gray-600' },
 };
 
 const VC_POSITION_CFG: Record<string, { label: string; cls: string }> = {
-  upstream:   { label: 'Upstream',   cls: 'bg-amber-100 text-amber-700' },
-  midstream:  { label: 'Midstream',  cls: 'bg-blue-100 text-blue-700' },
-  downstream: { label: 'Downstream', cls: 'bg-green-100 text-green-700' },
+  upstream:   { label: 'Upstream',   cls: 'bg-navy-50 text-navy-600' },
+  midstream:  { label: 'Midstream',  cls: 'bg-navy-100 text-navy-700' },
+  downstream: { label: 'Downstream', cls: 'bg-navy-50 text-navy-600' },
 };
 
-const BAR_COLORS = ['bg-blue-400', 'bg-indigo-400', 'bg-purple-400', 'bg-violet-400', 'bg-emerald-400'];
+const BAR_COLORS = ['bg-navy-700', 'bg-navy-600', 'bg-navy-500', 'bg-navy-400', 'bg-navy-300'];
 
 // ── V2 Tab: 요약 ──────────────────────────────────────────────────────────────
 
@@ -488,7 +481,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
           <ul className="space-y-1.5 flex-1">
             {s.key_bullets.map((b, i) => (
               <li key={i} className="text-white text-sm font-medium leading-snug flex items-start gap-2">
-                <span className="text-blue-400 shrink-0 mt-0.5">•</span>
+                <span className="text-navy-400 shrink-0 mt-0.5">•</span>
                 <span>{b}</span>
               </li>
             ))}
@@ -510,14 +503,14 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && filteredMetrics.length > 0 && (
         <div className="flex justify-end">
-          <button onClick={() => onTabChange('financials')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">재무 상세 보기 →</button>
+          <button onClick={() => onTabChange('financials')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">재무 상세 보기 →</button>
         </div>
       )}
 
       {/* Products + Markets — 풀 너비 스택 (바 차트 전체 너비 확보) */}
       <div className="space-y-3">
         {s.products.length > 0 && (
-          <SectionCard title="주요 제품/서비스" dotColor="bg-blue-400">
+          <SectionCard title="주요 제품/서비스" dotColor="bg-navy-400">
             {/* 매출 비중(%)은 여기서 더 이상 안 보여준다 — 재무 탭의 "매출 구성"(revenue_lines,
                 EDGAR 10-K 실측)만이 유일한 비중 출처. 이름+정성적 설명만 표시. */}
             <ul className="space-y-2">
@@ -532,7 +525,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
         )}
 
         {s.key_markets.length > 0 && (
-          <SectionCard title="주요 시장" dotColor="bg-indigo-400">
+          <SectionCard title="주요 시장" dotColor="bg-navy-400">
             <div className="space-y-2.5">
               {s.key_markets.map((m, i) => (
                 <div key={i}>
@@ -550,7 +543,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && (s.products.length > 0 || s.key_markets.length > 0) && (
         <div className="flex justify-end -mt-1">
-          <button onClick={() => onTabChange('business_model')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">비즈니스모델 보기 →</button>
+          <button onClick={() => onTabChange('business_model')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">비즈니스모델 보기 →</button>
         </div>
       )}
 
@@ -563,11 +556,11 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
           ? cc.customers.filter(c => c.revenue_share > 0 && !isPlaceholder(String(c.revenue_share)))
           : [];
         return (
-          <SectionCard title="주요 고객사" dotColor="bg-violet-400">
+          <SectionCard title="주요 고객사" dotColor="bg-navy-400">
             {s.top_customers.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {s.top_customers.map((c, i) => (
-                  <Tag key={i} label={c} color="violet" />
+                  <Tag key={i} label={c} color="navy" />
                 ))}
               </div>
             )}
@@ -575,8 +568,8 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
               <div className="space-y-2 mt-2">
                 <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg font-medium ${
                   cc.is_concentrated
-                    ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                    : 'bg-green-50 text-green-700 border border-green-100'
+                    ? 'bg-risk-bg text-risk border border-risk-border'
+                    : 'bg-navy-50 text-navy-700 border border-navy-100'
                 }`}>
                   <span>{cc.is_concentrated ? '⚠️' : '✅'}</span>
                   <span>
@@ -610,28 +603,28 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && (s.top_customers.length > 0 || s.customer_concentration) && (
         <div className="flex justify-end">
-          <button onClick={() => onTabChange('competitors')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">경쟁사 분석 보기 →</button>
+          <button onClick={() => onTabChange('competitors')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">경쟁사 분석 보기 →</button>
         </div>
       )}
 
       {/* 성장 모멘텀 / 핵심 리스크 — 둘 다 없으면 섹션 자체 미노출 */}
       {(s.bull_case?.length || s.bear_case?.length) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <BulletCallout title="성장 모멘텀" items={s.bull_case} boxCls="bg-green-50 border border-green-100" titleCls="text-green-600" dotCls="bg-green-400" />
-          <BulletCallout title="핵심 리스크" items={s.bear_case} boxCls="bg-red-50 border border-red-100" titleCls="text-red-500" dotCls="bg-red-400" />
+          <BulletCallout title="성장 모멘텀" items={s.bull_case} boxCls="bg-navy-50 border border-navy-100" titleCls="text-navy-600" dotCls="bg-navy-400" />
+          <BulletCallout title="핵심 리스크" items={s.bear_case} boxCls="bg-risk-bg border border-risk-border" titleCls="text-risk" dotCls="bg-risk" />
         </div>
       ) : null}
 
       {/* 최근 트리거 이벤트 — 이벤트 없으면 섹션 자체 미노출 */}
       {s.trigger_events && s.trigger_events.length > 0 && (
-        <SectionCard title="최근 트리거 이벤트" dotColor="bg-amber-400">
+        <SectionCard title="최근 트리거 이벤트" dotColor="bg-navy-400">
           <div className="space-y-3">
             {s.trigger_events.map((ev, i) => (
               <div key={i} className="flex items-start gap-3">
                 <span className="shrink-0 text-[11px] font-medium text-gray-400 w-20 pt-0.5">{ev.date}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mb-0.5">
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-700">{ev.type}</span>
+                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-navy-50 text-navy-700">{ev.type}</span>
                     {ev.amount && <span className="text-xs font-medium text-gray-700">{ev.amount}</span>}
                     {ev.counterparty && <span className="text-xs text-gray-400">· {ev.counterparty}</span>}
                   </div>
@@ -645,7 +638,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && (
         <div className="flex justify-end">
-          <button onClick={() => onTabChange('strategy')} className="text-xs text-blue-500 hover:text-blue-700 font-medium">전략 보기 →</button>
+          <button onClick={() => onTabChange('strategy')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">전략 보기 →</button>
         </div>
       )}
 
@@ -677,7 +670,7 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
           ))}
         </div>
       )}
-      <SectionCard title="경영 요약" dotColor="bg-blue-400">
+      <SectionCard title="경영 요약" dotColor="bg-navy-400">
         <div className="space-y-2">
           {lines.map((l, i) => (
             <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
@@ -733,15 +726,15 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
           return (
             <div key={i} className="flex gap-4">
               <div className="flex flex-col items-center w-10 shrink-0">
-                <div className="w-10 h-10 rounded-full bg-blue-50 border-2 border-blue-300 flex items-center justify-center shrink-0">
-                  <span className="text-[9px] font-semibold text-blue-800 text-center leading-none px-0.5">{item.period.slice(0, 6)}</span>
+                <div className="w-10 h-10 rounded-full bg-navy-50 border-2 border-navy-300 flex items-center justify-center shrink-0">
+                  <span className="text-[9px] font-semibold text-navy-800 text-center leading-none px-0.5">{item.period.slice(0, 6)}</span>
                 </div>
                 {!isLast && <div className="w-0.5 bg-gray-100 flex-1 my-1 min-h-[2rem]" />}
               </div>
               <div className="pb-5 flex-1 min-w-0 pt-1">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="text-sm font-semibold text-gray-800">{item.title}</span>
-                  <span className="text-[11px] text-blue-600 font-medium">{item.period}</span>
+                  <span className="text-[11px] text-navy-600 font-medium">{item.period}</span>
                 </div>
                 <div className="space-y-1 text-xs text-gray-600 mb-2">
                   <div className="flex gap-2 items-start">
@@ -759,7 +752,7 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
                 </div>
                 {item.key_players.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {item.key_players.map((p, j) => <Tag key={j} label={p} color="blue" />)}
+                    {item.key_players.map((p, j) => <Tag key={j} label={p} color="navy" />)}
                   </div>
                 )}
               </div>
@@ -770,21 +763,21 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
       {hasMore && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="w-full py-2 text-xs text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg"
+          className="w-full py-2 text-xs text-navy-500 hover:text-navy-600 bg-navy-50 hover:bg-navy-100 rounded-lg"
         >
           더 보기 ({h.timeline.length - LIMIT}개 더)
         </button>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <BulletCallout title="지속 가능성" items={h.why_durable} boxCls="bg-green-50 border border-green-100" titleCls="text-green-600" dotCls="bg-green-400" />
+        <BulletCallout title="지속 가능성" items={h.why_durable} boxCls="bg-navy-50 border border-navy-100" titleCls="text-navy-600" dotCls="bg-navy-400" />
         {h.chasm_points.length > 0 && (
-          <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-orange-600 mb-2">캐즘 포인트</div>
+          <div className="bg-navy-50 border border-navy-100 rounded-xl p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-600 mb-2">캐즘 포인트</div>
             <div className="space-y-1.5">
               {h.chasm_points.map((c, i) => (
                 <div key={i} className="flex items-start gap-2">
-                  <span className="mt-[4px] w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                  <span className="mt-[4px] w-1.5 h-1.5 rounded-full bg-navy-400 shrink-0" />
                   <p className="text-xs text-gray-700 leading-relaxed">{c}</p>
                 </div>
               ))}
@@ -808,15 +801,15 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
       {/* Above fold: current stage + next inflection */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {t.current_stage?.label && (
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600 mb-2">현재 단계</div>
+          <div className="bg-navy-50 border border-navy-100 rounded-xl p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-600 mb-2">현재 단계</div>
             <div className="text-sm font-semibold text-gray-800 mb-1">{t.current_stage.label}</div>
             {t.current_stage.detail && <p className="text-xs text-gray-600 leading-relaxed">{t.current_stage.detail}</p>}
           </div>
         )}
         {t.next_inflection?.label && (
-          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-amber-600 mb-2">다음 변곡점</div>
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-600 mb-2">다음 변곡점</div>
             <div className="text-sm font-semibold text-gray-800 mb-1">{t.next_inflection.label}</div>
             {t.next_inflection.detail && <p className="text-xs text-gray-600 leading-relaxed">{t.next_inflection.detail}</p>}
           </div>
@@ -832,11 +825,11 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
               return (
                 <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <div className="w-6 h-6 rounded-full bg-purple-50 border-2 border-purple-400 flex items-center justify-center shrink-0">
-                      <span className="text-[11px] font-semibold text-purple-800">{s.stage}</span>
+                    <div className="w-6 h-6 rounded-full bg-navy-50 border-2 border-navy-400 flex items-center justify-center shrink-0">
+                      <span className="text-[11px] font-semibold text-navy-800">{s.stage}</span>
                     </div>
                     <span className="text-sm font-semibold text-gray-800">{s.title}</span>
-                    <span className="text-[11px] text-purple-600 font-medium">{s.period}</span>
+                    <span className="text-[11px] text-navy-600 font-medium">{s.period}</span>
                     <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${hype.cls}`}>{hype.label}</span>
                   </div>
                   <p className="text-sm text-gray-600 leading-relaxed mb-2">{s.description}</p>
@@ -844,7 +837,7 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
                     {s.key_enablers.length > 0 && (
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-[10px] text-gray-400 shrink-0">Enablers</span>
-                        {s.key_enablers.map((e, j) => <Tag key={j} label={e} color="purple" />)}
+                        {s.key_enablers.map((e, j) => <Tag key={j} label={e} color="navy" />)}
                       </div>
                     )}
                     {s.key_players.length > 0 && (
@@ -874,14 +867,14 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
       <KeyBulletsBlock bullets={vc.key_bullets} />
 
       {/* 업스트림→다운스트림 세로 레이아웃 */}
-      <SectionCard title="밸류체인 레이어" dotColor="bg-indigo-400">
+      <SectionCard title="밸류체인 레이어" dotColor="bg-navy-400">
         <div className="flex flex-col items-stretch gap-0">
           {vc.layers.map((layer, i) => {
             const pp = layer.pricing_power ? (PRICING_POWER_CFG[layer.pricing_power] ?? PRICING_POWER_CFG.medium) : null;
             const cardCls = layer.is_subject
-              ? 'border-blue-400 bg-blue-50 shadow-sm'
+              ? 'border-navy-400 bg-navy-50 shadow-sm'
               : layer.buyer
-              ? 'border-green-200 bg-green-50'
+              ? 'border-gray-300 bg-gray-50'
               : 'border-gray-200 bg-white';
             return (
               <div key={i} className="flex flex-col items-center">
@@ -890,18 +883,18 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
                   {/* 헤더 행 */}
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${layer.is_subject ? 'text-blue-700' : layer.buyer ? 'text-green-700' : 'text-gray-800'}`}>
+                      <span className={`text-sm font-semibold ${layer.is_subject ? 'text-navy-700' : layer.buyer ? 'text-gray-800' : 'text-gray-800'}`}>
                         {layer.name}
                       </span>
                       {layer.is_subject && (
-                        <span className="text-[10px] bg-blue-600 text-white rounded-full px-2 py-0.5 font-medium">분석 대상</span>
+                        <span className="text-[10px] bg-navy-600 text-white rounded-full px-2 py-0.5 font-medium">분석 대상</span>
                       )}
                       {layer.bottleneck && (
-                        <span className="text-[10px] bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5 font-medium">Bottleneck</span>
+                        <span className="text-[10px] bg-risk-bg text-risk border border-risk-border rounded-full px-2 py-0.5 font-medium">Bottleneck</span>
                       )}
                     </div>
                     {layer.buyer
-                      ? <span className="text-[10px] bg-blue-100 text-blue-600 rounded-full px-2 py-0.5 font-medium">구매자</span>
+                      ? <span className="text-[10px] bg-navy-100 text-navy-600 rounded-full px-2 py-0.5 font-medium">구매자</span>
                       : pp && <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${pp.cls}`}>{pp.label}</span>
                     }
                   </div>
@@ -932,8 +925,8 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
       {/* Below fold: 가격 전가 메커니즘 + 분석 기업 포지션 */}
       <ShowMore label="포지션 상세 보기">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <BulletCallout title="가격 전가 메커니즘" items={vc.value_flow} boxCls="bg-blue-50 border border-blue-100" titleCls="text-blue-600" dotCls="bg-blue-400" />
-          <BulletCallout title="분석 기업 포지션" items={vc.subject_position} boxCls="bg-indigo-50 border border-indigo-100" titleCls="text-indigo-600" dotCls="bg-indigo-400" />
+          <BulletCallout title="가격 전가 메커니즘" items={vc.value_flow} boxCls="bg-navy-50 border border-navy-100" titleCls="text-navy-600" dotCls="bg-navy-400" />
+          <BulletCallout title="분석 기업 포지션" items={vc.subject_position} boxCls="bg-navy-50 border border-navy-100" titleCls="text-navy-600" dotCls="bg-navy-400" />
         </div>
       </ShowMore>
 
@@ -977,16 +970,16 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
   return (
     <div className="space-y-4">
       {data.value_chain_overview && (
-        <SectionCard title="밸류체인 개요" dotColor="bg-indigo-400">
+        <SectionCard title="밸류체인 개요" dotColor="bg-navy-400">
           <p className="text-sm text-gray-700 leading-relaxed">{data.value_chain_overview}</p>
         </SectionCard>
       )}
       {players.length > 0 && (
-        <SectionCard title="주요 플레이어" dotColor="bg-indigo-400">
+        <SectionCard title="주요 플레이어" dotColor="bg-navy-400">
           <div className="flex items-center gap-2 mb-5 flex-wrap">
             {flowNodes.flatMap((node, i) => [
               <div key={`node-${i}`} className={`rounded-lg px-3 py-2 text-xs text-center flex-1 min-w-[80px] ${
-                node.isTarget ? 'bg-blue-50 border-2 border-blue-300 text-blue-800 font-medium' : 'bg-gray-50 text-gray-700'
+                node.isTarget ? 'bg-navy-50 border-2 border-navy-300 text-navy-800 font-medium' : 'bg-gray-50 text-gray-700'
               }`}>{node.label}</div>,
               i < flowNodes.length - 1 ? <span key={`arrow-${i}`} className="text-gray-300 text-sm shrink-0">→</span> : null,
             ])}
@@ -996,10 +989,10 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
               const isTarget = p.player_name?.toLowerCase().includes(companyName) ||
                 p.description?.toLowerCase().includes('분석 대상');
               return (
-                <div key={i} className={`rounded-xl border p-4 ${isTarget ? 'border-blue-200 bg-blue-50' : 'border-gray-100 bg-white'}`}>
+                <div key={i} className={`rounded-xl border p-4 ${isTarget ? 'border-navy-200 bg-navy-50' : 'border-gray-100 bg-white'}`}>
                   <div className="flex items-start justify-between gap-1 mb-2">
-                    <span className={`text-[11px] font-semibold uppercase tracking-widest ${isTarget ? 'text-blue-500' : 'text-gray-400'}`}>{p.role}</span>
-                    {isTarget && <span className="shrink-0 text-[10px] bg-blue-600 text-white rounded-full px-2 py-0.5 font-semibold">분석 대상</span>}
+                    <span className={`text-[11px] font-semibold uppercase tracking-widest ${isTarget ? 'text-navy-500' : 'text-gray-400'}`}>{p.role}</span>
+                    {isTarget && <span className="shrink-0 text-[10px] bg-navy-600 text-white rounded-full px-2 py-0.5 font-semibold">분석 대상</span>}
                   </div>
                   <div className="font-semibold text-gray-900 text-sm mb-1.5">{p.player_name}</div>
                   <p className="text-xs text-gray-500 leading-relaxed">{p.description}</p>
@@ -1039,7 +1032,7 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
       {/* Revenue Streams 전체 항상 표시 — 매출 비중(%)은 여기서 더 이상 안 보여준다(재무 탭의
           "매출 구성"만이 유일한 비중 출처, 2026-08-15). operating_margin/growth_rate는 그대로 유지. */}
       {revenueStreams.length > 0 && (
-        <SectionCard title="Revenue Streams" dotColor="bg-green-400">
+        <SectionCard title="Revenue Streams" dotColor="bg-navy-400">
           <div className="space-y-3">
             {revenueStreams.map((rs, i) => (
               <div key={i}>
@@ -1053,7 +1046,7 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
                       <span className="text-[10px] text-gray-400">OPM {rs.operating_margin}%</span>
                     )}
                     {rs.growth_rate !== 0 && (
-                      <span className={`text-[10px] ${rs.growth_rate > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      <span className={`text-[10px] ${rs.growth_rate > 0 ? 'text-navy-600' : 'text-risk'}`}>
                         {rs.growth_rate > 0 ? '+' : ''}{rs.growth_rate}% YoY
                       </span>
                     )}
@@ -1070,7 +1063,7 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
 
       {/* Above fold: growth motion — 상세 서술 없으면 카드 자체 미노출 */}
       {bm.growth_motion_detail && (
-        <SectionCard title="Growth Motion" dotColor="bg-blue-400">
+        <SectionCard title="Growth Motion" dotColor="bg-navy-400">
           <div className="mb-3">
             <span className={`inline-flex items-center text-sm font-semibold px-3 py-1.5 rounded-full ${gm.cls}`}>
               {gm.label}
@@ -1083,7 +1076,7 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
       {/* Below fold: unit economics + moat */}
       <ShowMore label="Unit Economics · 경제적 해자 보기">
         <>
-          <SectionCard title="Unit Economics" dotColor="bg-blue-400">
+          <SectionCard title="Unit Economics" dotColor="bg-navy-400">
             {ueMetrics.length > 0 ? (
               <div className="grid grid-cols-2 gap-2">
                 {ueMetrics.map((m, i) => (
@@ -1128,9 +1121,9 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
 
 function MoatBar({ strength }: { strength: string }) {
   const map: Record<string, { width: string; barColor: string }> = {
-    '강함': { width: 'w-[90%]', barColor: 'bg-blue-400' },
-    '보통': { width: 'w-[60%]', barColor: 'bg-amber-400' },
-    '약함': { width: 'w-[30%]', barColor: 'bg-red-400' },
+    '강함': { width: 'w-[90%]', barColor: 'bg-navy-600' },
+    '보통': { width: 'w-[60%]', barColor: 'bg-navy-400' },
+    '약함': { width: 'w-[30%]', barColor: 'bg-gray-300' },
   };
   const cfg = map[strength] ?? map['보통'];
   return (
@@ -1155,14 +1148,16 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
   ].filter((m): m is { label: string; value: string } => !!m.value && m.value !== '공개 없음') : [];
 
   const moatBadge: Record<string, string> = {
-    '강함': 'bg-green-50 text-green-700',
-    '보통': 'bg-amber-50 text-amber-700',
-    '약함': 'bg-red-50 text-red-700',
+    '강함': 'bg-navy-100 text-navy-700',
+    '보통': 'bg-navy-50 text-navy-600',
+    '약함': 'bg-gray-100 text-gray-500',
   };
+  // 리스크 심각도(높음/중간/낮음) — risk-red 계열 안에서 진하기로만 구분,
+  // "낮음"은 사실상 리스크가 아니라는 신호로 gray 처리
   const severityStyle: Record<string, { bg: string; text: string }> = {
-    '높음': { bg: 'bg-red-50',     text: 'text-red-700' },
-    '중간': { bg: 'bg-amber-50',   text: 'text-amber-700' },
-    '낮음': { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+    '높음': { bg: 'bg-red-100',  text: 'text-red-800' },
+    '중간': { bg: 'bg-risk-bg',  text: 'text-risk' },
+    '낮음': { bg: 'bg-gray-100', text: 'text-gray-600' },
   };
   const riskGroups = risk ? ([
     { label: '비즈니스', data: risk.business },
@@ -1172,14 +1167,14 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
 
   return (
     <div className="space-y-4">
-      <SectionCard title="비즈니스 모델" dotColor="bg-green-400">
+      <SectionCard title="비즈니스 모델" dotColor="bg-navy-400">
         <div className="space-y-2">
           {ls.map((l, i) => <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>)}
         </div>
       </SectionCard>
 
       {ueMetrics.length > 0 && (
-        <SectionCard title="Unit Economics" dotColor="bg-blue-400">
+        <SectionCard title="Unit Economics" dotColor="bg-navy-400">
           <div className="grid grid-cols-2 gap-2">
             {ueMetrics.map((m, i) => <MetricCard key={i} label={m.label} value={m.value} />)}
           </div>
@@ -1205,14 +1200,14 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {moat.sustain_conditions && (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 mb-1.5">유지 조건</div>
+                <div className="bg-navy-50 border border-navy-100 rounded-lg p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-600 mb-1.5">유지 조건</div>
                   <p className="text-xs text-gray-700 leading-relaxed">{moat.sustain_conditions}</p>
                 </div>
               )}
               {moat.collapse_scenarios && (
-                <div className="bg-red-50 border border-red-100 rounded-lg p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-widest text-red-500 mb-1.5">붕괴 시나리오</div>
+                <div className="bg-risk-bg border border-risk-border rounded-lg p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-risk mb-1.5">붕괴 시나리오</div>
                   <p className="text-xs text-gray-700 leading-relaxed">{moat.collapse_scenarios}</p>
                 </div>
               )}
@@ -1222,7 +1217,7 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
       )}
 
       {riskGroups.length > 0 && (
-        <SectionCard title="리스크 분석" dotColor="bg-red-400">
+        <SectionCard title="리스크 분석" dotColor="bg-risk">
           <div className="space-y-4">
             {riskGroups.map(({ label, data: g }) => {
               const sev = severityStyle[g.severity] ?? severityStyle['중간'];
@@ -1271,7 +1266,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
 
       {/* Above fold: top 3 direct competitors */}
       {topDirect.length > 0 && (
-        <SectionCard title="직접 경쟁사" dotColor="bg-orange-400">
+        <SectionCard title="직접 경쟁사" dotColor="bg-navy-400">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {topDirect.map((comp, i) => (
               <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
@@ -1280,13 +1275,13 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                   <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>
                 </div>
                 {comp.market_share && (
-                  <div className="text-blue-600 font-medium text-xs">{comp.market_share}</div>
+                  <div className="text-navy-600 font-medium text-xs">{comp.market_share}</div>
                 )}
                 {comp.strengths.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {comp.strengths.slice(0, 3).map((s, j) => (
                       <div key={j} className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-navy-400 shrink-0" />
                         <span className="text-[11px] text-gray-600">{s}</span>
                       </div>
                     ))}
@@ -1296,15 +1291,15 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                   <div className="flex flex-wrap gap-1">
                     {comp.weaknesses.slice(0, 2).map((w, j) => (
                       <div key={j} className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-risk shrink-0" />
                         <span className="text-[11px] text-gray-600">{w}</span>
                       </div>
                     ))}
                   </div>
                 )}
                 {comp.vs_subject && (
-                  <div className="bg-blue-50 rounded-lg px-3 py-1.5">
-                    <p className="text-[11px] text-blue-700 leading-relaxed">{comp.vs_subject}</p>
+                  <div className="bg-navy-50 rounded-lg px-3 py-1.5">
+                    <p className="text-[11px] text-navy-700 leading-relaxed">{comp.vs_subject}</p>
                   </div>
                 )}
               </div>
@@ -1314,7 +1309,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
       )}
 
       {dataSource === 'edgar' && c.revenue_ranking && (
-        <SectionCard title="매출 순위" dotColor="bg-blue-400">
+        <SectionCard title="매출 순위" dotColor="bg-navy-400">
           <p className="text-[11px] text-gray-400 mb-2">
             <CitedText text={`SIC ${c.revenue_ranking.sicCode} 동종업계, EDGAR ${c.revenue_ranking.totalCompanies}개사 중 매출 상위 ${c.revenue_ranking.top.length}개사${c.revenue_ranking.sourceIndex ? ` [${c.revenue_ranking.sourceIndex}]` : ''}`} />
           </p>
@@ -1329,7 +1324,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
               </thead>
               <tbody>
                 {c.revenue_ranking.top.map((row) => (
-                  <tr key={row.ticker} className={row.isSubject ? 'bg-blue-50 font-semibold text-blue-700' : 'text-gray-700'}>
+                  <tr key={row.ticker} className={row.isSubject ? 'bg-navy-50 font-semibold text-navy-700' : 'text-gray-700'}>
                     <td className="py-1.5 pr-2">{row.rank}</td>
                     <td className="py-1.5 pr-2">{row.name} <span className="text-gray-400 font-normal">({row.ticker})</span></td>
                     <td className="py-1.5 text-right">{fmtGrowthRevenue(row.revenue, 'USD')}</td>
@@ -1351,7 +1346,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
         <ShowMore label="경쟁사 전체 보기">
           <>
             {restDirect.length > 0 && (
-              <SectionCard title="직접 경쟁사 (추가)" dotColor="bg-orange-400">
+              <SectionCard title="직접 경쟁사 (추가)" dotColor="bg-navy-400">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {restDirect.map((comp, i) => (
                     <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
@@ -1359,10 +1354,10 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                         <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
                         <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>
                       </div>
-                      {comp.market_share && <div className="text-blue-600 font-medium text-xs">{comp.market_share}</div>}
+                      {comp.market_share && <div className="text-navy-600 font-medium text-xs">{comp.market_share}</div>}
                       {comp.vs_subject && (
-                        <div className="bg-blue-50 rounded-lg px-3 py-1.5">
-                          <p className="text-[11px] text-blue-700 leading-relaxed">{comp.vs_subject}</p>
+                        <div className="bg-navy-50 rounded-lg px-3 py-1.5">
+                          <p className="text-[11px] text-navy-700 leading-relaxed">{comp.vs_subject}</p>
                         </div>
                       )}
                     </div>
@@ -1373,7 +1368,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
             {(c.indirect.length > 0 || c.substitutes.length > 0) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                 {c.indirect.length > 0 && (
-                  <SectionCard title="간접 경쟁사" dotColor="bg-orange-300">
+                  <SectionCard title="간접 경쟁사" dotColor="bg-navy-300">
                     <div className="flex flex-wrap gap-2">
                       {c.indirect.map((comp, i) => (
                         <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
@@ -1385,7 +1380,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                   </SectionCard>
                 )}
                 {c.substitutes.length > 0 && (
-                  <SectionCard title="대체재" dotColor="bg-amber-400">
+                  <SectionCard title="대체재" dotColor="bg-navy-400">
                     <div className="flex flex-wrap gap-2">
                       {c.substitutes.map((sub, i) => (
                         <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
@@ -1419,17 +1414,17 @@ function CompetitorCard({ comp }: { comp: DirectCompetitor }) {
         <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
         {comp.country && <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>}
       </div>
-      {comp.market_share && <div className="text-blue-600 font-medium text-sm">{comp.market_share}</div>}
+      {comp.market_share && <div className="text-navy-600 font-medium text-sm">{comp.market_share}</div>}
       {(comp.strengths?.length ?? 0) > 0 && (
         <div className="flex flex-wrap gap-1">
-          {comp.strengths.slice(0, 3).map((s, j) => <Tag key={j} label={s} color="green" />)}
+          {comp.strengths.slice(0, 3).map((s, j) => <Tag key={j} label={s} color="navy" />)}
         </div>
       )}
       {diff && (
         <>
           <p className={`text-xs text-gray-500 leading-relaxed ${!expanded && showToggle ? 'line-clamp-2' : ''}`}>{diff}</p>
           {showToggle && (
-            <button onClick={() => setExpanded(v => !v)} className="text-[11px] text-blue-500 hover:text-blue-700 self-start">
+            <button onClick={() => setExpanded(v => !v)} className="text-[11px] text-navy-500 hover:text-navy-700 self-start">
               {expanded ? '접기' : '더보기'}
             </button>
           )}
@@ -1449,14 +1444,14 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
   return (
     <div className="space-y-4">
       {direct.length > 0 && (
-        <SectionCard title="직접 경쟁사" dotColor="bg-orange-400">
+        <SectionCard title="직접 경쟁사" dotColor="bg-navy-400">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {direct.map((comp, i) => <CompetitorCard key={i} comp={comp} />)}
           </div>
         </SectionCard>
       )}
       {indirect.length > 0 && (
-        <SectionCard title="간접 경쟁사 / 대체재" dotColor="bg-orange-400">
+        <SectionCard title="간접 경쟁사 / 대체재" dotColor="bg-navy-400">
           <div className="flex flex-wrap gap-2">
             {indirect.map((comp, i) => (
               <span key={i} className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-xs">
@@ -1492,9 +1487,9 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
         )}
       </SectionCard>
 
-      <SectionCard title="타산업 해결 사례" dotColor="bg-blue-400">
+      <SectionCard title="타산업 해결 사례" dotColor="bg-navy-400">
         <div className="flex items-center gap-2 mb-1.5">
-          <Tag label={n.cross_industry_example.source_industry} color="blue" />
+          <Tag label={n.cross_industry_example.source_industry} color="navy" />
           <span className="text-sm font-semibold text-gray-800">{n.cross_industry_example.case_name}</span>
         </div>
         <CitedText text={n.cross_industry_example.solution_description} className="text-sm text-gray-600 leading-relaxed block" />
@@ -1578,13 +1573,13 @@ function IcpRatingWidget({ insightId, initialRating, initialComment, uiT, onErro
           value={comment}
           onChange={e => setComment(e.target.value)}
           placeholder={uiT.icpInsight.ratingCommentPlaceholder}
-          className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-navy-400"
         />
         <button
           type="button"
           onClick={handleSubmit}
           disabled={rating == null && !comment.trim()}
-          className="text-xs font-medium text-blue-500 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed px-2"
+          className="text-xs font-medium text-navy-500 hover:text-navy-700 disabled:opacity-40 disabled:cursor-not-allowed px-2"
         >
           {uiT.icpInsight.ratingSubmit}
         </button>
@@ -1667,7 +1662,7 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
         <Lightbulb size={20} className="text-amber-400" />
         <button
           onClick={handleGenerate}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-navy-600 hover:bg-navy-700 rounded-xl transition-colors"
         >
           {uiT.icpInsight.generateButton}
         </button>
@@ -1686,7 +1681,7 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
     <div className="space-y-4">
       <div className="flex items-center justify-between text-xs text-gray-400">
         <span>{uiT.icpInsight.generatedAgo(daysAgo)}</span>
-        <button onClick={handleGenerate} className="text-blue-500 hover:text-blue-700 font-medium">
+        <button onClick={handleGenerate} className="text-navy-500 hover:text-navy-700 font-medium">
           {uiT.icpInsight.regenerateButton}
         </button>
       </div>
@@ -1780,7 +1775,7 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
     {
       label: '기업 전략',
       sub: 'Corporate',
-      dotColor: 'bg-violet-400',
+      dotColor: 'bg-navy-400',
       direction: s.corporate.direction,
       bullets: [
         s.corporate.portfolio          && `포트폴리오 — ${s.corporate.portfolio}`,
@@ -1791,7 +1786,7 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
     {
       label: '사업 전략',
       sub: 'Business',
-      dotColor: 'bg-blue-400',
+      dotColor: 'bg-navy-400',
       direction: s.business.direction,
       bullets: [
         s.business.competitive_advantage && `경쟁 우위 — ${s.business.competitive_advantage}`,
@@ -1802,7 +1797,7 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
     {
       label: '재무 전략',
       sub: 'Financial',
-      dotColor: 'bg-emerald-400',
+      dotColor: 'bg-navy-400',
       direction: s.financial.direction,
       bullets: [
         s.financial.capital_allocation   && `자본 배분 — ${s.financial.capital_allocation}`,
@@ -1855,15 +1850,15 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
         <ShowMore label="전략 수렴 · 지속가능성 보기">
           <div className="space-y-3 pb-1">
             {s.strategy_coherence && (
-              <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-500 mb-2">전략 수렴</div>
+              <div className="bg-white border-2 border-navy-200 rounded-xl p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-500 mb-2">전략 수렴</div>
                 {/* 백엔드가 strategy_coherence를 2~3개 문단(빈 줄로 구분, "\n\n")으로 나눠 보내므로
                     whitespace-pre-line으로 줄바꿈을 실제로 살린다 — 기본 white-space:normal이면
                     \n이 공백으로 뭉개져서 여전히 한 덩어리 문단처럼 보인다. */}
                 <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{s.strategy_coherence}</p>
               </div>
             )}
-            <BulletCallout title="10년 지속 가능성" items={s.ten_year_durability} boxCls="bg-green-50 border border-green-100" titleCls="text-green-600" dotCls="bg-green-400" />
+            <BulletCallout title="10년 지속 가능성" items={s.ten_year_durability} boxCls="bg-navy-50 border border-navy-100" titleCls="text-navy-600" dotCls="bg-navy-400" />
           </div>
         </ShowMore>
       ) : null}
@@ -1883,7 +1878,7 @@ function HighlightNumbers({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         /\d/.test(p)
-          ? <span key={i} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-medium mx-0.5">{p}</span>
+          ? <span key={i} className="bg-navy-50 text-navy-700 px-1.5 py-0.5 rounded text-[11px] font-medium mx-0.5">{p}</span>
           : <span key={i}>{p}</span>
       )}
     </>
@@ -1898,7 +1893,7 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
 
   const sections = [
     {
-      label: '기업 전략', dotColor: 'bg-violet-400',
+      label: '기업 전략', dotColor: 'bg-navy-400',
       headline: s.corporate?.portfolio_direction,
       items: s.corporate ? [
         { label: 'M&A / 파트너십', value: s.corporate.ma_partnership },
@@ -1907,7 +1902,7 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
       ] : [],
     },
     {
-      label: '사업 전략', dotColor: 'bg-blue-400',
+      label: '사업 전략', dotColor: 'bg-navy-400',
       headline: s.business?.competitive_advantage,
       items: s.business ? [
         { label: '고객 / 채널', value: s.business.customer_channel },
@@ -1916,7 +1911,7 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
       ] : [],
     },
     {
-      label: '재무 전략', dotColor: 'bg-emerald-400',
+      label: '재무 전략', dotColor: 'bg-navy-400',
       headline: s.financial?.investment_priority,
       items: s.financial ? [
         { label: '자본 조달', value: s.financial.capital_raising },
@@ -2057,7 +2052,7 @@ function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkC
   const chartT = getUiStrings(language).benchmarkChart;
   if (comparison.status === 'insufficient_sample') {
     return (
-      <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-indigo-400">
+      <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-navy-400">
         <p className="text-xs text-gray-500 leading-relaxed">
           이 업종(SIC {comparison.sicCode})은 공개 동종업계 비교 표본이 적어(최대 {comparison.maxN ?? 0}개사) 벤치마크 비교가 제한적이에요. 재무 상황은 직접 확인하는 게 더 정확할 수 있어요.
         </p>
@@ -2066,7 +2061,7 @@ function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkC
   }
   if (!comparison.items?.length) return null;
   return (
-    <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-indigo-400">
+    <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-navy-400">
       <div className="space-y-4">
         {comparison.items.map((item, i) => {
           const maxAbs = Math.max(Math.abs(item.companyValue), Math.abs(item.median)) || 1;
@@ -2074,7 +2069,7 @@ function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkC
             <div key={i} className={i > 0 ? 'pt-4 border-t border-gray-100' : ''}>
               <div className="text-xs font-semibold text-gray-700 mb-2">{item.label}</div>
               <div className="space-y-1.5">
-                <SecBenchmarkBar label={chartT.thisCompany} value={item.companyValue} unit={item.unit} colorClass="bg-blue-500" maxAbs={maxAbs} />
+                <SecBenchmarkBar label={chartT.thisCompany} value={item.companyValue} unit={item.unit} colorClass="bg-navy-500" maxAbs={maxAbs} />
                 <SecBenchmarkBar label={`${chartT.industryMedian}(n=${item.n})`} value={item.median} unit={item.unit} colorClass="bg-gray-300" maxAbs={maxAbs} />
               </div>
               {item.interpretation && (
@@ -2098,15 +2093,15 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
   const yoyCls = (v?: string) => {
     const n = normalizeYoy(v);
     if (n === '—') return 'text-gray-400';
-    return n.startsWith('▲') ? 'text-green-600 font-medium' : 'text-red-500 font-medium';
+    return n.startsWith('▲') ? 'text-navy-600 font-medium' : 'text-risk font-medium';
   };
 
 
   const cfDots: Record<string, string> = {
-    'Operating CF':  'bg-blue-400',
-    'Investing CF':  'bg-amber-400',
+    'Operating CF':  'bg-navy-600',
+    'Investing CF':  'bg-navy-400',
     'Financing CF':  'bg-gray-400',
-    'FCF':           'bg-green-500',
+    'FCF':           'bg-navy-800',
   };
 
   // 데이터 신뢰도 요약 — 이 탭에 표시되는 필드들 중 (추정) 배지 / 확인 필요(플레이스홀더) 값 카운트
@@ -2131,7 +2126,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
     <div className="space-y-4">
       <KeyBulletsBlock bullets={f.key_bullets} />
       {(estimatedCount > 0 || unknownCount > 0) && (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+        <p className="text-xs text-source-reference bg-source-reference-bg border border-source-reference-border rounded-lg px-3 py-2">
           ⚠️ 이 리포트에는 추정값 {estimatedCount}건, 확인 필요 데이터 {unknownCount}건이 포함되어 있습니다
         </p>
       )}
@@ -2153,7 +2148,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-800 bg-navy-50 hover:bg-navy-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
           {isRefreshing ? '새로고침 중...' : '데이터 새로고침'}
@@ -2162,7 +2157,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
 
       {/* 업종 벤치마크 — EDGAR 기업 전용, 표본 부족 지표는 서버가 이미 배열에서 제외함 */}
       {dataSource === 'edgar' && f.industry_benchmark && (
-        <SectionCard title="업종 벤치마크" dotColor="bg-violet-400">
+        <SectionCard title="업종 벤치마크" dotColor="bg-navy-400">
           <div className="space-y-1.5">
             {f.industry_benchmark.metrics.map((m) => (
               <p key={m.key} className="text-sm text-gray-700 leading-relaxed">
@@ -2181,7 +2176,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
 
       {/* Income statement */}
       {f.income_statement.length > 0 && (
-        <SectionCard title="손익계산서 (I/S)" dotColor="bg-blue-400">
+        <SectionCard title="손익계산서 (I/S)" dotColor="bg-navy-400">
           <VirtualTable
             rows={f.income_statement}
             colTemplate={`minmax(100px,1.5fr) repeat(${isYearCols.length},1fr) 80px`}
@@ -2220,7 +2215,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
           파싱, Claude 미생성) — 축이 사업부든 제품군이든 그 회사가 쓴 라벨 그대로. 라인 구분이
           없는 회사(f.revenue_lines가 undefined)는 이 섹션 자체를 스킵한다. */}
       {f.revenue_lines && f.revenue_lines.length > 0 && (
-        <SectionCard title="매출 구성" dotColor="bg-teal-400">
+        <SectionCard title="매출 구성" dotColor="bg-navy-400">
           <div className="space-y-3">
             {f.revenue_lines.map((rl, i) => (
               <div key={i}>
@@ -2240,7 +2235,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
       <ShowMore label="재무상태표 · 현금흐름 보기">
         <>
           {f.balance_sheet.length > 0 && (
-            <SectionCard title="재무상태표 (B/S)" dotColor="bg-indigo-400">
+            <SectionCard title="재무상태표 (B/S)" dotColor="bg-navy-400">
               <VirtualTable
                 rows={f.balance_sheet}
                 colTemplate={`minmax(130px,1.5fr) repeat(${bsYearCols.length},1fr)`}
@@ -2274,7 +2269,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
           )}
 
           {(f.cash_flow.operating || f.cash_flow.fcf) && (
-            <SectionCard title="현금흐름 (C/F)" dotColor="bg-green-400">
+            <SectionCard title="현금흐름 (C/F)" dotColor="bg-navy-400">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {([
                   { label: 'Operating CF', value: f.cash_flow.operating },
@@ -2292,11 +2287,11 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
           )}
 
           {f.key_risks.length > 0 && (
-            <SectionCard title="핵심 리스크" dotColor="bg-red-400">
+            <SectionCard title="핵심 리스크" dotColor="bg-risk">
               <div className="space-y-1.5">
                 {f.key_risks.map((r, i) => (
                   <div key={i} className="flex items-start gap-2">
-                    <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                    <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-risk shrink-0" />
                     <p className="text-sm text-gray-700 leading-relaxed">{r}</p>
                   </div>
                 ))}
@@ -2329,18 +2324,18 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
 
   const yoyCls = (v?: string) => {
     if (!v || v === '—') return 'text-gray-400';
-    return v.startsWith('▲') ? 'text-green-600 font-medium' : v.startsWith('▼') ? 'text-red-500 font-medium' : 'text-gray-500';
+    return v.startsWith('▲') ? 'text-navy-600 font-medium' : v.startsWith('▼') ? 'text-risk font-medium' : 'text-gray-500';
   };
 
   const cfDots: Record<string, string> = {
-    '영업활동 CF': 'bg-blue-400', '투자활동 CF': 'bg-amber-400',
-    '재무활동 CF': 'bg-gray-400', 'Free Cash Flow': 'bg-green-500',
+    '영업활동 CF': 'bg-navy-600', '투자활동 CF': 'bg-navy-400',
+    '재무활동 CF': 'bg-gray-400', 'Free Cash Flow': 'bg-navy-800',
   };
 
   return (
     <div className="space-y-4">
       {data.financials && (
-        <SectionCard title="재무 서사" dotColor="bg-emerald-400">
+        <SectionCard title="재무 서사" dotColor="bg-navy-400">
           <div className="space-y-1.5">
             {splitLines(data.financials).map((l, i) => (
               <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
@@ -2352,7 +2347,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
       {hasStructured ? (
         <>
           {(fs!.income_statement?.length ?? 0) > 0 && (
-            <SectionCard title="손익계산서 (I/S)" dotColor="bg-blue-400">
+            <SectionCard title="손익계산서 (I/S)" dotColor="bg-navy-400">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -2383,7 +2378,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
             </SectionCard>
           )}
           {(fs!.balance_sheet?.length ?? 0) > 0 && (
-            <SectionCard title="재무상태표 (B/S)" dotColor="bg-indigo-400">
+            <SectionCard title="재무상태표 (B/S)" dotColor="bg-navy-400">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -2412,7 +2407,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
             </SectionCard>
           )}
           {fs!.cash_flow && (
-            <SectionCard title="현금흐름 (C/F)" dotColor="bg-green-400">
+            <SectionCard title="현금흐름 (C/F)" dotColor="bg-navy-400">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {([
                   { label: '영업활동 CF',    value: fs!.cash_flow.operating },
@@ -2430,7 +2425,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
           )}
         </>
       ) : (
-        <SectionCard title="재무 현황" dotColor="bg-emerald-400">
+        <SectionCard title="재무 현황" dotColor="bg-navy-400">
           <div className="space-y-2">
             {rawLines.map((l, i) => (
               <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
@@ -2447,14 +2442,14 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
 // ── V2 Tab: 창업자 ────────────────────────────────────────────────────────────
 
 const RESULT_CFG: Record<string, { label: string; cls: string }> = {
-  exit:      { label: 'Exit',    cls: 'bg-green-50 text-green-700' },
-  closed:    { label: '폐업',    cls: 'bg-red-50 text-red-600' },
-  operating: { label: '운영 중', cls: 'bg-blue-50 text-blue-700' },
+  exit:      { label: 'Exit',    cls: 'bg-navy-100 text-navy-700' },
+  closed:    { label: '폐업',    cls: 'bg-risk-bg text-risk' },
+  operating: { label: '운영 중', cls: 'bg-gray-100 text-gray-600' },
 };
 
 const EXIT_TYPE_CFG: Record<string, { label: string; cls: string }> = {
-  'M&A': { label: 'M&A',  cls: 'bg-purple-50 text-purple-700' },
-  'IPO': { label: 'IPO',  cls: 'bg-emerald-50 text-emerald-700' },
+  'M&A': { label: 'M&A',  cls: 'bg-navy-50 text-navy-700' },
+  'IPO': { label: 'IPO',  cls: 'bg-navy-100 text-navy-700' },
 };
 
 const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
@@ -2466,14 +2461,14 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
 
       {/* Founder profiles */}
       {f.founders.length > 0 && (
-        <SectionCard title="기본 정보" dotColor="bg-blue-400">
+        <SectionCard title="기본 정보" dotColor="bg-navy-400">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {f.founders.map((fd, i) => (
               <div key={i} className="bg-gray-50 rounded-lg p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-900">{fd.name}</span>
                   {fd.title && fd.title !== '-' && (
-                    <span className="text-[11px] bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-medium">{fd.title}</span>
+                    <span className="text-[11px] bg-navy-100 text-navy-700 rounded-full px-2 py-0.5 font-medium">{fd.title}</span>
                   )}
                 </div>
                 {fd.education && fd.education !== '-' && (
@@ -2496,7 +2491,7 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
 
       {/* Career trajectory */}
       {f.career_trajectory.length > 0 && (
-        <SectionCard title="커리어 궤적" dotColor="bg-indigo-400">
+        <SectionCard title="커리어 궤적" dotColor="bg-navy-400">
           <div>
             {[...f.career_trajectory]
               .sort((a, b) => {
@@ -2508,8 +2503,8 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
               return (
                 <div key={i} className="flex gap-4">
                   <div className="flex flex-col items-center w-10 shrink-0">
-                    <div className="w-10 h-10 rounded-full bg-indigo-50 border-2 border-indigo-300 flex items-center justify-center shrink-0">
-                      <span className="text-[9px] font-semibold text-indigo-800 text-center leading-none px-0.5">{item.period.slice(0, 6)}</span>
+                    <div className="w-10 h-10 rounded-full bg-navy-50 border-2 border-navy-300 flex items-center justify-center shrink-0">
+                      <span className="text-[9px] font-semibold text-navy-800 text-center leading-none px-0.5">{item.period.slice(0, 6)}</span>
                     </div>
                     {!isLast && <div className="w-0.5 bg-gray-100 flex-1 my-1 min-h-[2rem]" />}
                   </div>
@@ -2527,9 +2522,9 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
       {/* Below fold: founding history + reputation + network */}
       <ShowMore label="창업 이력 · 평판 · 네트워크 보기">
         <>
-          <SectionCard title="창업 이력" dotColor="bg-violet-400">
+          <SectionCard title="창업 이력" dotColor="bg-navy-400">
             <div className="flex items-center gap-2 mb-3">
-              <span className={`text-sm font-semibold px-3 py-1 rounded-full ${isSerial ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>
+              <span className={`text-sm font-semibold px-3 py-1 rounded-full ${isSerial ? 'bg-navy-100 text-navy-700' : 'bg-gray-100 text-gray-600'}`}>
                 {isSerial ? 'Serial Founder' : '1st Time Founder'}
               </span>
             </div>
@@ -2555,7 +2550,7 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
           </SectionCard>
 
           {(f.reputation.sns_style !== '-' || f.reputation.media_exposure !== '-' || f.reputation.blind_glassdoor !== '-') && (
-            <SectionCard title="평판 & 퍼블릭 시그널" dotColor="bg-amber-400">
+            <SectionCard title="평판 & 퍼블릭 시그널" dotColor="bg-navy-400">
               <div className="space-y-2">
                 {f.reputation.sns_style !== '-' && (
                   <div className="flex gap-3 items-start py-2 border-b border-gray-50">
@@ -2580,13 +2575,13 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
           )}
 
           {(f.network.investors.length > 0 || f.network.advisors_board.length > 0 || f.network.cofounders.length > 0) && (
-            <SectionCard title="네트워크" dotColor="bg-emerald-400">
+            <SectionCard title="네트워크" dotColor="bg-navy-400">
               <div className="space-y-3">
                 {f.network.cofounders.length > 0 && (
                   <div>
                     <div className="text-[11px] text-gray-400 mb-1.5">공동창업팀</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {f.network.cofounders.map((c, i) => <Tag key={i} label={c} color="emerald" />)}
+                      {f.network.cofounders.map((c, i) => <Tag key={i} label={c} color="navy" />)}
                     </div>
                   </div>
                 )}
@@ -2594,7 +2589,7 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
                   <div>
                     <div className="text-[11px] text-gray-400 mb-1.5">투자자</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {f.network.investors.map((inv, i) => <Tag key={i} label={inv} color="blue" />)}
+                      {f.network.investors.map((inv, i) => <Tag key={i} label={inv} color="navy" />)}
                     </div>
                   </div>
                 )}
@@ -2624,7 +2619,7 @@ function ShowMore({ children, label = '더 보기' }: { children: React.ReactNod
       {open && children}
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full py-2 text-xs text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1.5 mt-1"
+        className="w-full py-2 text-xs text-navy-500 hover:text-navy-600 bg-navy-50 hover:bg-navy-100 rounded-lg flex items-center justify-center gap-1.5 mt-1"
       >
         {open ? '접기 ↑' : `${label} ↓`}
       </button>
@@ -2644,7 +2639,7 @@ function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: 
       {onReanalyze && (
         <button
           onClick={onReanalyze}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-navy-600 hover:bg-navy-700 rounded-xl transition-colors"
         >
           {reanalyzeLabel}
         </button>
@@ -2656,21 +2651,61 @@ function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: 
 // 스크롤-스택 문서(2026-08-17)의 섹션 하나 — 구 탭 콘텐츠 패널을 대체. id는 상단 sticky
 // 그리드의 jumpToSection()이 scrollIntoView로 찾는 앵커. scroll-mt로 sticky 그리드에
 // 가려지지 않게 오프셋을 준다. emphasis는 Pain Diagnosis 전용 앰버 강조.
-function ReportSection({ id, title, icon: Icon, emphasis, children }: {
+function ReportSection({ id, title, icon: Icon, emphasis, children, getMarkdown, uiT }: {
   id: string;
   title: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   emphasis?: boolean;
   children: React.ReactNode;
+  // 이 카드 자체의 데이터만 참조하는 마크다운 생성 함수 — 헤더의 "이 탭 복사"
+  // (getActiveTabMarkdown, tab state 기반)와 별개로 각 카드가 자기 콘텐츠만 안다.
+  getMarkdown: () => string;
+  uiT: ReturnType<typeof getUiStrings>;
 }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(async () => {
+    const md = getMarkdown();
+    if (!md) return;
+    try {
+      await navigator.clipboard.writeText(md);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 클립보드 권한 거부 등 — 조용히 무시
+    }
+  }, [getMarkdown]);
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
   return (
     <div
       id={`section-${id}`}
       className={`scroll-mt-20 rounded-xl border p-5 ${emphasis ? 'border-amber-200 ring-1 ring-amber-200 bg-amber-50/30' : 'border-gray-100 bg-white'}`}
     >
-      <div className="flex items-center gap-2 mb-4">
-        <Icon size={15} className={emphasis ? 'text-amber-500' : 'text-gray-400'} />
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <Icon size={15} className={emphasis ? 'text-amber-500' : 'text-gray-400'} />
+          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={handleCopy}
+            title={copied ? uiT.actions.copied : uiT.actions.copySection}
+            aria-label={copied ? uiT.actions.copied : uiT.actions.copySection}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+          </button>
+          <button
+            type="button"
+            onClick={scrollToTop}
+            title={uiT.actions.scrollToTop}
+            aria-label={uiT.actions.scrollToTop}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <ArrowUp size={14} />
+          </button>
+        </div>
       </div>
       {children}
     </div>
@@ -2681,8 +2716,8 @@ function ReportSection({ id, title, icon: Icon, emphasis, children }: {
 // 한 곳에 모은 통합 목록(PDF의 "마지막 페이지 통합 출처 목록"과 동일한 개념). 각 섹션의
 // 실제 렌더링 컴포넌트가 쓰는 것과 동일한 출처 소스(자체 .sources 필드 우선, 없으면
 // data.sources 폴백)를 그대로 재사용 — 신규 데이터 없음, 신규 렌더링만.
-function AllSourcesSummary({ data, uiT }: { data: AnalysisDetail; uiT: ReturnType<typeof getUiStrings> }) {
-  const groups: Array<{ label: string; sources: Source[] | undefined }> = [
+function buildSourceGroups(data: AnalysisDetail, uiT: ReturnType<typeof getUiStrings>): Array<{ label: string; sources: Source[] | undefined }> {
+  return [
     { label: uiT.tabs.summary.label,              sources: data.summary_v2?.sources ?? data.sources?.summary },
     { label: uiT.tabs.value_chain.label,           sources: data.value_chain_v2?.sources ?? data.sources?.value_chain },
     { label: uiT.tabs.business_model.label,        sources: data.business_model_v2?.sources ?? data.sources?.business_model },
@@ -2693,6 +2728,17 @@ function AllSourcesSummary({ data, uiT }: { data: AnalysisDetail; uiT: ReturnTyp
     { label: uiT.tabs.industry_history.label,      sources: data.industry_history_v2?.sources ?? data.sources?.industry_history },
     { label: uiT.tabs.tech_evolution.label,        sources: data.tech_evolution_v2?.sources ?? data.sources?.tech_evolution },
   ].filter(g => g.sources?.length);
+}
+
+function sourcesToMd(data: AnalysisDetail, uiT: ReturnType<typeof getUiStrings>): string {
+  const groups = buildSourceGroups(data, uiT);
+  if (groups.length === 0) return '';
+  const body = groups.map(g => mdSourcesBlock(g.sources, g.label)).join('\n\n');
+  return `## ${uiT.home.progressCardSources}\n\n${body}`;
+}
+
+function AllSourcesSummary({ data, uiT }: { data: AnalysisDetail; uiT: ReturnType<typeof getUiStrings> }) {
+  const groups = buildSourceGroups(data, uiT);
 
   if (groups.length === 0) {
     return <p className="text-sm text-gray-500 py-4 text-center">아직 표시할 출처가 없습니다.</p>;
@@ -2742,9 +2788,27 @@ function fmtGrowthRevenue(v: number, currency: 'KRW' | 'USD'): string {
 
 const SCENARIO_LABEL = { p10: '보수적 시나리오', p50: '예상 시나리오', p90: '낙관적 시나리오' } as const;
 
+// 라인 자기 자신의 첫 연도 → 마지막 연도 구간 CAGR — 라인 간 교차 계산 없음(2026-08-17).
+// years는 항상 3이지만(server/src/services/monteCarloService.ts 기본값, 오버라이드하는
+// 호출부 없음) 배열 길이 기반으로 일반화해 나중에 바뀌어도 안전하게 뒀다.
+function calcCagr(values: number[]): number | null {
+  const n = values.length;
+  if (n < 2) return null;
+  const first = values[0];
+  const last = values[n - 1];
+  if (first <= 0 || last <= 0) return null;
+  return (last / first) ** (1 / (n - 1)) - 1;
+}
+
 function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
   const years = g.simulation.p50.length;
   const stats = g.stats;
+  const cagr = {
+    p10: calcCagr(g.simulation.p10),
+    p50: calcCagr(g.simulation.p50),
+    p90: calcCagr(g.simulation.p90),
+  };
+  const fmtCagr = (v: number | null) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
   // 구버전 캐시(growth_scenario_v2에 confidenceLevel 필드가 없던 시절 저장분) 호환 —
   // 필드가 없으면 stats 모양(sampleSize 유무)으로 유추
   const isHigh = g.confidenceLevel ? g.confidenceLevel === 'high' : !('sampleSize' in stats);
@@ -2765,7 +2829,7 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
       {/* 핵심 요약 블록 — 신뢰도 배지 + 해석 문장 */}
       <div className="bg-black text-white rounded-xl p-4 space-y-2">
         <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isHigh ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isHigh ? 'bg-source-official/20 text-source-official' : 'bg-source-reference/20 text-source-reference'}`}>
             {isHigh ? '🟢 공식' : '🟡 참고'}
           </span>
           <span className="text-[11px] text-gray-400">{sampleLabel} 기반</span>
@@ -2776,7 +2840,7 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
       </div>
 
       {!isHigh && (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+        <p className="text-xs text-source-reference bg-source-reference-bg border border-source-reference-border rounded-lg px-3 py-2">
           이 기업의 공식 재무 데이터가 부족해 동종업계 벤치마크 기반 추정치를 사용했어요. 실제 편차는 더 클 수 있습니다.
         </p>
       )}
@@ -2784,6 +2848,14 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
       {/* 라인 + 신뢰구간 밴드 차트 */}
       <div>
         <h4 className="text-sm font-semibold text-gray-700 mb-3">연도별 매출 시나리오</h4>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {(['p10', 'p50', 'p90'] as const).map(k => (
+            <div key={k} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-center">
+              <p className="text-[10px] text-gray-400 mb-0.5">{SCENARIO_LABEL[k].replace(' 시나리오', '')} CAGR</p>
+              <p className="text-sm font-semibold text-gray-900">{fmtCagr(cagr[k])}</p>
+            </div>
+          ))}
+        </div>
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={lineData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
@@ -2805,8 +2877,8 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
           </ResponsiveContainer>
         </div>
         <div className="flex items-center gap-4 mt-2 text-[11px] text-gray-400">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />{SCENARIO_LABEL.p50}</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-200 inline-block" />{SCENARIO_LABEL.p10} ~ {SCENARIO_LABEL.p90} 범위</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-navy-600 inline-block" />{SCENARIO_LABEL.p50}</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-navy-200 inline-block" />{SCENARIO_LABEL.p10} ~ {SCENARIO_LABEL.p90} 범위</span>
         </div>
       </div>
 
@@ -2858,7 +2930,7 @@ function GrowthScenarioLocked() {
       <p className="text-sm text-gray-500">성장 시나리오는 프리미엄 전용 기능이에요</p>
       <button
         type="button"
-        className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+        className="px-4 py-2 rounded-xl bg-navy-600 text-white text-xs font-medium hover:bg-navy-700 transition-colors"
       >
         프리미엄으로 업그레이드
       </button>
@@ -2876,13 +2948,13 @@ function mdList(items: (string | false | null | undefined)[]): string {
   return items.filter((i): i is string => !!i).map(i => `- ${i}`).join('\n');
 }
 
-function mdSourcesBlock(sources: Source[] | undefined): string {
+function mdSourcesBlock(sources: Source[] | undefined, label = '출처'): string {
   if (!sources?.length) return '';
   const lines = sources.map((s, i) => {
     const idx = s.index ?? i + 1;
     return `[${idx}] ${s.organization}${s.date ? ` — ${s.date}` : ''}: ${s.content}${s.isEstimate ? ' (추정)' : ''}`;
   });
-  return `**출처**\n${lines.join('\n')}`;
+  return `**${label}**\n${lines.join('\n')}`;
 }
 
 function summaryToMd(s: SummaryV2, sources: Source[] | undefined): string {
@@ -2927,6 +2999,17 @@ function techEvolutionToMd(t: TechEvolutionV2, sources: Source[] | undefined): s
     mdSourcesBlock(sources),
   ]);
   return body ? `## 기술변화\n\n${body}` : '';
+}
+
+function crossIndustryNudgeToMd(n: CrossIndustryNudgeV1): string {
+  const body = mdJoin([
+    n.key_bullets?.length ? `**핵심 요약**\n${mdList(n.key_bullets)}` : '',
+    `**${n.industry_pain.title}**\n${mdList(n.industry_pain.description)}`,
+    n.industry_pain.financial_impact_question,
+    `**타산업 사례 (${n.cross_industry_example.source_industry})**: ${n.cross_industry_example.case_name} — ${n.cross_industry_example.solution_description}`,
+    mdSourcesBlock(n.sources),
+  ]);
+  return body ? `## 넛지\n\n${body}` : '';
 }
 
 function valueChainToMd(vc: ValueChainV2, sources: Source[] | undefined): string {
@@ -3029,8 +3112,10 @@ function founderToMd(fo: FounderV2): string {
 
 function growthScenarioToMd(g: GrowthScenarioV2): string {
   const years = g.simulation.p50.length;
+  const fmtCagr = (v: number | null) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
   const body = mdJoin([
     g.narrative ?? '',
+    `**CAGR (Year+1 → Year+${years})**: 보수적(P10) ${fmtCagr(calcCagr(g.simulation.p10))} · 예상(P50) ${fmtCagr(calcCagr(g.simulation.p50))} · 낙관적(P90) ${fmtCagr(calcCagr(g.simulation.p90))}`,
     `| 연차 | 보수적(P10) | 예상(P50) | 낙관적(P90) |\n|---|---|---|---|\n${
       Array.from({ length: years }, (_, i) =>
         `| Year+${i + 1} | ${g.simulation.p10[i]} | ${g.simulation.p50[i]} | ${g.simulation.p90[i]} |`
@@ -3038,6 +3123,15 @@ function growthScenarioToMd(g: GrowthScenarioV2): string {
     }`,
   ]);
   return body ? `## 성장 시나리오\n\n${body}` : '';
+}
+
+// ICP 인사이트 — 큐레이션 로직(curateDiscoveryQuestions 등)은 서버 쪽 별개 영역, 여기선
+// 이미 선별된 결과(질문+근거)를 포맷팅만 한다. isShareView/일반 뷰 어느 쪽 데이터든 동일
+// DiscoveryQuestionItem[] 셰이프라 호출부에서 소스만 갈라 넘겨주면 됨.
+function icpInsightToMd(questions: DiscoveryQuestionItem[] | undefined | null): string {
+  if (!questions?.length) return '';
+  const body = mdList(questions.map(q => q.rationale ? `${q.question} — ${q.rationale}` : q.question));
+  return `## ICP 인사이트\n\n${body}`;
 }
 
 function analysisToMd(data: AnalysisDetail): string {
@@ -3077,7 +3171,7 @@ function CopyButton({ getMarkdown, label = '복사', shortLabel, copiedLabel = '
       onClick={handleCopy}
       className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0"
     >
-      {copied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+      {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
       {shortLabel ? (
         <>
           <span className="hidden sm:inline">{copied ? copiedLabel : label}</span>
@@ -3237,7 +3331,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
     <div className="text-right mb-2">
       <button
         onClick={() => onReanalyze(t)}
-        className="text-[11px] text-gray-400 hover:text-blue-500 hover:underline transition-colors"
+        className="text-[11px] text-gray-400 hover:text-navy-500 hover:underline transition-colors"
       >
         {uiT.actions.reanalyzeSection}
       </button>
@@ -3255,6 +3349,30 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
 
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
+
+  // ★ 즐겨찾기 토글(2026-08-17, 히스토리 페이지 즐겨찾기 섹션과 연동) — financialsV2Local과
+  // 동일한 이유로 prop 변화에 재동기화 필요(다른 분석을 열면 data.isFavorited도 바뀐다).
+  const [isFavorited, setIsFavorited] = useState(data.isFavorited ?? false);
+  useEffect(() => {
+    setIsFavorited(data.isFavorited ?? false);
+  }, [data.isFavorited, data.id]);
+
+  const handleToggleFavorite = useCallback(async () => {
+    if (!session) { signInWithGoogle(); return; }
+    if (!data.id) return; // 스트리밍 중(아직 저장 전)이면 버튼 자체가 비활성화되어 있음
+    const next = !isFavorited;
+    setIsFavorited(next); // 낙관적 업데이트
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+      const res = await fetch(`${apiUrl}/api/analyses/${data.id}/favorite`, {
+        method: next ? 'POST' : 'DELETE',
+        headers: buildAuthHeaders(null, session.access_token),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setIsFavorited(!next); // 실패 시 원상복구
+    }
+  }, [data.id, isFavorited, session, signInWithGoogle]);
 
   // data.financials_v2는 스트리밍 도중 fin_preview(프리뷰) → batch3(확정본) 순으로 갱신되는데,
   // useState 초기값은 마운트 시점 한 번만 캡처되고 이후 prop 변경엔 재동기화되지 않는 게
@@ -3320,6 +3438,18 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!isShareView && (
+              <button
+                type="button"
+                onClick={handleToggleFavorite}
+                disabled={!data.id}
+                aria-label={isFavorited ? uiT.home.favoriteRemove : uiT.home.favoriteAdd}
+                title={isFavorited ? uiT.home.favoriteRemove : uiT.home.favoriteAdd}
+                className="p-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Star size={16} className={isFavorited ? 'fill-source-reference text-source-reference' : 'text-gray-300'} />
+              </button>
+            )}
             <CopyButton getMarkdown={() => analysisToMd(data)} label={uiT.actions.copyAll} copiedLabel={uiT.actions.copied} />
             <CopyButton getMarkdown={getActiveTabMarkdown} label={uiT.actions.copyTab} shortLabel={uiT.actions.copyTabShort} copiedLabel={uiT.actions.copied} />
             {isAdmin && <ExportPdfButton data={data} />}
@@ -3368,19 +3498,19 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                     className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center transition-colors ${
                       card.isPain
                         ? `ring-1 ${card.done ? 'ring-amber-300 bg-amber-50 border-amber-200' : 'ring-amber-200 bg-amber-50/40 border-amber-100'}`
-                        : card.done ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' : 'bg-white border-gray-100 hover:border-gray-200'
+                        : card.done ? 'bg-success-bg border-success-border hover:bg-success-bg' : 'bg-white border-gray-100 hover:border-gray-200'
                     }`}
                   >
                     {card.done ? (
-                      <span className="text-emerald-500 text-xs font-bold leading-none">✓</span>
+                      <span className="text-success text-xs font-bold leading-none">✓</span>
                     ) : isInProgress ? (
-                      <span className="w-2.5 h-2.5 border border-current text-gray-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="w-2.5 h-2.5 border border-current text-navy-600 border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <span className="flex gap-[2px]" aria-hidden>
                         {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
                       </span>
                     )}
-                    <span className={`text-[10px] font-medium leading-tight ${card.done ? 'text-emerald-700' : 'text-gray-500'}`}>
+                    <span className={`text-[10px] font-medium leading-tight ${card.done ? 'text-success' : 'text-gray-500'}`}>
                       {card.label}
                     </span>
                   </button>
@@ -3395,7 +3525,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           각 블록의 !batchDone → SectionGenerating : hasTabData ? <Tab/> : <EmptySectionState/>
           게이트 로직은 기존 그대로(재분석 버튼 포함) — 조건문만 "탭 선택 시"에서 "항상"으로 바뀜. */}
       <div className="p-5 bg-gray-50 flex flex-col gap-4">
-        <ReportSection id="summary" title={uiT.tabs.summary.label} icon={Briefcase}>
+        <ReportSection id="summary" title={uiT.tabs.summary.label} icon={Briefcase} uiT={uiT} getMarkdown={() => data.summary_v2 ? summaryToMd(data.summary_v2, data.summary_v2.sources ?? data.sources?.summary) : ''}>
           {!batchDone(TAB_BATCH.summary) ? <SectionGenerating label={uiT.tabs.summary.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.summary_v2
             ? (hasTabData('summary', data, financialsV2Local)
@@ -3404,7 +3534,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <SummaryTab data={data} />}
         </ReportSection>
 
-        <ReportSection id="value_chain" title={uiT.tabs.value_chain.label} icon={GitBranch}>
+        <ReportSection id="value_chain" title={uiT.tabs.value_chain.label} icon={GitBranch} uiT={uiT} getMarkdown={() => data.value_chain_v2 ? valueChainToMd(data.value_chain_v2, data.value_chain_v2.sources ?? data.sources?.value_chain) : ''}>
           {(isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <SectionGenerating label={uiT.tabs.value_chain.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.value_chain_v2
             ? (hasTabData('value_chain', data, financialsV2Local)
@@ -3413,7 +3543,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('value_chain')}<ValueChainTab data={data} /></>}
         </ReportSection>
 
-        <ReportSection id="business_model" title={uiT.tabs.business_model.label} icon={DollarSign}>
+        <ReportSection id="business_model" title={uiT.tabs.business_model.label} icon={DollarSign} uiT={uiT} getMarkdown={() => data.business_model_v2 ? businessModelToMd(data.business_model_v2, data.business_model_v2.sources ?? data.sources?.business_model) : ''}>
           {(isReanalyzing('business_model') || !batchDone(TAB_BATCH.business_model)) ? <SectionGenerating label={uiT.tabs.business_model.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.business_model_v2
             ? (hasTabData('business_model', data, financialsV2Local)
@@ -3422,7 +3552,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('business_model')}<BusinessModelTab data={data} /></>}
         </ReportSection>
 
-        <ReportSection id="competitors" title={uiT.tabs.competitors.label} icon={Users}>
+        <ReportSection id="competitors" title={uiT.tabs.competitors.label} icon={Users} uiT={uiT} getMarkdown={() => data.competitors_v2 ? competitorsToMd(data.competitors_v2, data.competitors_v2.sources ?? data.sources?.competitors) : ''}>
           {(isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <SectionGenerating label={uiT.tabs.competitors.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.competitors_v2
             ? (hasTabData('competitors', data, financialsV2Local)
@@ -3431,7 +3561,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>}
         </ReportSection>
 
-        <ReportSection id="cross_industry_nudge" title={uiT.tabs.cross_industry_nudge.label} icon={Lightbulb}>
+        <ReportSection id="cross_industry_nudge" title={uiT.tabs.cross_industry_nudge.label} icon={Lightbulb} uiT={uiT} getMarkdown={() => data.cross_industry_nudge_v1 ? crossIndustryNudgeToMd(data.cross_industry_nudge_v1) : ''}>
           {(isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <SectionGenerating label={uiT.tabs.cross_industry_nudge.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.cross_industry_nudge_v1
             ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
@@ -3440,7 +3570,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('nudge')}<p className="text-sm text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>}
         </ReportSection>
 
-        <ReportSection id="financials" title={uiT.tabs.financials.label} icon={BarChart2}>
+        <ReportSection id="financials" title={uiT.tabs.financials.label} icon={BarChart2} uiT={uiT} getMarkdown={() => financialsV2Local ? financialsToMd(financialsV2Local, financialsV2Local.sources ?? data.sources?.financials) : ''}>
           {(isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <SectionGenerating label={uiT.tabs.financials.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           financialsV2Local
             ? (data.dataSource !== 'edgar' && data.dataSource !== 'dart'
@@ -3461,7 +3591,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>}
         </ReportSection>
 
-        <ReportSection id="strategy" title={uiT.tabs.strategy.label} icon={Target}>
+        <ReportSection id="strategy" title={uiT.tabs.strategy.label} icon={Target} uiT={uiT} getMarkdown={() => data.strategy_v2 ? strategyToMd(data.strategy_v2, data.strategy_v2.sources ?? data.sources?.strategy) : ''}>
           {(isReanalyzing('strategy') || !batchDone(TAB_BATCH.strategy)) ? <SectionGenerating label={uiT.tabs.strategy.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.strategy_v2
             ? (hasTabData('strategy', data, financialsV2Local)
@@ -3470,7 +3600,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('strategy')}<StrategyTab data={data} /></>}
         </ReportSection>
 
-        <ReportSection id="founder" title={uiT.tabs.founder.label} icon={User}>
+        <ReportSection id="founder" title={uiT.tabs.founder.label} icon={User} uiT={uiT} getMarkdown={() => data.founder_v2 ? founderToMd(data.founder_v2) : ''}>
           {(isReanalyzing('founder') || !batchDone(TAB_BATCH.founder)) ? <SectionGenerating label={uiT.tabs.founder.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.founder_v2
             ? (hasTabData('founder', data, financialsV2Local)
@@ -3479,16 +3609,19 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('founder')}<p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>}
         </ReportSection>
 
-        {/* 출처(신규, 2026-08-17) — 각 섹션 하단에 이미 개별 표시되는 출처와 별개로,
-            전 섹션 출처를 한 곳에 모은 통합 목록(PDF의 "마지막 페이지 통합 출처 목록"과
-            동일한 개념). data.sources는 이미 있는 필드라 데이터 신규 추가 없음. */}
-        <ReportSection id="sources" title={uiT.home.progressCardSources} icon={BookOpen}>
-          <AllSourcesSummary data={data} uiT={uiT} />
-        </ReportSection>
-
         {/* Pain Diagnosis(industry_history+tech_evolution 통합, 2026-08-16부터 배치5) —
             앰버 강조로 차별화 기능임을 표시. */}
-        <ReportSection id="pain_diagnosis" title={uiT.home.progressCardPainDiagnosis} icon={Lightbulb} emphasis>
+        <ReportSection
+          id="pain_diagnosis"
+          title={uiT.home.progressCardPainDiagnosis}
+          icon={Lightbulb}
+          emphasis
+          uiT={uiT}
+          getMarkdown={() => mdJoin([
+            data.industry_history_v2 ? industryHistoryToMd(data.industry_history_v2, data.industry_history_v2.sources ?? data.sources?.industry_history) : '',
+            data.tech_evolution_v2 ? techEvolutionToMd(data.tech_evolution_v2, data.tech_evolution_v2.sources ?? data.sources?.tech_evolution) : '',
+          ])}
+        >
           <div className="space-y-6">
             <div>
               <h4 className="text-xs font-semibold text-gray-500 mb-2">{uiT.tabs.industry_history.label}</h4>
@@ -3511,9 +3644,17 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           </div>
         </ReportSection>
 
+        {/* 출처(신규, 2026-08-17) — 각 섹션 하단에 이미 개별 표시되는 출처와 별개로,
+            전 섹션 출처를 한 곳에 모은 통합 목록(PDF의 "마지막 페이지 통합 출처 목록"과
+            동일한 개념). data.sources는 이미 있는 필드라 데이터 신규 추가 없음. 창업자→
+            Pain Diagnosis 다음, 스택 최후미(2026-08-17 순서 조정 — 출처는 항상 맨 끝). */}
+        <ReportSection id="sources" title={uiT.home.progressCardSources} icon={BookOpen} uiT={uiT} getMarkdown={() => sourcesToMd(data, uiT)}>
+          <AllSourcesSummary data={data} uiT={uiT} />
+        </ReportSection>
+
         {/* growth_scenario/icp_insight: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 스택
             맨 끝에 유지 — 기존 인터랙션(PRO 배지/생성 버튼) 그대로. */}
-        <ReportSection id="growth_scenario" title={uiT.tabs.growth_scenario.label} icon={TrendingUp}>
+        <ReportSection id="growth_scenario" title={uiT.tabs.growth_scenario.label} icon={TrendingUp} uiT={uiT} getMarkdown={() => data.growth_scenario_v2 ? growthScenarioToMd(data.growth_scenario_v2) : ''}>
           {!isPremium ? <GrowthScenarioLocked /> :
           !batchDone(TAB_BATCH.growth_scenario) ? <SectionGenerating label={uiT.tabs.growth_scenario.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.growth_scenario_v2
@@ -3527,7 +3668,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             AnalysisCardInner에 끌어올려져 있어 재마운트돼도 복원된다. 공유 뷰(isShareView)는
             인터랙티브 생성/재생성/별점 위젯 없이 서버가 이미 골라준 소유자의 결과만
             읽기 전용으로 보여준다(SharedIcpQuestionsTab, 2026-08-15). */}
-        <ReportSection id="icp_insight" title={uiT.tabs.icp_insight.label} icon={Lightbulb}>
+        <ReportSection id="icp_insight" title={uiT.tabs.icp_insight.label} icon={Lightbulb} uiT={uiT} getMarkdown={() => icpInsightToMd(isShareView ? data.icpDiscoveryQuestions : icpInsightResult?.content.questions)}>
           {isShareView
             ? <SharedIcpQuestionsTab questions={data.icpDiscoveryQuestions} ownerLabel={data.icpOwnerLabel} uiT={uiT} />
             : <IcpInsightTab

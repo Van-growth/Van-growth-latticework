@@ -18,9 +18,6 @@ export interface ProfileFormValues {
   purpose: PurposeCode[];
   purpose_other: string;
   region: RegionCode | '';
-  icp_product: string;
-  icp_target_industry: string;
-  icp_target_role: string;
   nickname: string;
 }
 
@@ -34,9 +31,6 @@ function toFormValues(p?: Partial<UserProfile> | null): ProfileFormValues {
     purpose: p?.purpose ?? [],
     purpose_other: p?.purpose_other ?? '',
     region: (p?.region ?? '') as RegionCode | '',
-    icp_product: p?.icp_product ?? '',
-    icp_target_industry: p?.icp_target_industry ?? '',
-    icp_target_role: p?.icp_target_role ?? '',
     nickname: p?.nickname ?? '',
   };
 }
@@ -57,8 +51,8 @@ function ChoiceGroup<T extends string>({ options, labelFor, value, onChange, col
           onClick={() => onChange(value === opt ? '' : opt)}
           className={`text-xs font-medium py-2 rounded-lg border transition-colors ${
             value === opt
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+              ? 'bg-navy-600 text-white border-navy-600'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-navy-300'
           }`}
         >
           {labelFor[opt]}
@@ -68,15 +62,15 @@ function ChoiceGroup<T extends string>({ options, labelFor, value, onChange, col
   );
 }
 
-export default function ProfileForm({ initial, onSubmit, submitLabel, submitting, showIcp = true }: {
+export default function ProfileForm({ initial, onSubmit, submitLabel, submitting, showNickname = true }: {
   initial?: Partial<UserProfile> | null;
   onSubmit: (values: ProfileFormValues) => void;
   submitLabel: string;
   submitting?: boolean;
-  // 온보딩 모달은 짧은 고정 질문 세트를 유지하려고 ICP 섹션을 숨긴다(스펙상 설정 페이지
-  // 전용 기능) — OnboardingModal.tsx의 submit()이 icp_* 필드를 PATCH body로 안 보내므로,
+  // 온보딩 모달은 짧은 고정 질문 세트를 유지하려고 닉네임 입력을 숨긴다(설정 페이지
+  // 전용 기능) — OnboardingModal.tsx의 submit()이 nickname을 PATCH body로 안 보내므로,
   // 숨기지 않으면 온보딩 중 입력한 값이 조용히 유실된다.
-  showIcp?: boolean;
+  showNickname?: boolean;
 }) {
   const [values, setValues] = useState<ProfileFormValues>(() => toFormValues(initial));
   const { language } = useLanguage();
@@ -99,7 +93,7 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
           value={values.company_name}
           onChange={e => setValues(v => ({ ...v, company_name: e.target.value }))}
           placeholder={t.companyNamePlaceholder}
-          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-navy-400"
         />
       </div>
 
@@ -167,8 +161,8 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
               onClick={() => togglePurpose(p)}
               className={`text-xs font-medium py-2 rounded-lg border transition-colors ${
                 values.purpose.includes(p)
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                  ? 'bg-navy-600 text-white border-navy-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-navy-300'
               }`}
             >
               {labels.purpose[p]}
@@ -181,12 +175,12 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
             value={values.purpose_other}
             onChange={e => setValues(v => ({ ...v, purpose_other: e.target.value }))}
             placeholder={t.purposeOtherPlaceholder}
-            className="mt-2 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            className="mt-2 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-navy-400"
           />
         )}
       </div>
 
-      {showIcp && (
+      {showNickname && (
         <div className="pt-2 border-t border-gray-100">
           <label className="block text-xs font-medium text-gray-600 mb-1">{t.nickname}</label>
           <p className="text-xs text-gray-400 mb-2">{t.nicknameHelperText}</p>
@@ -196,55 +190,15 @@ export default function ProfileForm({ initial, onSubmit, submitLabel, submitting
             onChange={e => setValues(v => ({ ...v, nickname: e.target.value }))}
             placeholder={t.nicknamePlaceholder}
             maxLength={40}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-navy-400"
           />
-        </div>
-      )}
-
-      {showIcp && (
-        <div className="pt-2 border-t border-gray-100">
-          <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpSectionTitle}</label>
-          <p className="text-xs text-gray-400 mb-3">{t.icpHelperText}</p>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpProduct}</label>
-              <input
-                type="text"
-                value={values.icp_product}
-                onChange={e => setValues(v => ({ ...v, icp_product: e.target.value }))}
-                placeholder={t.icpProductPlaceholder}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpTargetIndustry}</label>
-              <input
-                type="text"
-                value={values.icp_target_industry}
-                onChange={e => setValues(v => ({ ...v, icp_target_industry: e.target.value }))}
-                placeholder={t.icpTargetIndustryPlaceholder}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t.icpTargetRole}</label>
-              <input
-                type="text"
-                value={values.icp_target_role}
-                onChange={e => setValues(v => ({ ...v, icp_target_role: e.target.value }))}
-                placeholder={t.icpTargetRolePlaceholder}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              />
-            </div>
-          </div>
         </div>
       )}
 
       <button
         type="submit"
         disabled={submitting}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+        className="w-full bg-navy-600 hover:bg-navy-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
       >
         {submitting ? t.saving : submitLabel}
       </button>

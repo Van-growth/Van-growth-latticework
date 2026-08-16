@@ -49,7 +49,7 @@ function CategoryChip({ label, active, onClick }: { label: string; active: boole
     <button
       onClick={onClick}
       className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-        active ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
+        active ? 'bg-navy-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
       }`}
     >
       {label}
@@ -65,9 +65,9 @@ export default function AeSkillsView() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <Lightbulb size={18} className="text-amber-400" />
+          <Lightbulb size={18} className="text-navy-600" />
           <h2 className="text-xl font-semibold text-gray-900">AE Skills</h2>
-          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-[1px] leading-none">
+          <span className="text-[10px] font-bold text-navy-600 bg-navy-50 border border-navy-200 rounded px-1.5 py-[1px] leading-none">
             무료
           </span>
         </div>
@@ -83,7 +83,7 @@ export default function AeSkillsView() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {cards.map(card => (
           <div key={card.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-            <span className="inline-block text-[10px] font-semibold uppercase tracking-widest text-blue-500 bg-blue-50 rounded px-1.5 py-0.5 mb-2">
+            <span className="inline-block text-[10px] font-semibold uppercase tracking-widest text-navy-500 bg-navy-50 rounded px-1.5 py-0.5 mb-2">
               {card.category}
             </span>
             <h3 className="text-sm font-semibold text-gray-800 mb-1.5 leading-snug">{card.title}</h3>
