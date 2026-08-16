@@ -1895,6 +1895,23 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
     grep만으로 끝내지 말고 Render Cron Jobs 대시보드(특히 `render.yaml`에 없는, 대시보드에서
     직접 만들어진 서비스가 있는지)도 같이 확인할 것** — 애플리케이션 코드 밖에서 그
     엔드포인트를 호출하는 인프라는 grep으로 안 잡힌다.
+18. (2026-08-18) 커스텀 도메인 `ceostaffben.com`/`www.ceostaffben.com`을 Render Custom
+    Domains에 신규 연결했는데, `server/src/index.ts`의 CORS `ALLOWED_ORIGINS` 화이트리스트
+    갱신이 누락돼 배포 후 로그인 이후 거의 전 기능(히스토리/산업별 보기/기업분석 검색·
+    자동완성 등 `/api/analyze/usage`·`/api/companies/typeahead`·`/api/industries`·
+    `/api/analyses` 전부)이 막힘 — 브라우저 콘솔에 "No 'Access-Control-Allow-Origin' header"
+    에러로 확인. 원인은 이 프로젝트 CORS 설정이 `cors()`의 동적 `origin` 콜백에 하드코딩된
+    `Set`(`https://latticework-client.onrender.com` 등)이라, 새 도메인을 연결해도 자동으로
+    통과되지 않고 이 목록에 문자열을 직접 추가해야만 함 — Render의 "Custom Domain 연결"
+    자체는 DNS/TLS 레벨 작업이라 애플리케이션 레벨 CORS와 완전히 별개 단계라는 점이 누락의
+    핵심 원인. `process.env.ALLOWED_ORIGINS`로 추가 origin을 얹는 경로도 있지만
+    prod(`render.yaml`)엔 이 환경변수 자체가 선언돼 있지 않아(dev만 `render.dev.yaml`에
+    `sync: false`로 선언) prod는 하드코딩 목록에만 의존 — 대시보드 환경변수 추가로는 해결
+    안 되고 반드시 코드 수정+재배포가 필요했음. 수정: `ALLOWED_ORIGINS` Set에 두 origin 추가.
+    교훈: **커스텀 도메인을 새로 연결할 때는 DNS/TLS 연결 확인만으로 끝내지 말고, 서버의
+    CORS 화이트리스트(하드코딩이든 환경변수든)에 그 도메인이 등록됐는지 반드시 함께
+    확인·배포할 것** — 프론트엔드 배포가 성공해도 API 요청이 전부 브라우저 단에서 막혀
+    "로그인은 되는데 아무 데이터도 안 뜬다"는 증상으로만 나타나 원인 특정이 늦어지기 쉽다.
 
 ### 새 프로젝트/기능 착수 시 체크리스트
 - [ ] 신규 테이블 생성 시 RLS 활성화 여부 확인
@@ -1919,6 +1936,13 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
   있음)도 같이 확인할 것 — 애플리케이션 코드 밖에서 그 엔드포인트를 호출하는 인프라는
   grep으로 안 잡힌다(2026-08-15 `latticework-daily-cron`이 이미 삭제된 `/api/cron/daily`를
   계속 호출하고 있던 사고, 실전 발견 이력 17번 참고)
+- [ ] **커스텀 도메인을 새로 추가(Render Custom Domains)할 때는 DNS/TLS 연결뿐 아니라
+  `server/src/index.ts`의 CORS `ALLOWED_ORIGINS` 화이트리스트에도 그 도메인(`https://`와
+  `https://www.` 두 형태 모두)을 추가하고 재배포까지 완료할 것** — 누락 시 프론트는
+  정상 배포되지만 로그인 이후 전 API 요청이 브라우저 CORS 차단으로 막혀 "로그인은 되는데
+  아무 데이터도 안 뜬다"는 증상으로 나타난다(2026-08-18 `ceostaffben.com` 연결 시 실제
+  발생, 실전 발견 이력 18번 참고). prod는 `ALLOWED_ORIGINS` 환경변수가 아예 선언돼 있지
+  않아 하드코딩 목록만 유효 — Render 대시보드 환경변수 추가로는 해결되지 않는다.
 
 ## Data Aggregation Principles (SSOT)
 

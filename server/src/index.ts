@@ -18,6 +18,8 @@ const PORT = process.env.PORT || 4000;
 const ALLOWED_ORIGINS = new Set([
   'https://latticework-client.onrender.com',
   'https://van-growth-latticework.onrender.com',
+  'https://ceostaffben.com',
+  'https://www.ceostaffben.com',
   'http://localhost:3000',
   ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : []),
 ]);
