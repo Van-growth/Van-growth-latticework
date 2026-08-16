@@ -78,19 +78,42 @@ function hasFinancialBenchmarkDeviation(financials: FinancialsV2 | null | undefi
     && (financials.sec_benchmark_comparison.items?.length ?? 0) > 0;
 }
 
+// 섹션당 상한 — 각 섹션의 discovery_questions 생성 프롬프트가 이미 3-5개로 제한하므로
+// 이 값은 방어적 상한(생성 단계가 어겼을 때의 안전망)일 뿐, 정상 동작에서는 거의 항상
+// 섹션이 만든 개수 그대로 통과한다. 2026-08-17 UX 피드백 — 이전엔 전체 총량을 5개로
+// 캡해서 9개 섹션이 만든 후보 풀(최대 ~45개)이 최종 화면에서는 항상 5개로 뭉개졌음
+// (섹션별 3-5개 설계가 최종 노출 단계에서 지켜지지 않던 버그) → 전체 캡을 없애고
+// 섹션별 캡만 적용하도록 전환.
+const PER_SECTION_MAX = 5;
+
+// curateDiscoveryQuestions()(claude.ts)도 Claude 응답 후 동일한 방어적 상한을 적용하려고
+// export — 섹션별 캡 기준을 두 곳에서 다르게 두지 않기 위함. section 필드만 있으면 되므로
+// 전체 DiscoveryQuestionCandidate 형태를 강제하지 않는 제네릭으로 둔다(claude.ts 호출부는
+// sources 필드가 없는 축약된 형태를 넘긴다).
+export function capPerSection<T extends { section: string }>(candidates: T[]): T[] {
+  const seenPerSection = new Map<string, number>();
+  const result: T[] = [];
+  for (const c of candidates) {
+    const count = seenPerSection.get(c.section) ?? 0;
+    if (count >= PER_SECTION_MAX) continue;
+    seenPerSection.set(c.section, count + 1);
+    result.push(c);
+  }
+  return result;
+}
+
 // ICP(icp_product/icp_target_industry/icp_target_role)가 전부 비어있을 때(선택 입력이라
-// 흔한 경우) Claude 큐레이션 호출 없이 결정론적으로 최대 5개를 고른다 — 불필요한 Claude
-// 호출을 피하는 게 이 코드베이스의 기존 원칙(제로 유저 레이버 원칙과 동일 계열)과 맞다.
-// 우선순위: 재무 벤치마크 이탈 플래그가 있으면 financials_v2 후보를 앞으로 당기고,
-// 없으면 SECTION_ORDER(summary_v2부터) 그대로.
+// 흔한 경우) Claude 큐레이션 호출 없이 결정론적으로 고른다 — 불필요한 Claude 호출을
+// 피하는 게 이 코드베이스의 기존 원칙(제로 유저 레이버 원칙과 동일 계열)과 맞다. 전체
+// 총량 캡은 없음(섹션별 캡만) — 우선순위: 재무 벤치마크 이탈 플래그가 있으면
+// financials_v2 후보를 앞으로 당기고, 없으면 SECTION_ORDER(summary_v2부터) 그대로.
 export function pickDefaultDiscoveryQuestions(
   candidates: DiscoveryQuestionCandidate[],
   financials_v2: FinancialsV2 | null | undefined,
-  max = 5,
 ): DiscoveryQuestionCandidate[] {
   if (candidates.length === 0) return [];
   const prioritized = hasFinancialBenchmarkDeviation(financials_v2)
     ? [...candidates].sort((a, b) => (a.section === 'financials_v2' ? 0 : 1) - (b.section === 'financials_v2' ? 0 : 1))
     : candidates;
-  return prioritized.slice(0, max);
+  return capPerSection(prioritized);
 }

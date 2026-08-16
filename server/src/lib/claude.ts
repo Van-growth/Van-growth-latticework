@@ -6,6 +6,7 @@ import * as path from 'path';
 import { fetchFinancialContext } from './financialContext';
 import type { IndustryBenchmarkResult, CompetitorRevenueRanking } from '../services/industryBenchmarkService';
 import type { DiscoveryQuestionCandidate } from './discoveryQuestions';
+import { capPerSection } from './discoveryQuestions';
 import type { EdgarRawSeries } from './edgar';
 import type { DartRawSeries } from './dart';
 import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, getRowYearCols } from './financialsTableBuilder';
@@ -1629,7 +1630,7 @@ function discoveryQuestionCurationSystem(language: Language): string {
 Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. ${LANGUAGE_DIRECTIVE[language]}
 
 [Task]
-You're given a numbered pool of candidate questions, each already grounded in this company's actual analysis data (no candidate is speculative — that filtering already happened upstream). Pick the 3-5 candidates most relevant to the reader's ICP and return them.
+You're given a numbered pool of candidate questions grouped by originating section (each already grounded in this company's actual analysis data — no candidate is speculative, that filtering already happened upstream). For EACH section that has at least one candidate, select up to 3-5 of that section's candidates most relevant to the reader's ICP (fewer than 3 only if that section itself has fewer than 3, or none if none of that section's candidates fit the ICP at all). Do not impose any cap across the whole pool — the total return size should scale with however many sections have relevant candidates.
 
 [Rephrasing — optional, must stay grounded]
 You may lightly rephrase a candidate's wording to sharpen it for this specific ICP (e.g. naming the reader's product category instead of a generic phrase) — but the question must still be answerable from the same underlying fact as the original candidate. Never introduce a new fact, number, or claim that wasn't in the original candidate. If a candidate is already sharp as-is, return it unchanged.
@@ -1641,7 +1642,7 @@ Any ICP field marked "(not provided)" must NOT be used to narrow selection — f
 Every returned question must be phrased as something you'd ask the company, not a statement of fact you already know. No investor language (valuation/P/E/ROE/stock price).
 
 [Selection]
-Return 3-5 items (fewer only if the candidate pool itself has fewer than 3), ordered by relevance to this ICP (most relevant first). Always return each item's original "id" copied verbatim from the candidate pool — never invent a new id.`;
+Return up to 3-5 items per originating section (never more than 5 from any single section), ordered by relevance to this ICP within each section. Always return each item's original "id" copied verbatim from the candidate pool — never invent a new id.`;
 }
 
 export interface CuratedDiscoveryQuestion {
@@ -1668,7 +1669,7 @@ export async function curateDiscoveryQuestions(
 
   const schema = `Output only a JSON object matching this schema:
 {"selected":[{"id":<candidate id, copied verbatim from the pool below>,"question":"The question — the original wording, or lightly rephrased for this ICP"}]}
-Return 3-5 items (fewer only if the candidate pool has fewer than 3).`;
+Up to 3-5 items per originating section (see [Selection] above) — do not cap the total across sections.`;
 
   const userMessage = `Company: ${companyName}
 
@@ -1695,7 +1696,9 @@ ${schema}`;
     try {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-5',
-        max_tokens: 1500,
+        // 2026-08-17 섹션별 캡 전환 이전엔 전체 5개로 응답이 작았지만, 이제 최대 9개 섹션
+        // × 5개 = ~45개까지 나올 수 있어 1500으로는 잘릴 위험이 있음 — 여유 있게 상향.
+        max_tokens: 4000,
         system: [{ type: 'text', text: discoveryQuestionCurationSystem(language), cache_control: { type: 'ephemeral' } }] as any,
         messages: [{ role: 'user', content: userMessage }],
       });
@@ -1712,11 +1715,15 @@ ${schema}`;
       }
 
       // 근거 검증: 실제로 넘긴 candidate id만 통과 — 지어낸 id나 근거 없는 항목은 버린다.
-      const validIds = new Set(candidates.map(c => c.id));
-      const result: CuratedDiscoveryQuestion[] = parsed.selected
+      // 전체 총량 슬라이스는 걸지 않는다 — 섹션별 방어적 상한(capPerSection, PER_SECTION_MAX=5)만
+      // 적용해 프롬프트가 어겨도 한 섹션이 결과를 과점하지 않게만 막는다(2026-08-17, 전체
+      // 5개 캡이 섹션별 3-5개 설계를 최종 노출 단계에서 뭉개던 문제 수정).
+      const validIds = new Map(candidates.map(c => [c.id, c.section]));
+      const filtered = parsed.selected
         .filter(item => typeof item.id === 'number' && validIds.has(item.id) && typeof item.question === 'string' && item.question.trim())
-        .slice(0, 5)
-        .map(item => ({ id: item.id, question: item.question.trim() }));
+        .map(item => ({ id: item.id, question: item.question.trim(), section: validIds.get(item.id)! }));
+      const result: CuratedDiscoveryQuestion[] = capPerSection(filtered)
+        .map(({ id, question }) => ({ id, question }));
 
       console.log(`[claude] discovery_question_curation OK (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms (${result.length}/${candidates.length} candidates selected)`);
       return result;

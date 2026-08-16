@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, FormEvent, KeyboardEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Share2, Link, X, RefreshCw } from 'lucide-react';
+import { Share2, Link, X, RefreshCw, Target } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import IndustryView from './IndustryView';
 import LoginPromptModal from './LoginPromptModal';
@@ -811,9 +811,11 @@ export default function HomeContent() {
         <p className="text-gray-500">{t.heroSubtitle}</p>
       </div>
 
-      {/* Search form */}
-      <form onSubmit={handleSubmit} className="mb-8">
-        <div className="flex gap-3 max-w-2xl mx-auto">
+      {/* 검색창 + 목적 입력을 하나의 응집된 카드로 묶음(2026-08-17 UX 피드백) —
+          검색-목적-상세가 시각적으로 한 블록임을 보여준다. */}
+      <div className="max-w-2xl mx-auto mb-8 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <form onSubmit={handleSubmit}>
+        <div className="flex gap-3">
           <div className="relative flex-1">
             <input
               type="text"
@@ -884,9 +886,13 @@ export default function HomeContent() {
       </form>
 
       {/* 목적 입력 — 분석 요청마다 매번 입력받는다(온보딩 저장값 아님). 각 섹션 프롬프트
-          컨텍스트에 해석 레이어로만 주입(주입 배관만, 톤 분기 로직은 다음 단계). */}
-      <div className="max-w-2xl mx-auto mb-8">
-        <p className="text-xs font-medium text-gray-500 mb-2">{t.purposeSectionTitle}</p>
+          컨텍스트에 해석 레이어로만 주입(주입 배관만, 톤 분기 로직은 다음 단계). 검색창과
+          같은 카드 안에 두고 구분선만으로 나눔(2026-08-17 UX 피드백 — 시각적 강조 강화). */}
+      <div className="mt-5 pt-5 border-t border-gray-100">
+        <div className="flex items-center gap-1.5 mb-3">
+          <Target size={16} className="text-blue-600" />
+          <p className="text-sm font-semibold text-gray-900">{t.purposeSectionTitle}</p>
+        </div>
         <div className="flex flex-wrap gap-2 mb-3" role="radiogroup" aria-label={t.purposeSectionTitle}>
           {PURPOSE_CATEGORIES.map(cat => {
             const label = { ma: t.purposeMa, investment: t.purposeInvestment, partnership: t.purposePartnership, customer: t.purposeCustomer, other: t.purposeOther }[cat];
@@ -899,8 +905,10 @@ export default function HomeContent() {
                 aria-checked={active}
                 disabled={loading}
                 onClick={() => setPurposeCategory(prev => prev === cat ? null : cat)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors disabled:opacity-50 ${
-                  active ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border-2 transition-colors disabled:opacity-50 ${
+                  active
+                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                    : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-blue-300 hover:bg-blue-50'
                 }`}
               >
                 {label}
@@ -914,8 +922,9 @@ export default function HomeContent() {
           disabled={loading}
           placeholder={t.purposeDetailPlaceholder}
           rows={2}
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm text-gray-900 placeholder-gray-400 resize-none disabled:opacity-50"
+          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white text-sm text-gray-900 placeholder-gray-400 resize-none disabled:opacity-50"
         />
+      </div>
       </div>
 
       {/* 캐시 있음 — 서버 응답(resolveResult.cached)에 따라서만 보여짐, 유저가 고르는 토글 아님 */}
