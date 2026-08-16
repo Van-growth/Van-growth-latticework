@@ -5,8 +5,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fetchFinancialContext } from './financialContext';
 import type { IndustryBenchmarkResult, CompetitorRevenueRanking } from '../services/industryBenchmarkService';
-import type { DiscoveryQuestionCandidate } from './discoveryQuestions';
-import { capPerSection } from './discoveryQuestions';
 import type { EdgarRawSeries } from './edgar';
 import type { DartRawSeries } from './dart';
 import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, getRowYearCols } from './financialsTableBuilder';
@@ -113,9 +111,6 @@ export interface SummaryV2 {
   bull_case: string[];
   bear_case: string[];
   oneLiner: string;
-  // AE 디스커버리 콜 질문 후보(2026-08-15, ICP 인사이트 탭 2단계 통합 재료) — 3-5개,
-  // 발표형 금지·질문형만. 빈 배열 허용(억지로 채우지 않음).
-  discovery_questions: string[];
   sources?: SectionSource[];
 }
 
@@ -132,7 +127,6 @@ export interface IndustryHistoryV2 {
   why_durable: string[];
   chasm_points: string[];
   key_bullets: string[];
-  discovery_questions: string[];
   sources: SectionSource[];
 }
 
@@ -150,7 +144,6 @@ export interface TechEvolutionV2 {
   current_stage: { label: string; detail: string };
   next_inflection: { label: string; detail: string };
   key_bullets: string[];
-  discovery_questions: string[];
   sources: SectionSource[];
 }
 
@@ -175,7 +168,6 @@ export interface ValueChainV2 {
   value_flow: string[];
   subject_position: string[];
   key_bullets: string[];
-  discovery_questions: string[];
   sources: SectionSource[];
 }
 
@@ -215,7 +207,6 @@ export interface BusinessModelV2 {
   };
   moat: MoatV2[];
   key_bullets: string[];
-  discovery_questions: string[];
   sources: SectionSource[];
 }
 
@@ -234,7 +225,6 @@ export interface CompetitorsV2 {
   substitutes: { name: string; threat: string }[];
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
   key_bullets: string[];
-  discovery_questions: string[];
   sources: SectionSource[];
   // EDGAR 기업 전용 — Claude가 생성하지 않고 industryBenchmarkService가 순수 계산 후 병합(analyze.ts).
   revenue_ranking?: CompetitorRevenueRanking | null;
@@ -262,7 +252,6 @@ export interface StrategyV2 {
   strategy_coherence: string;
   ten_year_durability: string[];
   key_bullets: string[];
-  discovery_questions: string[];
   sources: SectionSource[];
 }
 
@@ -321,7 +310,6 @@ export interface FinancialsV2 {
     keyRisks: string[];
   };
   key_bullets: string[];
-  discovery_questions: string[];
   sources: SectionSource[];
   // EDGAR 기업 전용 — Claude가 생성하지 않고 industryBenchmarkService가 순수 계산 후 병합(analyze.ts).
   industry_benchmark?: IndustryBenchmarkResult | null;
@@ -360,7 +348,6 @@ export interface FounderV2 {
     cofounders: string[];
   };
   key_bullets: string[];
-  discovery_questions: string[];
   sources?: SectionSource[];
 }
 
@@ -406,19 +393,19 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     company: '', ticker: null, industry: '', hq: '',
     value_chain_position: 'midstream',
     products: [], key_metrics: [], top_customers: [], key_markets: [],
-    key_bullets: [], bull_case: [], bear_case: [], oneLiner: '', discovery_questions: [], sources: [],
+    key_bullets: [], bull_case: [], bear_case: [], oneLiner: '', sources: [],
   },
-  industry_history_v2: { industry_name: '', timeline: [], why_durable: [], chasm_points: [], key_bullets: [], discovery_questions: [], sources: [] },
-  tech_evolution_v2: { tech_name: '', stages: [], current_stage: { label: '', detail: '' }, next_inflection: { label: '', detail: '' }, key_bullets: [], discovery_questions: [], sources: [] },
-  value_chain_v2: { industry: '', layers: [], value_flow: [], subject_position: [], key_bullets: [], discovery_questions: [], sources: [] },
+  industry_history_v2: { industry_name: '', timeline: [], why_durable: [], chasm_points: [], key_bullets: [], sources: [] },
+  tech_evolution_v2: { tech_name: '', stages: [], current_stage: { label: '', detail: '' }, next_inflection: { label: '', detail: '' }, key_bullets: [], sources: [] },
+  value_chain_v2: { industry: '', layers: [], value_flow: [], subject_position: [], key_bullets: [], sources: [] },
   business_model_v2: {
     revenue_streams: [], segments: [],
     growth_motion: 'hybrid', growth_motion_detail: '',
     unit_economics: { gross_margin: 0, operating_margin: 0, net_margin: 0, fcf_margin: 0, nrr: 0 },
     moat: [],
-    key_bullets: [], discovery_questions: [], sources: [],
+    key_bullets: [], sources: [],
   },
-  competitors_v2: { direct: [], indirect: [], substitutes: [], competitive_position: 'niche', key_bullets: [], discovery_questions: [], sources: [] },
+  competitors_v2: { direct: [], indirect: [], substitutes: [], competitive_position: 'niche', key_bullets: [], sources: [] },
   cross_industry_nudge_v1: {
     industry_pain: { title: '', description: [], financial_impact_question: '' },
     cross_industry_example: { source_industry: '', case_name: '', solution_description: '' },
@@ -428,14 +415,14 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     corporate: { direction: '', portfolio: '', ma_partnerships: [], geographic: '' },
     business: { direction: '', competitive_advantage: '', go_to_market: '', product_roadmap: [] },
     financial: { direction: '', capital_allocation: '', investment_priority: '', return_target: '' },
-    strategy_coherence: '', ten_year_durability: [], key_bullets: [], discovery_questions: [], sources: [],
+    strategy_coherence: '', ten_year_durability: [], key_bullets: [], sources: [],
   },
   financials_v2: {
     income_statement: [], balance_sheet: [],
     cash_flow: { operating: '', investing: '', financing: '', fcf: '', notes: '' },
     key_risks: [],
     outlook: { shortTerm: '', midLongTerm: '', keyRisks: [] },
-    key_bullets: [], discovery_questions: [], sources: [],
+    key_bullets: [], sources: [],
   },
   founder_v2: {
     founders: [],
@@ -444,7 +431,6 @@ const DEFAULT_ANALYSIS_DATA: AnalysisData = {
     reputation: { sns_style: '-', media_exposure: '-', blind_glassdoor: '-' },
     network: { investors: [], advisors_board: [], cofounders: [] },
     key_bullets: [],
-    discovery_questions: [],
     sources: [],
   },
   sources: {},
@@ -719,8 +705,7 @@ research report. Aim for Gong / HubSpot / Salesforce blog voice, not McKinsey de
 
 const SECTION_SCHEMAS: Record<string, string> = {
   summary_v2: `Output only a JSON object matching this schema:
-{"company":"Company name","ticker":"TradingView-format ticker or null","industry":"Industry classification","hq":"HQ city, country","value_chain_position":"upstream|midstream|downstream","products":[{"name":"Product/segment name","description":"What it covers, 1 line"}],"key_metrics":[{"label":"Revenue","value":"figure — 'Not disclosed' if unconfirmed","trend":"up|down|flat","source_index":number or null},{"label":"Operating margin","value":"figure% — 'figure% (estimated)' if estimated","trend":"up|down|flat","source_index":number or null},{"label":"Market cap","value":"figure","trend":"up|down|flat","source_index":number or null},{"label":"YoY growth","value":"figure%","trend":"up|down|flat","source_index":number or null}],"top_customers":["Only customer names confirmed by disclosure. Empty array [] if uncertain"],"customer_concentration":{"customers":[{"name":"Customer name","revenue_share":number confirmed by disclosure}],"top_n":number,"top_n_share":number,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"Country","revenue_share":number confirmed by disclosure only — omit the entry if unavailable}],"trigger_events":[{"date":"YYYY-MM-DD or YYYY-MM","type":"Funding|Equity Offering|Major Deal","amount":"amount — empty string if unconfirmed","counterparty":"counterparty (investor/partner name) — empty string if unconfirmed","description":"1-line description, include [n] source markers","source_index":number}],"key_bullets":["Why this company is distinct in this market — core positioning, 8 words or fewer","This company's core growth driver, 8 words or fewer","This company's biggest execution risk, 8 words or fewer"],"bull_case":["Growth momentum bullet — market expansion, partnership, or competitive edge point, 1 line","2nd growth momentum bullet, 1 line"],"bear_case":["Key risk bullet — execution, competitive, regulatory, or market risk, 1 line","2nd key risk bullet, 1 line"],"oneLiner":"1-2 sentence read on where this company stands right now, written so a strategy or sales practitioner gets it immediately","discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-discovery_questions: 3-5 candidate discovery-call questions an AE could ask on a call, grounded only in this section's own data. Phrase each as something you're curious to ask — never a statement of a fact you already know. Bad: "70% of revenue is concentrated in Product A." Good: "Is there a deliberate push to reduce that revenue concentration?" — state the consequence a fact implies, not the fact itself. If trigger_events is non-empty, turn each event's implication into a question this way — Bad: "You raised a Series C recently." Good: "Has anything changed in team structure or priorities since that round?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
+{"company":"Company name","ticker":"TradingView-format ticker or null","industry":"Industry classification","hq":"HQ city, country","value_chain_position":"upstream|midstream|downstream","products":[{"name":"Product/segment name","description":"What it covers, 1 line"}],"key_metrics":[{"label":"Revenue","value":"figure — 'Not disclosed' if unconfirmed","trend":"up|down|flat","source_index":number or null},{"label":"Operating margin","value":"figure% — 'figure% (estimated)' if estimated","trend":"up|down|flat","source_index":number or null},{"label":"Market cap","value":"figure","trend":"up|down|flat","source_index":number or null},{"label":"YoY growth","value":"figure%","trend":"up|down|flat","source_index":number or null}],"top_customers":["Only customer names confirmed by disclosure. Empty array [] if uncertain"],"customer_concentration":{"customers":[{"name":"Customer name","revenue_share":number confirmed by disclosure}],"top_n":number,"top_n_share":number,"is_concentrated":true,"trend":"concentrating|diversifying|stable"},"key_markets":[{"country":"Country","revenue_share":number confirmed by disclosure only — omit the entry if unavailable}],"trigger_events":[{"date":"YYYY-MM-DD or YYYY-MM","type":"Funding|Equity Offering|Major Deal","amount":"amount — empty string if unconfirmed","counterparty":"counterparty (investor/partner name) — empty string if unconfirmed","description":"1-line description, include [n] source markers","source_index":number}],"key_bullets":["Why this company is distinct in this market — core positioning, 8 words or fewer","This company's core growth driver, 8 words or fewer","This company's biggest execution risk, 8 words or fewer"],"bull_case":["Growth momentum bullet — market expansion, partnership, or competitive edge point, 1 line","2nd growth momentum bullet, 1 line"],"bear_case":["Key risk bullet — execution, competitive, regulatory, or market risk, 1 line","2nd key risk bullet, 1 line"],"oneLiner":"1-2 sentence read on where this company stands right now, written so a strategy or sales practitioner gets it immediately","sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 top_customers: only names confirmed via IR or disclosure. Empty array if it's a guess. key_markets.revenue_share: if there's no disclosed figure, drop that country's entry entirely.
 products.description: 1 short line on what that product/segment actually does or covers — never state, imply, or round off a revenue-share percentage or dollar figure here (e.g. never write "roughly half of revenue" or "the smaller of the two segments"). The financials tab's revenue_lines section (server-computed straight from the 10-K, not you) is the only place revenue mix appears now — this section is name + what-it-is only.
 key_metrics.value must contain only the figure itself (e.g. "$215.9B", "38%", "38% (estimated)") — never append a fiscal year or data-source name in parentheses like "(EDGAR, FY2026)"; that detail belongs in the linked source instead. key_metrics.source_index must point at the index of the entry in this section's own sources[] array that backs that figure — put the fiscal year in that source's content (e.g. "FY2026 10-K revenue disclosure") so the footnote carries it. Use null only if the figure genuinely can't be attributed to any listed source.
@@ -731,8 +716,7 @@ trigger_events: base this only on the context's [Recent trigger event candidates
 oneLiner rule: don't just list numbers — explain in narrative form why the number matters. Style example: "Revenue's up, margins aren't — this is a company mid-buildout, pouring cash into infrastructure before it pays off."`,
 
   industry_history_v2: `Output only a JSON object matching this schema:
-{"industry_name":"Industry name","timeline":[{"period":"Time period","title":"Era title, 5 words or fewer","technology":"Core technology, 1 line","market_need":"Market need, 1 line","key_players":["Company name (country)"],"significance":"Why it matters, 1 line"}],"why_durable":["Reason this industry endures, 1 line","2nd reason it endures, 1 line"],"chasm_points":["Chasm moment and why, 1 line each, max 3"],"key_bullets":["This industry's single most decisive historical turning point, 8 words or fewer","What stage of development the industry is at now, 8 words or fewer","A structural risk unique to this industry, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (the industry's history/durability/chasm points) — where the analyzed company might sit relative to a historical pattern. Phrase each as something you're curious to ask, never a stated fact. Bad: "This industry consolidated around 3 players after 2015." Good: "Where do you see yourselves positioned as this industry keeps consolidating?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
+{"industry_name":"Industry name","timeline":[{"period":"Time period","title":"Era title, 5 words or fewer","technology":"Core technology, 1 line","market_need":"Market need, 1 line","key_players":["Company name (country)"],"significance":"Why it matters, 1 line"}],"why_durable":["Reason this industry endures, 1 line","2nd reason it endures, 1 line"],"chasm_points":["Chasm moment and why, 1 line each, max 3"],"key_bullets":["This industry's single most decisive historical turning point, 8 words or fewer","What stage of development the industry is at now, 8 words or fewer","A structural risk unique to this industry, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 timeline: 4-6 entries in chronological order. Tag important facts in the body with [n] source markers.
 why_durable: 2-4 short bullets, one distinct reason per bullet. If a bullet draws on a source, put the [n] marker at the very end of that bullet.
 Each timeline entry covers only industry-wide technology, market, or regulatory turning points. Never include a single company's funding round, VC raise, or M&A event — unless that company's tech/product launch itself reshaped the industry.
@@ -747,8 +731,7 @@ you can't find a distinct source backing a specific era's claim, search again ra
 unrelated citation or leaving it unsourced.`,
 
   tech_evolution_v2: `Output only a JSON object matching this schema:
-{"tech_name":"Core technology name","stages":[{"stage":1,"period":"Time period","title":"Stage title, 5 words or fewer","description":"Description, 2 sentences max","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["Key enabler, max 3"],"key_players":["Company name, max 4"]}],"current_stage":{"label":"Short 2-5 word phrase naming the current stage","detail":"1 sentence of supporting detail"},"next_inflection":{"label":"Short 2-5 word phrase naming the next inflection point","detail":"1 sentence of supporting detail"},"key_bullets":["Current maturity stage on the Hype Cycle, 8 words or fewer","The key trigger for the next inflection point, 8 words or fewer","The main barrier blocking wider adoption, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (the technology's maturity stage, next inflection, adoption barrier). Phrase each as something you're curious to ask, never a stated fact. Bad: "This tech is still in the trough of disillusionment." Good: "What's it going to take for this to cross into mainstream adoption for you?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
+{"tech_name":"Core technology name","stages":[{"stage":1,"period":"Time period","title":"Stage title, 5 words or fewer","description":"Description, 2 sentences max","hype_level":"emerging|hype|trough|recovery|mainstream","key_enablers":["Key enabler, max 3"],"key_players":["Company name, max 4"]}],"current_stage":{"label":"Short 2-5 word phrase naming the current stage","detail":"1 sentence of supporting detail"},"next_inflection":{"label":"Short 2-5 word phrase naming the next inflection point","detail":"1 sentence of supporting detail"},"key_bullets":["Current maturity stage on the Hype Cycle, 8 words or fewer","The key trigger for the next inflection point, 8 words or fewer","The main barrier blocking wider adoption, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 stages: 4-6 entries. Tag important facts in the body with [n] source markers.
 current_stage/next_inflection: label is a short noun phrase (not a full sentence), detail is exactly 1 supporting sentence — don't restate the label inside detail.
 Sourcing discipline: this section is about the TECHNOLOGY's evolution industry-wide, not the analyzed
@@ -761,16 +744,14 @@ across every entry. If you can't find a distinct source backing a specific stage
 rather than reusing an unrelated citation or leaving it unsourced.`,
 
   value_chain_v2: `Output only a JSON object matching this schema:
-{"industry":"Industry name","layers":[{"name":"Layer name","description":"Description, 1 line","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"buyer":false,"global_leaders":[{"name":"Company name","country":"Country","why_leader":"Why it leads, 1 line"}]}],"value_flow":["Pricing pass-through mechanism point, 1 line","2nd point, 1 line"],"subject_position":["The analyzed company's position point, 1 line","2nd point, 1 line"],"key_bullets":["Where this company is strongest in the value chain, 8 words or fewer","The basis for its pricing power / negotiating leverage, 8 words or fewer","The biggest risk that comes from this value-chain structure, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (pricing power, bottlenecks, the company's value-chain position). Phrase each as something you're curious to ask, never a stated fact. Bad: "You're squeezed by a bottleneck upstream." Good: "How much leverage do you actually have in pricing conversations with that upstream layer?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
+{"industry":"Industry name","layers":[{"name":"Layer name","description":"Description, 1 line","is_subject":false,"pricing_power":"high|medium|low","bottleneck":false,"buyer":false,"global_leaders":[{"name":"Company name","country":"Country","why_leader":"Why it leads, 1 line"}]}],"value_flow":["Pricing pass-through mechanism point, 1 line","2nd point, 1 line"],"subject_position":["The analyzed company's position point, 1 line","2nd point, 1 line"],"key_bullets":["Where this company is strongest in the value chain, 8 words or fewer","The basis for its pricing power / negotiating leverage, 8 words or fewer","The biggest risk that comes from this value-chain structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 layers: 4-6 entries. Set is_subject:true on the layer the analyzed company belongs to.
 For end-consumer/buyer layers (e.g. consumers, enterprise customers, government), set buyer:true and omit the pricing_power field.
 Only set pricing_power:"high"|"medium"|"low" on supplier, manufacturing, or distribution layers.
 value_flow/subject_position: 2-4 short bullets each, one distinct point per bullet. If a bullet draws on a source, put the [n] marker at the very end of that bullet. Any URL confirmed via web search must go in sources[].url.`,
 
   business_model_v2: `Output only a JSON object matching this schema:
-{"revenue_streams":[{"name":"Revenue stream","type":"subscription|transaction|service|license|other","description":"What this stream covers, 1 line","operating_margin":number,"growth_rate":number}],"segments":[{"name":"Segment name","characteristics":"Characteristics, 1 line"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"How growth works, 2 sentences max","unit_economics":{"gross_margin":number,"operating_margin":number,"net_margin":number,"fcf_margin":number,"nrr":number},"moat":[{"type":"Moat type","strength":"strong|medium|weak","description":"Moat description, 1 line"}],"key_bullets":["The core of this company's revenue engine — why it makes money, 8 words or fewer","The core moat holding up the business model, 8 words or fewer","A structural weakness or collapse risk in the business model, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (revenue mix, growth motion, moat, unit economics). Phrase each as something you're curious to ask, never a stated fact. Bad: "Your NRR looks soft." Good: "What's driving expansion revenue right now versus new-logo growth?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
+{"revenue_streams":[{"name":"Revenue stream","type":"subscription|transaction|service|license|other","description":"What this stream covers, 1 line","operating_margin":number,"growth_rate":number}],"segments":[{"name":"Segment name","characteristics":"Characteristics, 1 line"}],"growth_motion":"PLG|SLG|FLG|hybrid","growth_motion_detail":"How growth works, 2 sentences max","unit_economics":{"gross_margin":number,"operating_margin":number,"net_margin":number,"fcf_margin":number,"nrr":number},"moat":[{"type":"Moat type","strength":"strong|medium|weak","description":"Moat description, 1 line"}],"key_bullets":["The core of this company's revenue engine — why it makes money, 8 words or fewer","The core moat holding up the business model, 8 words or fewer","A structural weakness or collapse risk in the business model, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 Tag important facts in growth_motion_detail/moat.description with [n] source markers. Any URL confirmed via web search must go in sources[].url.
 operating_margin/growth_rate (inside revenue_streams) and unit_economics' gross_margin/operating_margin/net_margin/fcf_margin/nrr are numeric fields — return 0 if unconfirmable. Never use text like "Not disclosed"/"N/A" or a sentinel like -999 (that produces invalid JSON).
 revenue_streams.description / segments.characteristics: 1 short line on what that stream/segment actually is or does — never state, imply, or round off a revenue-share percentage or dollar figure (e.g. never write "the majority of revenue" or "a small but growing stream"). Revenue mix now lives only in the financials tab's revenue_lines section (server-computed straight from the 10-K, not you).`,
@@ -780,19 +761,16 @@ revenue_streams.description / segments.characteristics: 1 short line on what tha
 Determine the analyzed company's industry (SIC/KSIC classification) from the provided context first. industry_pain.description: 2-4 short bullets, one distinct point per bullet, describing a pain point shared across that industry broadly, not a problem unique to this one company. cross_industry_example.source_industry must differ from the analyzed company's own industry — find a company in a different industry that solved a genuinely analogous operational problem. financial_impact_question must be phrased strictly as a question — never assert a number, percentage, or dollar-figure impact as fact. Both facts need at least one real, verifiable source URL in sources[].url — a real URL is required here (unlike other sections, don't leave it null); if you can't find a real source URL for a fact, drop that fact rather than inventing a URL. Tag industry_pain bullets and the solution_description with [n] source markers (bullets: marker at the end of the bullet; solution_description: marker at the end of the sentence it supports).`,
 
   competitors_v2: `Output only a JSON object matching this schema:
-{"direct":[{"name":"Competitor name","country":"Country","market_share":"share% (estimates OK)","strengths":["Strength, 1 line, max 3 — strategy/technology/market-power focused"],"weaknesses":["Weakness, 1 line, max 2 — structural weaknesses"],"vs_subject":"1-line positioning gap vs. the analyzed company — format like 'stronger on X, weaker on Y'"}],"indirect":[{"name":"Indirect competitor","threat":"Threat, 1 line"}],"substitutes":[{"name":"Substitute","threat":"Threat, 1 line"}],"competitive_position":"leader|challenger|niche|follower","key_bullets":["This company's competitive position — where it's strongest and weakest, 8 words or fewer","The clearest strategic differentiator versus competitors, 8 words or fewer","The most threatening competitive risk — where it could get flipped, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (competitive position, direct competitors, differentiation gaps). Phrase each as something you're curious to ask, never a stated fact. Bad: "Competitor X is undercutting you on price." Good: "How are you thinking about competing on price versus X right now?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
+{"direct":[{"name":"Competitor name","country":"Country","market_share":"share% (estimates OK)","strengths":["Strength, 1 line, max 3 — strategy/technology/market-power focused"],"weaknesses":["Weakness, 1 line, max 2 — structural weaknesses"],"vs_subject":"1-line positioning gap vs. the analyzed company — format like 'stronger on X, weaker on Y'"}],"indirect":[{"name":"Indirect competitor","threat":"Threat, 1 line"}],"substitutes":[{"name":"Substitute","threat":"Threat, 1 line"}],"competitive_position":"leader|challenger|niche|follower","key_bullets":["This company's competitive position — where it's strongest and weakest, 8 words or fewer","The clearest strategic differentiator versus competitors, 8 words or fewer","The most threatening competitive risk — where it could get flipped, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 direct: 3-5 global direct competitors required. If there's no public market_share figure, give an estimate tagged "(estimated)"; use "-" only when it's genuinely unknowable. vs_subject must not be a plain list — write one specific line on the strategic positioning gap (price, channel, technology, customer base, etc.). Tag important facts in the body with [n] source markers. Any URL confirmed via web search must go in sources[].url.`,
 
   strategy_v2: `Output only a JSON object matching this schema:
-{"corporate":{"direction":"Corporate strategy, 1 line","portfolio":"Portfolio direction, 1 line","ma_partnerships":["M&A example, 1 line, max 3"],"geographic":"Geographic expansion, 1 line"},"business":{"direction":"Business strategy, 1 line","competitive_advantage":"Competitive edge, 1 line","go_to_market":"GTM strategy, 1 line","product_roadmap":["Roadmap item, 1 line, max 4"]},"financial":{"direction":"Financial strategy, 1 line","capital_allocation":"Capital allocation, 1 line","investment_priority":"Investment priority, 1 line","return_target":"Target return metric, 1 line"},"strategy_coherence":"How the 3 strategies connect, written as 2-3 short paragraphs separated by a blank line (\\n\\n) — not bullets","ten_year_durability":["10-year durability point, 1 line","2nd point, 1 line"],"key_bullets":["The core direction of corporate strategy in one line, 8 words or fewer","Business strategy — how it wins, 8 words or fewer","Financial strategy — where it's betting, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (corporate/business/financial strategy, coherence, durability). Phrase each as something you're curious to ask, never a stated fact. Bad: "You're betting heavily on geographic expansion." Good: "What's the biggest thing that has to go right for that geographic push to pay off?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.
+{"corporate":{"direction":"Corporate strategy, 1 line","portfolio":"Portfolio direction, 1 line","ma_partnerships":["M&A example, 1 line, max 3"],"geographic":"Geographic expansion, 1 line"},"business":{"direction":"Business strategy, 1 line","competitive_advantage":"Competitive edge, 1 line","go_to_market":"GTM strategy, 1 line","product_roadmap":["Roadmap item, 1 line, max 4"]},"financial":{"direction":"Financial strategy, 1 line","capital_allocation":"Capital allocation, 1 line","investment_priority":"Investment priority, 1 line","return_target":"Target return metric, 1 line"},"strategy_coherence":"How the 3 strategies connect, written as 2-3 short paragraphs separated by a blank line (\\n\\n) — not bullets","ten_year_durability":["10-year durability point, 1 line","2nd point, 1 line"],"key_bullets":["The core direction of corporate strategy in one line, 8 words or fewer","Business strategy — how it wins, 8 words or fewer","Financial strategy — where it's betting, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 strategy_coherence is the only field in this schema written as full paragraph prose — it's a narrative showing how the 3 strategy blocks above connect, so breaking it into bullets would just repeat what those blocks already say. Do NOT convert it to bullets — instead, split it into 2-3 short paragraphs separated by a blank line ("\n\n" inside the JSON string), each 2-4 sentences: paragraph 1 covers how the 3 strategy blocks connect to each other; paragraph 2 covers the financial consequence that connection produces; an optional paragraph 3 covers remaining risk or preconditions, only if there's something concrete worth flagging (omit it rather than padding). One long unbroken paragraph is no longer acceptable output for this field. Every [n] marker in it must sit at the very end of the sentence it supports — never mid-sentence; if a sentence draws on two sources, put both markers together at the end (e.g. "...as a result [1][2].").
 ten_year_durability: 2-4 short bullets, one distinct point per bullet (e.g. one bullet per structural tailwind/headwind, not a running paragraph). If a bullet draws on a source, put the [n] marker at the very end of that bullet. Any URL confirmed via web search must go in sources[].url.`,
 
   financials_v2: `Output only a JSON object matching this schema:
-{"income_statement":[{"item":"Revenue","fy2021":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2022":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'","yoy":"▲N% or ▼N% or —"},{"item":"Gross Profit","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Operating Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Net Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"Cash & Equivalents","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'"},{"item":"Total Assets","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Liabilities","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Equity","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"disclosed figure or 'Not disclosed'","investing":"disclosed figure or 'Not disclosed'","financing":"disclosed figure or 'Not disclosed'","fcf":"disclosed figure or 'figure (estimated)' or 'Not disclosed'","notes":"anything notable, or an empty string"},"key_risks":["Risk, 1 line, max 5"],"outlook":{"shortTerm":"Short-term outlook (3-6 months) — include a symbol: ○ positive / △ neutral / ▼ negative","midLongTerm":"Mid/long-term outlook (1-3 years) — include a symbol: ○ positive / △ neutral / ▼ negative","keyRisks":["Key risk, 1 line, max 3"]},"key_bullets":["The financial metric and trend most worth flagging, 8 words or fewer","Core state of profitability and cash flow, 8 words or fewer","The single biggest risk in the financial structure, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (income statement trend, cash flow, key risks, outlook). Phrase each as something you're curious to ask, never a stated fact or number. Bad: "Operating margin dropped 4 points this year." Good: "What's driving the margin compression — is it a deliberate investment phase or cost pressure?" No investor language (no valuation/P/E/ROE framing). Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one. (Note: industry-benchmark deviations are handled separately by the server after this call — don't try to reference them here.)
+{"income_statement":[{"item":"Revenue","fy2021":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2022":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'","yoy":"▲N% or ▼N% or —"},{"item":"Gross Profit","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Operating Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""},{"item":"Net Income","fy2021":"","fy2022":"","fy2023":"","fy2024":"","fy2025":"","yoy":""}],"balance_sheet":[{"item":"Cash & Equivalents","fy2023":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2024":"disclosed figure or 'Not disclosed' or 'Not applicable'","fy2025":"disclosed figure or 'figure (estimated)' or 'Not disclosed' or 'Not applicable'"},{"item":"Total Assets","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Liabilities","fy2023":"","fy2024":"","fy2025":""},{"item":"Total Equity","fy2023":"","fy2024":"","fy2025":""}],"cash_flow":{"operating":"disclosed figure or 'Not disclosed'","investing":"disclosed figure or 'Not disclosed'","financing":"disclosed figure or 'Not disclosed'","fcf":"disclosed figure or 'figure (estimated)' or 'Not disclosed'","notes":"anything notable, or an empty string"},"key_risks":["Risk, 1 line, max 5"],"outlook":{"shortTerm":"Short-term outlook (3-6 months) — include a symbol: ○ positive / △ neutral / ▼ negative","midLongTerm":"Mid/long-term outlook (1-3 years) — include a symbol: ○ positive / △ neutral / ▼ negative","keyRisks":["Key risk, 1 line, max 3"]},"key_bullets":["The financial metric and trend most worth flagging, 8 words or fewer","Core state of profitability and cash flow, 8 words or fewer","The single biggest risk in the financial structure, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"","content":"","url":""}]}
 income_statement/balance_sheet: never leave a cell blank — if there's no disclosed figure, it must be 'Not disclosed'. Exception: if the context's [Years missing from source data] section explicitly marks a given year as having no data (the source filing has no financial statement at all for that year), label that year 'Not applicable' instead of 'Not disclosed' — "Not disclosed" means "we looked but couldn't confirm it," "Not applicable" means "that year's data doesn't exist in the first place." Keep the distinction. Estimated values must always use the 'number (estimated)' format. Do not add an EBITDA row — it is intentionally excluded (D&A tagging isn't consistent enough across companies to compute it reliably). Gross Profit must be the figure as directly disclosed/tagged by the company — never derive it yourself as Revenue minus Cost of Revenue; if it isn't directly disclosed, that's 'Not disclosed' or 'Not applicable', not a calculation.
 Tag key figures with [n] source markers.
 outlook rules: base it on the financial data. No baseless optimism. shortTerm/midLongTerm must always be prefixed with a ○/△/▼ symbol.`,
@@ -1061,9 +1039,8 @@ Rules: Output pure JSON only — no markdown, no code blocks, no extra commentar
 Mark any item you can't find as "-". For a private company, research this section more deeply than the financials.`, cache_control: { type: 'ephemeral' as const } }];
 
     const schema = `Output only a JSON object matching this schema:
-{"founders":[{"name":"Name","title":"Title","education":"School or '-'","major":"Major or '-'"}],"career_trajectory":[{"period":"Period (e.g. 2018-present)","company":"Company name","role":"Title/role"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"Company name","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"Social media style, 1 line, or '-'","media_exposure":"Notable media exposure, 1 line, or '-'","blind_glassdoor":"Blind/Glassdoor reputation summary, 1 line, or '-'"},"network":{"investors":["Investor name/firm, max 5"],"advisors_board":["Advisor/board member, max 5"],"cofounders":["Co-founder name, max 5"]},"key_bullets":["This founder's core strength — why they're the right person for this business, 8 words or fewer","The most notable thing in the founder's network/track record, 8 words or fewer","Founder risk — the biggest concern, 8 words or fewer"],"discovery_questions":["Discovery-call question grounded in this section's data, 1 line","2nd question, 1 line"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
-career_trajectory: sort most recent first. Empty array [] if founding_history.previous_ventures has none. Any LinkedIn/news/Crunchbase URL confirmed via search must go in sources[].url.
-discovery_questions: 3-5 candidate discovery-call questions grounded only in this section's own data (founder background, career trajectory, founding history, network). Phrase each as something you're curious to ask, never a stated fact. Bad: "You've built and exited a company before." Good: "What are you doing differently this time based on what you learned from that exit?" No investor language. Every question's "you"/"your" must mean the company being analyzed itself — never phrase a question as if addressed to one of its customers, suppliers, or another company in its value chain. Return fewer than 3 (even an empty array) rather than inventing a weak one.`;
+{"founders":[{"name":"Name","title":"Title","education":"School or '-'","major":"Major or '-'"}],"career_trajectory":[{"period":"Period (e.g. 2018-present)","company":"Company name","role":"Title/role"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"Company name","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"Social media style, 1 line, or '-'","media_exposure":"Notable media exposure, 1 line, or '-'","blind_glassdoor":"Blind/Glassdoor reputation summary, 1 line, or '-'"},"network":{"investors":["Investor name/firm, max 5"],"advisors_board":["Advisor/board member, max 5"],"cofounders":["Co-founder name, max 5"]},"key_bullets":["This founder's core strength — why they're the right person for this business, 8 words or fewer","The most notable thing in the founder's network/track record, 8 words or fewer","Founder risk — the biggest concern, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
+career_trajectory: sort most recent first. Empty array [] if founding_history.previous_ventures has none. Any LinkedIn/news/Crunchbase URL confirmed via search must go in sources[].url.`;
 
     const raw = await runWithWebSearch(
       systemPrompt,
@@ -1565,185 +1542,3 @@ export async function generateSecBenchmarkInterpretations(
   }
 }
 
-// financials_v2.discovery_questions는 Claude가 callSection()에서 생성할 때 벤치마크
-// 편차를 아예 볼 수 없다(콘텐츠 포맷 원칙 1번 — 이 숫자는 narrative/프롬프트 컨텍스트에
-// 안 실린다, 막대비교 컴포넌트 전담). 그래서 편차를 소재로 한 질문 1개는 이 계산이 끝난
-// 뒤 여기서 별도로 만들어 analyze.ts가 financials_v2.discovery_questions 앞에 붙인다
-// (generateSecBenchmarkInterpretations와 동일한 위치·패턴, 입력도 동일).
-function benchmarkDiscoveryQuestionSystem(language: Language): string {
-  return `You are a B2B sales/BD strategist. Given a company's financial metrics that diverge from its industry's SEC-benchmark median, write exactly ONE discovery-call question an AE could ask about the single most notable deviation.
-Rules: Output pure JSON only — no markdown, no commentary. ${LANGUAGE_DIRECTIVE[language]}
-Phrase it as something you're curious to ask, never a stated fact or number. Bad: "Your operating margin is 8pt below the industry median." Good: "Is that margin gap versus peers something you're actively working to close, or is it structural?" No investor language (no valuation/P/E/ROE framing). If there are several deviating metrics, pick the single most striking one — one sharp question beats a vague composite one.`;
-}
-
-export async function generateBenchmarkDiscoveryQuestion(
-  companyName: string,
-  sicCode: string,
-  items: Array<{ label: string; unit: string; companyValue: number; median: number; n: number }>,
-  language: Language = 'en',
-): Promise<string | null> {
-  if (items.length === 0) return null;
-  const lines = items.map((it, i) =>
-    `${i + 1}. ${it.label}: this company ${it.companyValue.toFixed(it.unit === 'x' ? 2 : 1)}${it.unit} vs. ` +
-    `SIC ${sicCode} industry median ${it.median.toFixed(it.unit === 'x' ? 2 : 1)}${it.unit} (n=${it.n})`,
-  ).join('\n');
-  const userPrompt = `Company: ${companyName}\n${lines}\n\nOutput only a JSON object matching this schema: {"question":"The single discovery-call question"}`;
-
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
-      max_tokens: 300,
-      system: benchmarkDiscoveryQuestionSystem(language),
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-    logCacheUsage('benchmark_discovery_question', response.usage);
-    const raw = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-    const parsed = extractJson<{ question?: string }>(raw, 'benchmark_discovery_question');
-    const q = parsed?.question?.trim();
-    return q || null;
-  } catch (err) {
-    console.error('[claude] benchmark_discovery_question FAIL', err);
-    return null;
-  }
-}
-
-// ── ICP 인사이트 탭: discovery_questions 큐레이션 (2026-08-15) ─────────────────
-// 5카테고리 신호별 insight+consequence 합성(2026-08-13 설계) 대신, 이미 9개 섹션이
-// 자체적으로 생성해둔 discovery_questions 후보 풀(discoveryQuestions.ts,
-// collectDiscoveryQuestionCandidates)에서 이 유저의 ICP와 관련도 높은 3-5개를
-// 선별·재구성만 한다 — 카테고리별 함의를 매번 새로 합성하지 않으므로 "사실이 아니라
-// 결과"라는 품질 기준은 이미 1단계(섹션 프롬프트)에서 강제됐고, 여기서는 선택과
-// ICP 맞춤 문구 조정만 담당한다.
-//
-// 근거 추적: 후보마다 id를 매겨 넘기고, Claude에게 "그 id들 중에서 골라(문구는 재구성
-// 가능)"라고만 시킨다 — 반환된 id가 후보 풀에 실제로 있는지 서버가 다시 검증하므로,
-// Claude가 새 id를 지어내거나 원본에 없는 질문을 끼워 넣을 방법이 없다(원본 섹션 데이터
-// 근거를 벗어나지 않을 것 원칙의 서버측 강제). ICP가 전부 비어있을 때는 이 호출 자체를
-// 생략하고 discoveryQuestions.ts의 pickDefaultDiscoveryQuestions()가 결정론적으로
-// 선택한다(불필요한 Claude 호출 방지).
-
-function discoveryQuestionCurationSystem(language: Language): string {
-  return `You are a B2B sales/BD strategist selecting discovery-call questions for someone about to research or meet this company, tailored to the stated purpose of their analysis.
-Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. ${LANGUAGE_DIRECTIVE[language]}
-
-[Task]
-You're given a numbered pool of candidate questions grouped by originating section (each already grounded in this company's actual analysis data — no candidate is speculative, that filtering already happened upstream). For EACH section that has at least one candidate, select up to 3-5 of that section's candidates most relevant to the reader's stated purpose (fewer than 3 only if that section itself has fewer than 3, or none if none of that section's candidates fit the purpose at all). Do not impose any cap across the whole pool — the total return size should scale with however many sections have relevant candidates.
-
-[Rephrasing — optional, must stay grounded]
-You may lightly rephrase a candidate's wording to sharpen it for this specific purpose (e.g. naming the reader's stated angle instead of a generic phrase) — but the question must still be answerable from the same underlying fact as the original candidate. Never introduce a new fact, number, or claim that wasn't in the original candidate. If a candidate is already sharp as-is, return it unchanged.
-
-[Purpose-aware framing]
-If purpose_detail is marked "(not provided)", rely on purpose_category alone (it is always provided) — never invent purpose details the reader didn't give you.
-
-[Question form — non-negotiable]
-Every returned question must be phrased as something you'd ask the company, not a statement of fact you already know. No investor language (valuation/P/E/ROE/stock price).
-
-[Rationale — sharp vs. generic insight principle]
-For each selected item, also write a 1-sentence "rationale" explaining WHY this question follows — name 1-2 specific source_facts (verbatim or lightly paraphrased, from the "source_facts" list for that candidate) and connect them to the stated purpose. This is not a restatement of the question — it's the evidence trail a reader would want before asking it (e.g. "$7B capex announcement + a recent regen-medicine acquisition together suggest a shift in R&D priorities"). Never cite a fact that isn't in that candidate's source_facts. If a candidate has no source_facts at all, omit "rationale" for that item rather than inventing one.
-
-[Selection]
-Return up to 3-5 items per originating section (never more than 5 from any single section), ordered by relevance to this purpose within each section. Always return each item's original "id" copied verbatim from the candidate pool — never invent a new id.`;
-}
-
-export interface CuratedDiscoveryQuestion {
-  id: number;
-  question: string;
-  rationale?: string;
-}
-
-export async function curateDiscoveryQuestions(
-  companyName: string,
-  candidates: DiscoveryQuestionCandidate[],
-  purpose: { category: string | null; detail: string | null },
-  language: Language = 'en',
-): Promise<CuratedDiscoveryQuestion[] | null> {
-  if (candidates.length === 0) return [];
-  const t0 = Date.now();
-
-  const purposeLines = [
-    `purpose_category: ${purpose.category || '(not provided)'}`,
-    `purpose_detail: ${purpose.detail || '(not provided)'}`,
-  ].join('\n');
-
-  // source_facts: 각 후보가 discovery_questions 생성 당시 근거로 삼았던 그 섹션의 출처
-  // 스니펫(SectionSource.content, 이미 있는 필드) — rationale이 이 중 1-2개를 구체적으로
-  // 인용하도록 근거 자료로 넘긴다(2026-08-17 신규, 없는 사실 지어내기 방지).
-  const candidatesJson = JSON.stringify(
-    candidates.map(c => ({ id: c.id, section: c.section, question: c.question, source_facts: c.sources.map(s => s.content) })),
-    null, 2,
-  );
-
-  const schema = `Output only a JSON object matching this schema:
-{"selected":[{"id":<candidate id, copied verbatim from the pool below>,"question":"The question — the original wording, or lightly rephrased for this purpose","rationale":"1 sentence citing 1-2 source_facts — omit this key if that candidate has no source_facts"}]}
-Up to 3-5 items per originating section (see [Selection] above) — do not cap the total across sections.`;
-
-  const userMessage = `Company: ${companyName}
-
-[Analysis purpose]
-${purposeLines}
-
-[Candidate questions — id, originating section, question text, source_facts]
-${candidatesJson}
-
----
-
-${schema}`;
-
-  // 1회 재시도(2026-08-15) — Ford value_chain_v2와 같은 계열의 간헐적·비결정적 Claude
-  // Sonnet 5 JSON 파싱 실패(재현 시도 8/8 성공 확인, 매 실행이 완전히 독립적)라는 게
-  // 밝혀져서, 같은 프롬프트를 한 번 더 시도하면 통과할 가능성이 높다고 판단했다. 이 함수
-  // 하나에만 우선 적용 — 8개 배치 섹션 전체(callSection())로 확대할지는 이 케이스의
-  // 효과를 지켜본 뒤 별도 결정(CLAUDE.md "모델 티어링"/Quality Gate 원칙 섹션 참고).
-  // withTimeout(analyze.ts, DISCOVERY_QUESTION_TIMEOUT)이 재시도 포함 전체를 감싸므로
-  // 여기서 별도 타임아웃을 두지 않는다 — 대신 그 상수를 60s→90s로 올려 2회 시도分 여유를
-  // 확보했다(실측 24개 후보 기준 회당 11~17s, 최악의 경우를 감안해도 90s면 충분).
-  const MAX_ATTEMPTS = 2;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-5',
-        // 2026-08-17: 섹션별 캡 전환(최대 9섹션×5개≈45개) + 항목마다 rationale 1문장이
-        // 추가되면서 출력이 한층 더 커짐 — 4000→6000으로 재상향.
-        max_tokens: 6000,
-        system: [{ type: 'text', text: discoveryQuestionCurationSystem(language), cache_control: { type: 'ephemeral' } }] as any,
-        messages: [{ role: 'user', content: userMessage }],
-      });
-      logCacheUsage('discovery_question_curation', response.usage);
-      const raw = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-        .map(b => b.text)
-        .join('');
-      const parsed = extractJson<{ selected: Array<{ id: number; question: string; rationale?: string }> }>(raw, 'discovery_question_curation');
-      if (!parsed?.selected || !Array.isArray(parsed.selected)) {
-        console.error(`[claude] discovery_question_curation FAIL (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms — no selected array in response`);
-        if (attempt < MAX_ATTEMPTS) continue;
-        return null;
-      }
-
-      // 근거 검증: 실제로 넘긴 candidate id만 통과 — 지어낸 id나 근거 없는 항목은 버린다.
-      // 전체 총량 슬라이스는 걸지 않는다 — 섹션별 방어적 상한(capPerSection, PER_SECTION_MAX=5)만
-      // 적용해 프롬프트가 어겨도 한 섹션이 결과를 과점하지 않게만 막는다(2026-08-17, 전체
-      // 5개 캡이 섹션별 3-5개 설계를 최종 노출 단계에서 뭉개던 문제 수정).
-      const validIds = new Map(candidates.map(c => [c.id, c.section]));
-      const filtered = parsed.selected
-        .filter(item => typeof item.id === 'number' && validIds.has(item.id) && typeof item.question === 'string' && item.question.trim())
-        .map(item => ({
-          id: item.id, question: item.question.trim(), section: validIds.get(item.id)!,
-          rationale: typeof item.rationale === 'string' && item.rationale.trim() ? item.rationale.trim() : undefined,
-        }));
-      const result: CuratedDiscoveryQuestion[] = capPerSection(filtered)
-        .map(({ id, question, rationale }) => ({ id, question, rationale }));
-
-      console.log(`[claude] discovery_question_curation OK (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms (${result.length}/${candidates.length} candidates selected)`);
-      return result;
-    } catch (err) {
-      console.error(`[claude] discovery_question_curation FAIL (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms`, err);
-      if (attempt < MAX_ATTEMPTS) continue;
-      return null;
-    }
-  }
-  return null;
-}

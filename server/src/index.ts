@@ -6,8 +6,8 @@ import analysesRouter from './routes/analyses';
 import companiesRouter from './routes/companies';
 import shareRouter from './routes/share';
 import profileRouter from './routes/profile';
-import icpInsightsRouter from './routes/icpInsights';
 import industriesRouter from './routes/industries';
+import benRouter from './routes/ben';
 import { APP_ENV } from './lib/env';
 
 dotenv.config();
@@ -37,7 +37,7 @@ app.use('/api/analyses', analysesRouter);
 app.use('/api/companies', companiesRouter);
 app.use('/api/share', shareRouter);
 app.use('/api/profile', profileRouter);
-app.use('/api/icp-insights', icpInsightsRouter);
 app.use('/api/industries', industriesRouter);
+app.use('/api/analyses', benRouter);
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT} (APP_ENV=${APP_ENV})`));

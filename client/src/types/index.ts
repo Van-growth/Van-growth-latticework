@@ -189,7 +189,6 @@ export interface SummaryV2 {
   bull_case: string[];
   bear_case: string[];
   oneLiner: string;
-  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -206,7 +205,6 @@ export interface IndustryHistoryV2 {
   why_durable: string[];
   chasm_points: string[];
   key_bullets?: string[];
-  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -224,7 +222,6 @@ export interface TechEvolutionV2 {
   current_stage: { label: string; detail: string };
   next_inflection: { label: string; detail: string };
   key_bullets?: string[];
-  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -250,7 +247,6 @@ export interface ValueChainV2 {
   value_flow: string[];
   subject_position: string[];
   key_bullets?: string[];
-  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -289,7 +285,6 @@ export interface BusinessModelV2 {
   };
   moat: MoatV2[];
   key_bullets?: string[];
-  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -325,7 +320,6 @@ export interface CompetitorsV2 {
   substitutes: { name: string; threat: string }[];
   competitive_position: 'leader' | 'challenger' | 'niche' | 'follower';
   key_bullets?: string[];
-  discovery_questions?: string[];
   sources?: Source[];
   // EDGAR 기업 전용 — industryBenchmarkService가 순수 계산 후 병합(Claude 미생성)
   revenue_ranking?: CompetitorRevenueRanking | null;
@@ -368,7 +362,6 @@ export interface StrategyV2 {
   strategy_coherence: string;
   ten_year_durability: string[];
   key_bullets?: string[];
-  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -406,7 +399,6 @@ export interface FinancialsV2 {
     keyRisks: string[];
   };
   key_bullets?: string[];
-  discovery_questions?: string[];
   sources?: Source[];
   // EDGAR 기업 전용 — industryBenchmarkService가 순수 계산 후 병합(Claude 미생성)
   industry_benchmark?: IndustryBenchmarkResult | null;
@@ -483,7 +475,6 @@ export interface FounderV2 {
     cofounders: string[];
   };
   key_bullets: string[];
-  discovery_questions?: string[];
   sources?: Source[];
 }
 
@@ -531,30 +522,6 @@ export interface UserProfile {
   icp_target_industry: string | null;
   icp_target_role: string | null;
   nickname: string | null;
-}
-
-// ICP 맞춤형 인사이트 탭 — POST /api/analyze/:id/icp-insight 응답 (2026-08-15 개편:
-// 5카테고리 insight+consequence 대신 9개 섹션의 discovery_questions 후보 풀에서 선별한
-// 3-5개 질문 리스트). section은 근거 섹션 키(summary_v2 등, 또는 cross_industry_nudge_v1) —
-// UI가 어느 섹션 데이터에서 나온 질문인지 짧게 라벨링할 때 쓴다.
-export interface DiscoveryQuestionItem {
-  question: string;
-  section: string;
-  sources: Source[];
-  // "왜 이 질문이 나왔는지" 1문장 근거(2026-08-17) — purpose 미입력(결정론적 선택) 경로는
-  // Claude를 호출하지 않아 이 필드가 없다, 있으면만 렌더링.
-  rationale?: string;
-}
-
-export interface IcpInsightResponse {
-  id: string;
-  content: { questions: DiscoveryQuestionItem[] };
-  created_at: string;
-  cached: boolean;
-  // 별점/코멘트 — POST /api/icp-insights/:id/rate로 저장되고, 이 응답(신규 생성/캐시
-  // 히트 둘 다)에 실려 온다. 탭 재진입 시 이미 평가했는지 복원하는 용도(2026-08-15).
-  rating?: number | null;
-  rating_comment?: string | null;
 }
 
 export interface CompanyListing {
@@ -618,13 +585,6 @@ export interface AnalysisDetail {
   is_shared?: boolean;
   share_token?: string | null;
   valuechainPlayers: ValueChainPlayer[];
-  // 공유 뷰 전용(GET /api/share/:token만 채움, GET /api/analyses/:id는 이 키 자체를 안 보냄) —
-  // 소유자가 직접 생성한 discovery_questions만, ICP 원문(icp_product 등)은 서버가 절대 포함
-  // 안 함(2026-08-15). 소유자가 ICP 탭을 생성한 적 없으면 null.
-  icpDiscoveryQuestions?: DiscoveryQuestionItem[] | null;
-  // 소유자 표시 라벨 — profiles.nickname 미입력이면 null(이메일은 어떤 형태로도 노출 안 함,
-  // 이 경우 프론트가 일반 문구로 대체).
-  icpOwnerLabel?: string | null;
 }
 
 export interface AnalyzeResponse extends AnalysisDetail {

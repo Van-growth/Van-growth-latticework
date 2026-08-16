@@ -624,16 +624,6 @@ function CoverPage({ data, shareUrl, language, t }: { data: AnalysisDetail; shar
         <Text style={s.coverMeta}>{t('밸류체인 위치', 'Value Chain Position')}: {v2.value_chain_position}</Text>
       )}
       <Text style={s.coverMeta}>{t('분석 일자', 'Analysis Date')}: {date}</Text>
-      {/* ICP 인사이트 탭 결과가 있을 때만(소유자가 직접 생성한 경우) 헤더 문구 한 줄만 추가 —
-          ICP 원문(제품/타겟산업/타겟직무)이나 discovery_questions 목록 자체는 PDF에 넣지 않는다
-          (2026-08-15, 공유 링크와 달리 PDF는 문구만 유지하기로 결정). */}
-      {data.icpDiscoveryQuestions && data.icpDiscoveryQuestions.length > 0 && (
-        <Text style={s.coverMeta}>
-          {data.icpOwnerLabel
-            ? t(`이 분석은 ${data.icpOwnerLabel}님의 ICP 기준으로 생성됨`, `Generated based on ${data.icpOwnerLabel}'s ICP`)
-            : t('이 분석은 작성자의 ICP 기준으로 생성됨', "Generated based on the author's ICP")}
-        </Text>
-      )}
       {v2?.oneLiner && (
         <>
           <Divider />

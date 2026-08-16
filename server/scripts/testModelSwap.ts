@@ -1,7 +1,6 @@
 // claude-sonnet-4-6 → claude-sonnet-5 전환(2026-08-15) 실측 검증용 임시 스크립트 —
 // 확인 후 삭제 예정. 골든셋 기업 1개로 analyzeCompany() 전체를 실제로 돌려 새 모델로
-// 정상 동작하는지 확인한다 (에러 없이 9개 섹션이 채워지는지, discovery_questions도
-// 정상 생성되는지 부가 확인).
+// 정상 동작하는지 확인한다 (에러 없이 9개 섹션이 채워지는지 확인).
 // 실행: npx ts-node server/scripts/testModelSwap.ts
 import * as dotenv from 'dotenv';
 import * as path from 'path';
@@ -37,9 +36,6 @@ async function main() {
 
   console.log('\n===== summary_v2.oneLiner =====');
   console.log(analysis.summary_v2?.oneLiner || '(none)');
-
-  console.log('\n===== summary_v2.discovery_questions =====');
-  (analysis.summary_v2?.discovery_questions ?? []).forEach((q, i) => console.log(`  ${i + 1}. ${q}`));
 
   console.log('\n===== financials_v2.income_statement (연도/매출만) =====');
   console.log(JSON.stringify(analysis.financials_v2?.income_statement?.[0], null, 2));

@@ -141,7 +141,6 @@ interface UiStringDict {
     cross_industry_nudge: { label: string; tooltip: string };
     industry_history: { label: string; tooltip: string };
     tech_evolution: { label: string; tooltip: string };
-    icp_insight: { label: string; tooltip: string };
   };
   actions: {
     reanalyzeSection: string;
@@ -161,27 +160,21 @@ interface UiStringDict {
     thisCompany: string;
     industryMedian: string;
   };
-  icpInsight: {
-    generateButton: string;
-    regenerateButton: string;
-    generatedAgo: (days: number) => string;
-    loading: string;
-    failed: string;
-    noSignals: string;
-    questionsTitle: string;
-    sectionLabel: Record<string, string>;
-    ratingPrompt: string;
-    ratingCommentPlaceholder: string;
-    ratingSubmit: string;
-    ratingSubmitted: string;
-    ratingFailed: string;
-    // 공유 뷰(읽기 전용) 전용 — 소유자 표시 라벨/빈 상태. 별점 위젯은 공유 뷰에서 아예 숨김.
-    ownerLabelNamed: (name: string) => string;
-    ownerLabelGeneric: string;
-    sharedEmpty: string;
-    // 분석이 아직 스트리밍 중(analysisId가 빈 문자열)이라 생성 자체를 시도할 수 없을 때 —
-    // 생성 버튼 대신 이 안내만 표시(2026-08-16, Northwell Health 404 조사 계기).
-    notYetAvailable: string;
+  ben: {
+    panelTitle: string;
+    emptyState: string;
+    placeholder: string;
+    quickQuestions: string[];
+    mungerPromptLabel: string;
+    mungerPrompt: string;
+    resetButton: string;
+    signInToChat: string;
+    rateLimited: (usedCount: number, limit: number) => string;
+    genericError: string;
+    widthDefault: string;
+    widthWide: string;
+    openAria: string;
+    hint: string;
   };
   profileForm: {
     companyName: string;
@@ -343,7 +336,6 @@ const ko: UiStringDict = {
     cross_industry_nudge: { label: '넛지',         tooltip: '이 업종의 공통 pain과 타산업 해결 사례를 확인할 수 있어요' },
     industry_history:     { label: '산업역사',     tooltip: '이 산업이 어떻게 발전해왔는지 확인할 수 있어요' },
     tech_evolution:       { label: '기술변화',     tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
-    icp_insight:          { label: 'ICP 인사이트', tooltip: '내 ICP 기준으로 이 회사와 관련해 무엇이 중요한지 확인할 수 있어요' },
   },
   actions: {
     reanalyzeSection: '↻ 이 섹션 다시 분석',
@@ -361,35 +353,29 @@ const ko: UiStringDict = {
     thisCompany: '이 회사',
     industryMedian: '업종 중앙값',
   },
-  icpInsight: {
-    generateButton: 'ICP 인사이트 생성하기',
-    regenerateButton: '↻ 다시 생성',
-    generatedAgo: (days: number) => (days === 0 ? '이 ICP로 오늘 생성됨' : `이 ICP로 ${days}일 전 생성됨`),
-    loading: 'ICP 인사이트를 생성하고 있어요...',
-    failed: '인사이트 생성에 실패했어요. 잠시 후 다시 시도해주세요.',
-    noSignals: '지금은 참고할 만한 신호가 부족해요. 분석이 더 진행되면 다시 시도해보세요.',
-    questionsTitle: '디스커버리 질문',
-    sectionLabel: {
-      summary_v2: '요약',
-      financials_v2: '재무',
-      business_model_v2: '비즈니스모델',
-      competitors_v2: '경쟁사',
-      value_chain_v2: '밸류체인',
-      strategy_v2: '전략',
-      industry_history_v2: '산업역사',
-      tech_evolution_v2: '기술변화',
-      founder_v2: '창업자',
-      cross_industry_nudge_v1: '넛지',
-    },
-    ratingPrompt: '이 인사이트, 도움이 됐나요?',
-    ratingCommentPlaceholder: '왜 별로였나요? (선택)',
-    ratingSubmit: '제출',
-    ratingSubmitted: '평가해주셔서 감사합니다',
-    ratingFailed: '평가 저장에 실패했어요. 다시 시도해주세요.',
-    ownerLabelNamed: (name: string) => `이 분석은 ${name}님의 ICP 기준으로 생성됨`,
-    ownerLabelGeneric: '이 분석은 작성자의 ICP 기준으로 생성됨',
-    sharedEmpty: '이 공유 링크에는 아직 생성된 디스커버리 질문이 없어요.',
-    notYetAvailable: '분석이 완료되면 이용할 수 있어요. 다른 탭이 채워지는 걸 지켜봐 주세요.',
+  ben: {
+    panelTitle: 'Ben',
+    emptyState: '기업을 먼저 분석해주세요. 분석이 끝나면 이 리포트를 바탕으로 질문할 수 있어요.',
+    placeholder: '질문을 입력하세요...',
+    quickQuestions: ['핵심 리스크 요약', '경쟁사 대비 포지션', '이 회사에 대해 더 알아야 할 게 있을까요?'],
+    mungerPromptLabel: '멍거 체크리스트',
+    mungerPrompt: `찰리 멍거 관점에서 이 기업을 체크리스트로 평가해줘. 아래 5개 프레임 각각에 대해 현재 분석 데이터 기반으로 간결하게 답해줘:
+
+1. 비즈니스 퀄리티: 진입장벽 / Pricing power / 10년 내구성
+2. 해자(Moat): 전환비용 / 규모의 경제 / 네트워크 효과
+3. 경영진: 자본배분 / 가이던스 실행력 / SBC 수준
+4. 재무: ROE·ROIC vs 자본비용 / FCF vs 순이익 괴리 / 부채 안전성
+5. 밸류에이션: 현재 가격에 반영된 성장 가정 / 최악 시나리오 손실 / 5년 후 이 가격이 싸 보일 조건
+
+각 항목은 ✅ 양호 / ⚠️ 주의 / ❌ 취약 으로 시작하고 한 줄 근거를 붙여줘.`,
+    resetButton: '대화 초기화',
+    signInToChat: '로그인 후 Ben과 대화할 수 있어요.',
+    rateLimited: (usedCount: number, limit: number) => `오늘 사용 가능한 메시지(${limit}개)를 모두 사용했어요 (${usedCount}/${limit}). 내일 다시 시도해주세요.`,
+    genericError: '오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+    widthDefault: '기본',
+    widthWide: '넓게',
+    openAria: 'Ben 열기',
+    hint: '이 분석 결과를 기반으로 질문해보세요.',
   },
   profileForm: {
     companyName: '회사명',
@@ -551,7 +537,6 @@ const en: UiStringDict = {
     cross_industry_nudge:  { label: 'Nudge',           tooltip: 'See a common pain point in this industry and how another industry solved it' },
     industry_history:      { label: 'Industry History', tooltip: 'See how this industry has evolved over time' },
     tech_evolution:        { label: 'Tech Evolution',  tooltip: 'See current tech trends and where they’re headed' },
-    icp_insight:           { label: 'ICP Insight',     tooltip: "See what matters about this company for your ICP" },
   },
   actions: {
     reanalyzeSection: '↻ Re-analyze this section',
@@ -569,35 +554,29 @@ const en: UiStringDict = {
     thisCompany: 'This company',
     industryMedian: 'Industry median',
   },
-  icpInsight: {
-    generateButton: 'Generate ICP insight',
-    regenerateButton: '↻ Regenerate',
-    generatedAgo: (days: number) => (days === 0 ? 'Generated today for this ICP' : `Generated ${days} day${days === 1 ? '' : 's'} ago for this ICP`),
-    loading: 'Generating your ICP insight...',
-    failed: 'Failed to generate insight. Please try again shortly.',
-    noSignals: "There isn't enough signal to work with yet. Try again once the analysis has progressed further.",
-    questionsTitle: 'Discovery questions',
-    sectionLabel: {
-      summary_v2: 'Summary',
-      financials_v2: 'Financials',
-      business_model_v2: 'Business Model',
-      competitors_v2: 'Competitors',
-      value_chain_v2: 'Value Chain',
-      strategy_v2: 'Strategy',
-      industry_history_v2: 'Industry History',
-      tech_evolution_v2: 'Tech Evolution',
-      founder_v2: 'Founder',
-      cross_industry_nudge_v1: 'Nudge',
-    },
-    ratingPrompt: 'Was this insight helpful?',
-    ratingCommentPlaceholder: "What didn't work? (optional)",
-    ratingSubmit: 'Submit',
-    ratingSubmitted: 'Thanks for the feedback',
-    ratingFailed: 'Failed to save your feedback. Please try again.',
-    ownerLabelNamed: (name: string) => `This analysis was generated based on ${name}'s ICP`,
-    ownerLabelGeneric: "This analysis was generated based on the author's ICP",
-    sharedEmpty: 'No discovery questions have been generated for this shared report yet.',
-    notYetAvailable: "This will be available once the analysis finishes. Watch the other tabs fill in.",
+  ben: {
+    panelTitle: 'Ben',
+    emptyState: 'Analyze a company first. Once it finishes, you can ask questions grounded in this report.',
+    placeholder: 'Ask a question...',
+    quickQuestions: ['Summarize the core risks', 'How does this stack up against competitors?', 'What else should I know about this company?'],
+    mungerPromptLabel: 'Munger checklist',
+    mungerPrompt: `Evaluate this company as a checklist from Charlie Munger's perspective. Answer each of the 5 frames below concisely based on the current analysis data:
+
+1. Business quality: barriers to entry / pricing power / 10-year durability
+2. Moat: switching costs / economies of scale / network effects
+3. Management: capital allocation / guidance execution / SBC levels
+4. Financials: ROE/ROIC vs. cost of capital / FCF vs. net income gap / debt safety
+5. Valuation: growth assumptions priced in today / worst-case downside / conditions under which this price looks cheap in 5 years
+
+Start each item with ✅ Good / ⚠️ Caution / ❌ Weak, followed by a one-line rationale.`,
+    resetButton: 'Reset chat',
+    signInToChat: 'Sign in to chat with Ben.',
+    rateLimited: (usedCount: number, limit: number) => `You've used all ${limit} messages available today (${usedCount}/${limit}). Please try again tomorrow.`,
+    genericError: 'Something went wrong. Please try again shortly.',
+    widthDefault: 'Default',
+    widthWide: 'Wide',
+    openAria: 'Open Ben',
+    hint: 'Ask questions grounded in this report.',
   },
   profileForm: {
     companyName: 'Company name',

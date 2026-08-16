@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, memo, useCallback, useMemo, useTransition, Dispatch, SetStateAction } from 'react';
+import { useState, useEffect, memo, useCallback, useMemo, useTransition } from 'react';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { buildAuthHeaders } from '@/lib/authHeaders';
 import { trackEvent } from '@/lib/analytics';
 import dynamic from 'next/dynamic';
-import type { Session } from '@supabase/supabase-js';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
@@ -41,8 +40,6 @@ import {
   FounderV2,
   GrowthScenarioV2,
   SecBenchmarkComparison,
-  IcpInsightResponse,
-  DiscoveryQuestionItem,
 } from '@/types';
 import { isPlaceholder, countFinancialsReliability, getFinancialYearCols } from '@/lib/financialsReliability';
 import { useLanguage } from '@/app/context/LanguageContext';
@@ -1500,274 +1497,6 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
   );
 });
 
-// ── ICP 맞춤형 인사이트 (2026-08-13, 2026-08-15 discovery_questions 개편) ─────────
-// 다른 온디맨드 탭(산업역사/기술역사)과 달리 analyses 행이 아니라 별도 icp_insights
-// 테이블 + 유저 세션에 묶인 결과라, data(AnalysisDetail)에 결과를 실어보내지 않고
-// 이 컴포넌트가 완전히 자기 상태로 API를 직접 호출한다 — 부모(AnalysisCardInner)에
-// prop을 새로 뚫지 않음. 5카테고리 insight+consequence 카드는 9개 섹션의
-// discovery_questions 후보 풀에서 선별한 3-5개 질문 리스트로 대체됐다(UI 컴포넌트는
-// 그대로 재사용 — SectionCard/SourcesList/IcpRatingWidget 신규 없음).
-
-function IcpRatingWidget({ insightId, initialRating, initialComment, uiT, onError, onRated }: {
-  insightId: string;
-  // 탭 재진입으로 이 컴포넌트가 재마운트될 때, 이미 저장된 평가를 복원하기 위한 초기값
-  // (result.rating/rating_comment에서 내려옴 — 2026-08-15). "재마운트 시 최신값을 다시
-  // 반영"은 useState(initial) 자체가 매 마운트마다 새로 읽으므로 별도 useEffect 불필요.
-  initialRating: number | null;
-  initialComment: string | null;
-  uiT: ReturnType<typeof getUiStrings>;
-  // 실패를 조용히 삼키면 유저가 "제출됐다"고 착각한 채 넘어간다(CLAUDE.md "비동기 액션은
-  // 침묵 리턴 금지" 원칙 — pain 진단 버튼과 동일한 논리). 성공은 조용히(체크 표시로 대체)
-  // 두되, 실패했을 때만 부모(IcpInsightTab)의 토스트로 알린다.
-  onError: () => void;
-  // 제출 성공 시 부모(IcpInsightTab)가 끌어올려진 result에 반영하도록 알린다.
-  onRated: (rating: number | null, comment: string | null) => void;
-}) {
-  const [rating, setRating] = useState<number | null>(initialRating);
-  const [comment, setComment] = useState(initialComment ?? '');
-  const [submitted, setSubmitted] = useState(initialRating != null || !!initialComment);
-
-  const handleSubmit = async () => {
-    if (rating == null && !comment.trim()) return;
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-      const trimmedComment = comment.trim() || null;
-      const res = await fetch(`${apiUrl}/api/icp-insights/${insightId}/rate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating, rating_comment: trimmedComment }),
-      });
-      if (!res.ok) { onError(); return; }
-      setSubmitted(true);
-      onRated(rating, trimmedComment);
-    } catch {
-      onError();
-    }
-  };
-
-  if (submitted) {
-    return <p className="text-[11px] text-gray-400 mt-3 pt-3 border-t border-gray-100">{uiT.icpInsight.ratingSubmitted}</p>;
-  }
-
-  return (
-    <div className="mt-3 pt-3 border-t border-gray-100">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[11px] text-gray-400">{uiT.icpInsight.ratingPrompt}</span>
-        <div className="flex gap-0.5">
-          {[1, 2, 3, 4, 5].map(n => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setRating(n)}
-              aria-label={`${n}`}
-              className={`text-sm leading-none ${rating != null && n <= rating ? 'text-amber-400' : 'text-gray-200 hover:text-amber-200'}`}
-            >
-              ★
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={comment}
-          onChange={e => setComment(e.target.value)}
-          placeholder={uiT.icpInsight.ratingCommentPlaceholder}
-          className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-navy-400"
-        />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={rating == null && !comment.trim()}
-          className="text-xs font-medium text-navy-500 hover:text-navy-700 disabled:opacity-40 disabled:cursor-not-allowed px-2"
-        >
-          {uiT.icpInsight.ratingSubmit}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT, result, setResult, status, setStatus }: {
-  analysisId: string;
-  companyName: string;
-  session: Session | null;
-  signInWithGoogle: () => Promise<void>;
-  uiT: ReturnType<typeof getUiStrings>;
-  // 결과/상태는 AnalysisCardInner에 끌어올려져 있다 — 탭 전환으로 이 컴포넌트가
-  // 언마운트/재마운트돼도 값이 유지되도록. 2026-08-15.
-  result: IcpInsightResponse | null;
-  setResult: Dispatch<SetStateAction<IcpInsightResponse | null>>;
-  status: 'idle' | 'loading' | 'error';
-  setStatus: Dispatch<SetStateAction<'idle' | 'loading' | 'error'>>;
-}) {
-  // 별점/코멘트 제출 실패 토스트 — HomeContent.tsx의 showToast와 동일한 패턴(로컬
-  // useState + setTimeout). 성공은 조용히 두고(위젯이 "감사합니다"로 대체), 실패했을
-  // 때만 띄워서 "제출됐다"는 착각을 막는다(CLAUDE.md 비동기 액션 침묵 리턴 금지 원칙).
-  const [ratingToast, setRatingToast] = useState('');
-  const showRatingErrorToast = useCallback(() => {
-    setRatingToast(uiT.icpInsight.ratingFailed);
-    setTimeout(() => setRatingToast(''), 2500);
-  }, [uiT]);
-
-  const handleGenerate = useCallback(async () => {
-    if (!session) { signInWithGoogle(); return; }
-    // analysisId는 스트리밍 도중 emptyBase(name)의 id:''로 남아있다가 'done' 이벤트가 와야
-    // 실제 id로 채워진다 — 그 전에 시도하면 POST /api/analyze//icp-insight로 나가 서버가
-    // analyses 행을 못 찾아 404를 반환한다(2026-08-16, Northwell Health 배치 2/4 실측). 버튼
-    // 자체를 숨기지만(아래 !analysisId 분기), 방어적으로 한 번 더 막는다.
-    if (!analysisId) { setStatus('error'); return; }
-    setStatus('loading');
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-      const res = await fetch(`${apiUrl}/api/analyze/${analysisId}/icp-insight`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(null, session.access_token) },
-        body: JSON.stringify({ companyName }),
-      });
-      if (!res.ok) { setStatus('error'); return; }
-      const data: IcpInsightResponse = await res.json();
-      setResult(data);
-      setStatus('idle');
-    } catch {
-      setStatus('error');
-    }
-  }, [analysisId, companyName, session, signInWithGoogle, setResult, setStatus]);
-
-  // 별점 제출 성공 시 끌어올려진 result에도 반영 — 안 그러면 "평가 → 바로 탭 전환 →
-  // 복귀" 시 result가 여전히 옛 rating(null)을 들고 있어 미평가 상태로 보인다.
-  const handleRated = useCallback((rating: number | null, comment: string | null) => {
-    setResult(prev => (prev ? { ...prev, rating, rating_comment: comment } : prev));
-  }, [setResult]);
-
-  // 분석이 아직 스트리밍 중이면 analysisId가 빈 문자열이라 생성 자체가 불가능하다 — "생성"
-  // 버튼 대신 명확한 안내만 보여준다(위 handleGenerate 주석 참고). result가 이미 있으면
-  // (드물게 이전 ICP fingerprint로 캐시된 결과) 그대로 보여주는 게 나으므로 이 분기는
-  // !result일 때만 적용.
-  if (!analysisId && !result) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-        <Lightbulb size={20} className="text-amber-400" />
-        <p className="text-sm text-gray-500 max-w-xs leading-relaxed">{uiT.icpInsight.notYetAvailable}</p>
-      </div>
-    );
-  }
-
-  if (status === 'loading') return <SectionGenerating label={uiT.tabs.icp_insight.label} suffix={uiT.actions.sectionGeneratingSuffixShort} />;
-
-  if (!result) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-        {status === 'error' && <p className="text-xs text-red-500">{uiT.icpInsight.failed}</p>}
-        <Lightbulb size={20} className="text-amber-400" />
-        <button
-          onClick={handleGenerate}
-          className="px-4 py-2 text-sm font-medium text-white bg-navy-600 hover:bg-navy-700 rounded-xl transition-colors"
-        >
-          {uiT.icpInsight.generateButton}
-        </button>
-      </div>
-    );
-  }
-
-  const questions = result.content.questions ?? [];
-  const daysAgo = Math.max(0, Math.floor((Date.now() - new Date(result.created_at).getTime()) / (1000 * 60 * 60 * 24)));
-
-  if (questions.length === 0) {
-    return <p className="text-sm text-gray-500 py-16 text-center">{uiT.icpInsight.noSignals}</p>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between text-xs text-gray-400">
-        <span>{uiT.icpInsight.generatedAgo(daysAgo)}</span>
-        <button onClick={handleGenerate} className="text-navy-500 hover:text-navy-700 font-medium">
-          {uiT.icpInsight.regenerateButton}
-        </button>
-      </div>
-
-      <SectionCard title={uiT.icpInsight.questionsTitle} dotColor="bg-amber-400">
-        <ul className="space-y-3">
-          {questions.map((item, i) => (
-            <li key={i} className="pb-3 border-b border-gray-100 last:border-0 last:pb-0">
-              {/* 근거 연결 문구(2026-08-17) — purpose 미입력 경로(rationale 없음)는 생략,
-                  질문만 그대로. sharp vs generic insight 원칙: 사실이 아니라 그 사실이
-                  만드는 함의(근거→질문 연결)를 먼저 보여준다. */}
-              {item.rationale && (
-                <p className="text-[11px] text-gray-400 italic mb-1 leading-relaxed">{item.rationale} →</p>
-              )}
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0">
-                  {uiT.icpInsight.sectionLabel[item.section] ?? item.section}
-                </span>
-                <p className="text-sm text-gray-800 leading-relaxed">{item.question}</p>
-              </div>
-              <SourcesList sources={item.sources} />
-            </li>
-          ))}
-        </ul>
-        <IcpRatingWidget
-          insightId={result.id}
-          initialRating={result.rating ?? null}
-          initialComment={result.rating_comment ?? null}
-          uiT={uiT}
-          onError={showRatingErrorToast}
-          onRated={handleRated}
-        />
-      </SectionCard>
-
-      {ratingToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
-          {ratingToast}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// 공유 링크(ShareContent.tsx) 전용 읽기 전용 버전 — IcpInsightTab과 달리 API를 직접
-// 호출하지 않는다(생성/재생성/별점 전부 없음). data.icpDiscoveryQuestions/icpOwnerLabel은
-// share.ts가 "소유자 본인이 생성한 결과"만 걸러서 미리 넣어준 값 — ICP 원문(icp_product 등)은
-// 서버 응답에 애초에 포함되지 않으므로 이 컴포넌트가 렌더링할 방법 자체가 없다.
-function SharedIcpQuestionsTab({ questions, ownerLabel, uiT }: {
-  questions: DiscoveryQuestionItem[] | null | undefined;
-  ownerLabel: string | null | undefined;
-  uiT: ReturnType<typeof getUiStrings>;
-}) {
-  if (!questions || questions.length === 0) {
-    return <p className="text-sm text-gray-500 py-16 text-center">{uiT.icpInsight.sharedEmpty}</p>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-gray-400">
-        {ownerLabel ? uiT.icpInsight.ownerLabelNamed(ownerLabel) : uiT.icpInsight.ownerLabelGeneric}
-      </p>
-      <SectionCard title={uiT.icpInsight.questionsTitle} dotColor="bg-amber-400">
-        <ul className="space-y-3">
-          {questions.map((item, i) => (
-            <li key={i} className="pb-3 border-b border-gray-100 last:border-0 last:pb-0">
-              {/* 근거 연결 문구(2026-08-17) — purpose 미입력 경로(rationale 없음)는 생략,
-                  질문만 그대로. sharp vs generic insight 원칙: 사실이 아니라 그 사실이
-                  만드는 함의(근거→질문 연결)를 먼저 보여준다. */}
-              {item.rationale && (
-                <p className="text-[11px] text-gray-400 italic mb-1 leading-relaxed">{item.rationale} →</p>
-              )}
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0">
-                  {uiT.icpInsight.sectionLabel[item.section] ?? item.section}
-                </span>
-                <p className="text-sm text-gray-800 leading-relaxed">{item.question}</p>
-              </div>
-              <SourcesList sources={item.sources} />
-            </li>
-          ))}
-        </ul>
-      </SectionCard>
-    </div>
-  );
-}
-
 // ── V2 Tab: 전략 ──────────────────────────────────────────────────────────────
 
 const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV2; sources: Source[] | undefined }) {
@@ -3125,15 +2854,6 @@ function growthScenarioToMd(g: GrowthScenarioV2): string {
   return body ? `## 성장 시나리오\n\n${body}` : '';
 }
 
-// ICP 인사이트 — 큐레이션 로직(curateDiscoveryQuestions 등)은 서버 쪽 별개 영역, 여기선
-// 이미 선별된 결과(질문+근거)를 포맷팅만 한다. isShareView/일반 뷰 어느 쪽 데이터든 동일
-// DiscoveryQuestionItem[] 셰이프라 호출부에서 소스만 갈라 넘겨주면 됨.
-function icpInsightToMd(questions: DiscoveryQuestionItem[] | undefined | null): string {
-  if (!questions?.length) return '';
-  const body = mdList(questions.map(q => q.rationale ? `${q.question} — ${q.rationale}` : q.question));
-  return `## ICP 인사이트\n\n${body}`;
-}
-
 function analysisToMd(data: AnalysisDetail): string {
   const parts: string[] = [
     `# ${data.companyName}`,
@@ -3198,7 +2918,6 @@ const TABS = [
   { key: 'cross_industry_nudge', group: 'pain',    label: '넛지',         icon: Lightbulb,  tooltip: '이 업종의 공통 pain과 타산업 해결 사례를 확인할 수 있어요' },
   { key: 'industry_history',     group: 'pain',    label: '산업역사',     icon: Clock,      tooltip: '이 산업이 어떻게 발전해왔는지 확인할 수 있어요' },
   { key: 'tech_evolution',       group: 'pain',    label: '기술변화',     icon: Zap,        tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
-  { key: 'icp_insight',          group: 'pain',    label: 'ICP 인사이트', icon: Lightbulb,  tooltip: '내 ICP 기준으로 이 회사와 관련해 무엇이 중요한지 확인할 수 있어요' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -3222,7 +2941,6 @@ const TAB_BATCH: Record<TabKey, number> = {
   growth_scenario:      6,
   industry_history:     5,
   tech_evolution:       5,
-  icp_insight:          0,
 };
 
 
@@ -3281,9 +2999,6 @@ export function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: Fina
       return !!f && !!(f.founders.length || f.career_trajectory.length || f.key_bullets?.length);
     }
     case 'growth_scenario':      return !!data.growth_scenario_v2;
-    // ICP 인사이트는 analyses 행이 아니라 별도 icp_insights 테이블/유저별 결과라
-    // 탭 체크마크의 "배치 완료" 개념이 애초에 적용되지 않는다 — 항상 미체크.
-    case 'icp_insight':          return false;
     default:                     return false;
   }
 }
@@ -3296,9 +3011,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
   isPremium?: boolean;
-  // 공유 링크 전용(ShareContent.tsx, 2026-08-15) — ICP 인사이트 탭을 인터랙티브 생성/재생성/
-  // 별점 위젯이 있는 IcpInsightTab 대신, data.icpDiscoveryQuestions(소유자가 이미 생성해둔
-  // 결과, 서버가 미리 필터링해서 줌)만 읽기 전용으로 보여주는 SharedIcpQuestionsTab로 바꾼다.
+  // 공유 링크 전용(ShareContent.tsx) — 즐겨찾기 별표 등 로그인 유저 전용 액션을 숨긴다.
   isShareView?: boolean;
 }) {
   const { user, session, signInWithGoogle } = useAuth();
@@ -3337,15 +3050,6 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
       </button>
     </div>
   ) : null;
-
-  // ICP 인사이트 결과 — IcpInsightTab은 다른 탭과 달리 데이터를 상위 data prop이 아니라
-  // 이 상태에서만 받는다. 탭 전환에도 언마운트 안 되는 여기(AnalysisCardInner)에 둔다 —
-  // IcpInsightTab 자체는 탭 전환마다 언마운트/재마운트
-  // 되지만(다른 모든 탭과 동일한 조건부 렌더링 패턴), 값 자체는 여기 살아있어 복원된다.
-  // (2026-08-15, "ICP 인사이트 탭 재진입 시 결과 소실" 버그 수정 — 원인은 컴포넌트
-  // 자체 로컬 state였고, 서버는 이미 icp_fingerprint로 정상 캐시하고 있었음.)
-  const [icpInsightResult, setIcpInsightResult] = useState<IcpInsightResponse | null>(null);
-  const [icpInsightStatus, setIcpInsightStatus] = useState<'idle' | 'loading' | 'error'>('idle');
 
   const [financialsV2Local, setFinancialsV2Local] = useState<FinancialsV2 | undefined>(data.financials_v2);
   const [refreshingFinancials, setRefreshingFinancials] = useState(false);
@@ -3652,7 +3356,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           <AllSourcesSummary data={data} uiT={uiT} />
         </ReportSection>
 
-        {/* growth_scenario/icp_insight: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 스택
+        {/* growth_scenario: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 스택
             맨 끝에 유지 — 기존 인터랙션(PRO 배지/생성 버튼) 그대로. */}
         <ReportSection id="growth_scenario" title={uiT.tabs.growth_scenario.label} icon={TrendingUp} uiT={uiT} getMarkdown={() => data.growth_scenario_v2 ? growthScenarioToMd(data.growth_scenario_v2) : ''}>
           {!isPremium ? <GrowthScenarioLocked /> :
@@ -3660,28 +3364,6 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           data.growth_scenario_v2
             ? <GrowthScenarioV2Tab g={data.growth_scenario_v2} />
             : <p className="text-sm text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>}
-        </ReportSection>
-
-        {/* ICP 인사이트: 다른 배치 섹션과 달리 analyses 행에 결과를 저장하지 않고 별도
-            icp_insights 테이블로 관리 — batchDone 게이트 없이 IcpInsightTab이 클릭→로딩→
-            결과를 전부 자체 처리한다. 결과 자체(icpInsightResult/icpInsightStatus)는
-            AnalysisCardInner에 끌어올려져 있어 재마운트돼도 복원된다. 공유 뷰(isShareView)는
-            인터랙티브 생성/재생성/별점 위젯 없이 서버가 이미 골라준 소유자의 결과만
-            읽기 전용으로 보여준다(SharedIcpQuestionsTab, 2026-08-15). */}
-        <ReportSection id="icp_insight" title={uiT.tabs.icp_insight.label} icon={Lightbulb} uiT={uiT} getMarkdown={() => icpInsightToMd(isShareView ? data.icpDiscoveryQuestions : icpInsightResult?.content.questions)}>
-          {isShareView
-            ? <SharedIcpQuestionsTab questions={data.icpDiscoveryQuestions} ownerLabel={data.icpOwnerLabel} uiT={uiT} />
-            : <IcpInsightTab
-                analysisId={data.id}
-                companyName={data.companyName}
-                session={session}
-                signInWithGoogle={signInWithGoogle}
-                uiT={uiT}
-                result={icpInsightResult}
-                setResult={setIcpInsightResult}
-                status={icpInsightStatus}
-                setStatus={setIcpInsightStatus}
-              />}
         </ReportSection>
       </div>
     </div>
