@@ -1,0 +1,326 @@
+/* "사용법" 페이지 전용 스타일 — ceo_staff_ben_guide.html 원본을 CSS Module로 스코프
+   분리해 이식(2026-08-18). 원본은 :root/body/*에 변수·리셋을 얹는 구조였는데, 이 앱의
+   전역 CSS(globals.css의 --color-navy-* 등)와 절대 충돌하지 않도록 전부 .page 아래로만
+   적용되게 바꿨다 — :root/전역 body/전역 * 선택자를 하나도 안 쓴다. 클래스명은 원본의
+   kebab-case를 camelCase로만 바꿨을 뿐 시각 디자인/구조/카피는 원본 그대로.
+
+   Noto Serif KR(제목용)은 이 앱에 없던 폰트라 신규 자체 호스팅(구글 폰트 CDN은 이 앱의
+   CSP font-src 'self' 정책에 걸려 차단됨, 기존 Noto Sans KR과 동일한 로컬 self-host
+   컨벤션을 따름) — 이 페이지에서 실제 쓰이는 문자만 골라 서브셋한 초경량 파일(700
+   weight만, ~12KB). */
+@font-face {
+  font-family: 'Noto Serif KR Guide';
+  src: url('/fonts/noto-serif-kr-700-guide.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.page {
+  --ink: #111214;
+  --navy: #132340;
+  --navy-deep: #0B1830;
+  --paper: #FFFFFF;
+  --canvas: #F6F5F2;
+  --line: #E7E5E0;
+  --line-strong: #D3D0C8;
+  --muted: #6E6C64;
+  --faint: #A6A399;
+  --success: #1F6E45;
+  --success-bg: #EAF3EC;
+  --danger: #9A3030;
+  --danger-bg: #F8EDEC;
+
+  min-height: 100vh;
+  font-family: 'Noto Sans KR', 'Noto Sans', sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+.page * {
+  box-sizing: border-box;
+}
+
+.serif {
+  font-family: 'Noto Serif KR Guide', 'Noto Serif KR', Georgia, serif;
+}
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 56px 24px 100px;
+}
+
+/* Header */
+.brandRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 48px;
+}
+.brand {
+  font-family: 'Noto Serif KR Guide', 'Noto Serif KR', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--navy-deep);
+}
+.brandTag {
+  font-size: 12px;
+  color: var(--faint);
+  letter-spacing: 0.03em;
+}
+
+/* Hero */
+.hero {
+  text-align: center;
+  margin-bottom: 56px;
+}
+.eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--navy-deep);
+  background: #EEF0F5;
+  padding: 6px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.06em;
+  margin-bottom: 16px;
+}
+.hero h1 {
+  font-family: 'Noto Serif KR Guide', 'Noto Serif KR', serif;
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+.hero p {
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 auto;
+  max-width: 480px;
+}
+
+/* Section */
+.section {
+  margin-bottom: 52px;
+}
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--navy-deep);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sectionLabel::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: var(--navy-deep);
+  border-radius: 2px;
+}
+.section h2 {
+  font-family: 'Noto Serif KR Guide', 'Noto Serif KR', serif;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 24px;
+  letter-spacing: -0.01em;
+}
+
+/* 3-step flow */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.step {
+  display: flex;
+  gap: 20px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.step:last-child {
+  border-bottom: none;
+}
+.stepNum {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--navy-deep);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Noto Serif KR Guide', 'Noto Serif KR', serif;
+  font-weight: 700;
+  font-size: 15px;
+}
+.stepBody h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 2px 0 6px;
+}
+.stepBody p {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Cards grid */
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.wide {
+  grid-column: 1 / -1;
+}
+.cardIcon {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+.card h4 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.card p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* Purpose use-case table */
+.purposeList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.purposeRow {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+.purposeTag {
+  flex-shrink: 0;
+  width: 76px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--navy-deep);
+  border-radius: 6px;
+  padding: 5px 0;
+  text-align: center;
+}
+.purposeRow p {
+  font-size: 13.5px;
+  margin: 0;
+  color: #2A2B2D;
+  line-height: 1.6;
+}
+.ex {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+
+/* Tips */
+.tipBox {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px 22px;
+}
+.tipBox ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+.tipBox li {
+  display: flex;
+  gap: 10px;
+  font-size: 13.5px;
+  color: #2A2B2D;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tipBox li:last-child {
+  border-bottom: none;
+}
+.tipBox li::before {
+  content: '—';
+  color: var(--faint);
+  flex-shrink: 0;
+}
+
+/* CTA (신규 — 하단 "지금 분석해보기" 유도) */
+.cta {
+  text-align: center;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 36px 24px;
+}
+.cta h2 {
+  font-family: 'Noto Serif KR Guide', 'Noto Serif KR', serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+.cta p {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+.ctaButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--navy-deep);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 28px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+.ctaButton:hover {
+  opacity: 0.88;
+}
+
+/* Footer note */
+.footerNote {
+  text-align: center;
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 520px) {
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+  .hero h1 {
+    font-size: 26px;
+  }
+}

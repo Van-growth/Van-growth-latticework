@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
@@ -21,28 +20,15 @@ export function GoogleIcon() {
 
 export default function Header() {
   const pathname = usePathname();
-  const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const { user, loading, signInWithGoogle } = useAuth();
   const { language } = useLanguage();
   const t = getUiStrings(language).header;
 
-  // 최상단 내비게이션 — 기업분석/산업별 보기/히스토리 3개 nav 링크 + 우측 Ben 버튼(상시) +
-  // 아바타 드롭다운(설정/로그아웃, 2026-08-18) 구조. 설정/로그아웃은 이전엔 나머지와 같은
-  // nav 링크였으나(2026-08-17 "1단 구조"), Ben 버튼 자리를 만들기 위해 아바타 클릭 시
-  // 뜨는 드롭다운으로 재배치.
+  // 최상단 내비게이션 — 기업분석/산업별 보기/히스토리/사용법 4개 nav 링크(로그인 여부
+  // 무관 항상 노출, 2026-08-18) + 우측 Ben 버튼(상시) → 아바타+이메일(표시 전용) → 설정
+  // 순서. 로그아웃은 더 이상 헤더에 없음 — 설정 페이지 안으로 이동(settings/page.tsx).
   const navLinkCls = (active: boolean) =>
     `text-sm ${active ? 'text-navy-600 font-medium' : 'text-gray-500 hover:text-gray-800'}`;
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    function onMouseDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    }
-    document.addEventListener('mousedown', onMouseDown);
-    return () => document.removeEventListener('mousedown', onMouseDown);
-  }, [menuOpen]);
 
   return (
     <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
@@ -53,22 +39,17 @@ export default function Header() {
             <Link href="/" className={navLinkCls(pathname === '/')}>{t.analysis}</Link>
             <Link href="/industries" className={navLinkCls(pathname === '/industries')}>{t.industries}</Link>
             <Link href="/history" className={navLinkCls(pathname === '/history')}>{t.history}</Link>
+            <Link href="/guide" className={navLinkCls(pathname === '/guide')}>{t.guide}</Link>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <BenLauncher />
 
           {!loading && (
             user ? (
-              <div className="relative" ref={menuRef}>
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen(v => !v)}
-                  aria-haspopup="menu"
-                  aria-expanded={menuOpen}
-                  className="flex items-center gap-2"
-                >
+              <>
+                <div className="flex items-center gap-2">
                   {user.user_metadata?.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -83,31 +64,9 @@ export default function Header() {
                     </div>
                   )}
                   <span className="text-xs text-gray-500 hidden sm:inline max-w-[160px] truncate">{user.email}</span>
-                </button>
-
-                {menuOpen && (
-                  <div role="menu" className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-20">
-                    <div className="px-3 py-2 text-xs text-gray-400 truncate border-b border-gray-100 sm:hidden">{user.email}</div>
-                    <Link
-                      href="/settings"
-                      role="menuitem"
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      {t.settings}
-                    </Link>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => { setMenuOpen(false); signOut(); }}
-                      aria-label={t.logoutAria}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      {t.logout}
-                    </button>
-                  </div>
-                )}
-              </div>
+                </div>
+                <Link href="/settings" className={navLinkCls(pathname === '/settings')}>{t.settings}</Link>
+              </>
             ) : (
               <button
                 onClick={() => signInWithGoogle()}

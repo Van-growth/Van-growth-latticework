@@ -13,9 +13,10 @@ import ProfileForm, { ProfileFormValues } from '@/app/components/profile/Profile
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export default function SettingsPage() {
-  const { user, session, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
   const t = getUiStrings(language).settings;
+  const headerT = getUiStrings(language).header;
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -101,6 +102,15 @@ export default function SettingsPage() {
               <ProfileForm initial={profile} submitting={submitting} submitLabel={t.saveLabel} onSubmit={handleSave} />
               {saved && <p className="text-xs text-success mt-3">{t.saveSuccess}</p>}
             </div>
+
+            <button
+              type="button"
+              onClick={() => signOut()}
+              aria-label={headerT.logoutAria}
+              className="w-full text-sm text-gray-500 hover:text-risk border border-gray-200 hover:border-risk-border rounded-2xl py-3 transition-colors"
+            >
+              {headerT.logout}
+            </button>
           </div>
         )}
       </div>
