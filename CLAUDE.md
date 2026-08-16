@@ -9,16 +9,30 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-18 (같은 날 세션 계속 — ICP 제거+Ben 신규에 이어 CORS 핫픽스 추가)
+**날짜**: 2026-08-18 (같은 날 세션 계속 — ICP 제거+Ben 신규 → CORS 핫픽스 → Ben 노출
+범위 버그 수정)
 **커밋**: `7b70a84`(ICP Insights 제거 + Ben 채팅 어시스턴트 신규) → `c44d434`(핸드오프
 기록) → `b6cc767`(핸드오프 push 상태 정정) → `f1851d7`(CORS 화이트리스트에
-`ceostaffben.com` 추가 핫픽스) — 전부 push 완료, `git rev-parse HEAD` == `origin/main`
-(`f1851d7`) 확인.
+`ceostaffben.com` 추가 핫픽스) → `854f7ff`(핸드오프 갱신) → `d7457eb`(Ben 패널
+전역 노출 버그 수정, 기업분석 결과 화면 전용으로 스코프 축소) — 전부 push 완료,
+`git rev-parse HEAD` == `origin/main`(`d7457eb`) 확인.
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI가 없어 확인 수단 자체가 없음
 (push는 확인됨, 실제 배포 성공 여부 + CORS 핫픽스로 사이트가 실제로 복구됐는지는
 사용자가 직접 확인 필요 — 최우선).
 
-### 완료 (이번 세션 — 커밋 `7b70a84`~`f1851d7`, push 완료)
+### 완료 (이번 세션 — 커밋 `7b70a84`~`d7457eb`, push 완료)
+- **Ben 패널 전역 노출 버그 수정**: 처음 구현 시 사용자 확인을 거쳐 "전역 노출"로
+  결정했던 걸(공유 링크 제외 전 페이지, 분석 없으면 빈 상태) 사용자가 실사용 후
+  "기업분석 결과 화면에서만 보여야 한다"로 결정 번복 — `AppShell.tsx`에서
+  `BenPanel`/폭 토글/모바일 FAB 로직을 전부 제거해 원래의 단순 `OnboardingModal`
+  래퍼로 복귀시키고, `HomeContent.tsx`의 `showResult`(=`showCard && !fetchingId`,
+  `AnalysisCard`가 실제로 렌더되는 조건과 동일) 조건 안에서만 좌(리포트)+우(Ben)
+  분할 레이아웃을 렌더하도록 이전. 리포트가 없는 화면(히스토리/산업별 보기/설정)은
+  `BenPanel`을 아예 import조차 안 하므로 구조적으로 마운트 불가능. 폭 토글
+  state/localStorage 키(`ben_panel_width`)와 모바일 FAB+슬라이드오버도 그대로
+  `HomeContent.tsx`로 이전(로직 변경 없음, 위치만 이동). 검증: tsc/eslint 클린,
+  dev 서버로 `/`·`/history`·`/industries`·`/settings` 전부 200 + 렌더된 HTML에
+  Ben 마커 없음 확인(SSR 검증 — 브라우저 자동화 도구 없어 실클릭 미검증).
 - **CORS 화이트리스트 누락 핫픽스**: 배포된 커스텀 도메인(`https://ceostaffben.com`,
   `https://www.ceostaffben.com`)이 `server/src/index.ts`의 `ALLOWED_ORIGINS`에
   없어 로그인 이후 `/api/analyze/usage`·`/api/companies/typeahead`·
