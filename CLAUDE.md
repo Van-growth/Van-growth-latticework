@@ -10,29 +10,56 @@
 > git log/커밋 메시지를 참고할 것.
 
 **날짜**: 2026-08-18 (같은 날 세션 계속 — ICP 제거+Ben 신규 → CORS 핫픽스 → Ben 노출
-범위 버그 수정)
+범위 버그 수정 → Ben 3차 재설계: 헤더 상시 버튼+오버레이)
 **커밋**: `7b70a84`(ICP Insights 제거 + Ben 채팅 어시스턴트 신규) → `c44d434`(핸드오프
 기록) → `b6cc767`(핸드오프 push 상태 정정) → `f1851d7`(CORS 화이트리스트에
 `ceostaffben.com` 추가 핫픽스) → `854f7ff`(핸드오프 갱신) → `d7457eb`(Ben 패널
-전역 노출 버그 수정, 기업분석 결과 화면 전용으로 스코프 축소) — 전부 push 완료,
-`git rev-parse HEAD` == `origin/main`(`d7457eb`) 확인.
+전역 노출 버그 수정, 기업분석 결과 화면 전용으로 스코프 축소) → `fd812c3`(핸드오프
+갱신) → `22ce2ab`(Ben 3차 재설계 — 헤더 상시 버튼+오버레이 패널) — 전부 push 완료,
+`git rev-parse HEAD` == `origin/main`(`22ce2ab`) 확인.
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI가 없어 확인 수단 자체가 없음
 (push는 확인됨, 실제 배포 성공 여부 + CORS 핫픽스로 사이트가 실제로 복구됐는지는
 사용자가 직접 확인 필요 — 최우선).
 
-### 완료 (이번 세션 — 커밋 `7b70a84`~`d7457eb`, push 완료)
-- **Ben 패널 전역 노출 버그 수정**: 처음 구현 시 사용자 확인을 거쳐 "전역 노출"로
-  결정했던 걸(공유 링크 제외 전 페이지, 분석 없으면 빈 상태) 사용자가 실사용 후
-  "기업분석 결과 화면에서만 보여야 한다"로 결정 번복 — `AppShell.tsx`에서
-  `BenPanel`/폭 토글/모바일 FAB 로직을 전부 제거해 원래의 단순 `OnboardingModal`
-  래퍼로 복귀시키고, `HomeContent.tsx`의 `showResult`(=`showCard && !fetchingId`,
-  `AnalysisCard`가 실제로 렌더되는 조건과 동일) 조건 안에서만 좌(리포트)+우(Ben)
-  분할 레이아웃을 렌더하도록 이전. 리포트가 없는 화면(히스토리/산업별 보기/설정)은
-  `BenPanel`을 아예 import조차 안 하므로 구조적으로 마운트 불가능. 폭 토글
-  state/localStorage 키(`ben_panel_width`)와 모바일 FAB+슬라이드오버도 그대로
-  `HomeContent.tsx`로 이전(로직 변경 없음, 위치만 이동). 검증: tsc/eslint 클린,
-  dev 서버로 `/`·`/history`·`/industries`·`/settings` 전부 200 + 렌더된 HTML에
-  Ben 마커 없음 확인(SSR 검증 — 브라우저 자동화 도구 없어 실클릭 미검증).
+### 완료 (이번 세션 — 커밋 `7b70a84`~`22ce2ab`, push 완료)
+- **Ben 노출 방식 3차 재설계 — 헤더 상시 버튼 + 오버레이 패널**: 직전 수정(기업분석
+  결과 화면에서만 마운트)이 리포트를 보다가 다른 페이지로 이동하면 Ben이 완전히
+  사라지는 사용성 문제로 재차 지적받아, 상단 헤더에 상시 고정된 "Ben" 버튼(클릭 시
+  우측 오버레이)으로 전환. 컨텍스트는 신규 store 없이 기존 `AnalysisContext.
+  analysisData`를 그대로 재사용(재확인 결과: 루트 레이아웃에서 한 번만 provide되고
+  라우트 전환에 언마운트 안 돼 이미 "가장 최근에 조회한 분석"으로 자연히 유지되고
+  있었음 — 5개 `setAnalysisData` 호출부 모두 확인·변경 없음, `/history`의 사전 로드
+  호출부 포함). **의도적 스코프 제한**: 스트리밍 도중(아직 완료 안 된) 분석에는
+  실시간 반영 안 됨(기존 호출부가 전 배치 완료/캐시로드/SSE done 시점에만 fire) —
+  건드리면 이 저장소에서 여러 번 버그가 난 민감한 SSE 상태 머신을 손대야 해서
+  이번 스코프 밖으로 명시.
+  - 신규 `client/src/app/components/BenLauncher.tsx`: 트리거 버튼(`useAnalysis()`로
+    `analysisData` 읽기) + 오버레이(데스크톱/모바일 구분 없이 단일 구현 —
+    `style={{width: PRESET, maxWidth:'100%'}}`로 넓은 화면은 420/640px, 좁은
+    화면은 뷰포트 폭에 자동 clamp). 폭 프리셋 `localStorage['ben_panel_width']`
+    키 재사용, 신규 i18n 문자열 불필요(`ben.panelTitle`/`ben.openAria` 기존 재사용).
+  - `Header.tsx`: 설정/로그아웃을 flat nav 링크에서 아바타 클릭 드롭다운으로 재배치
+    (이 저장소 최초의 드롭다운 UI — 기존 재사용 패턴 없어 `useState`+`useRef`+
+    `mousedown` click-outside로 신규 구현), 비는 자리에 `<BenLauncher/>` 배치 —
+    로그인 여부 무관 항상 노출(`BenPanel`/`useBenChat`가 `!session`/
+    `analysisData===null` 양쪽 다 크래시 없이 안내 문구로 degrade함을 확인).
+  - `HomeContent.tsx`: Ben 전용 state(`benWidthPreset`/`showBenMobile` 등)·마운트
+    블록 전부 제거, 레이아웃을 Ben이 추가되기 전(커밋 `fc222e2`) 구조로 완전
+    원복(`<>` Fragment + `max-w-[1600px] lg:flex` 2컬럼 래퍼 → 단일
+    `max-w-4xl` 컨테이너, Toast도 원위치로).
+  - 검증: tsc/eslint 클린(기존 경고 4건 외 신규 0), dev 서버로 `/`·`/history`·
+    `/industries`·`/settings` 전부 200 + 렌더된 HTML에 `aria-label="Open Ben"`
+    존재 확인(SSR 검증). `/share/*`는 `ShareContent.tsx`가 실제 `Header`를 아예
+    import 안 해 구조적으로 자동 제외(신규 가드 코드 없음). 실클릭(오버레이 열기/
+    닫기, 드롭다운, 페이지 전환 후 컨텍스트 유지)은 브라우저 자동화 도구 없어
+    미검증 — 배포 후 사용자 재현 테스트 필요(아래 우선순위 참고).
+- **Ben 패널 전역 노출 버그 수정**(2차 반복, 이후 3차로 대체됨 — 아래 참고): 처음 구현
+  시 사용자 확인을 거쳐 "전역 노출"로 결정했던 걸(공유 링크 제외 전 페이지, 분석
+  없으면 빈 상태) 사용자가 실사용 후 "기업분석 결과 화면에서만 보여야 한다"로 결정
+  번복 — `AppShell.tsx`에서 `BenPanel`/폭 토글/모바일 FAB 로직을 전부 제거해 원래의
+  단순 `OnboardingModal` 래퍼로 복귀시키고, `HomeContent.tsx`의 `showResult`
+  조건 안에서만 좌(리포트)+우(Ben) 분할 레이아웃을 렌더하도록 이전. **바로 위 3차
+  재설계로 이 방식 자체가 대체됨** — 이 항목은 그 사이 세션 내 변화 기록으로만 유지.
 - **CORS 화이트리스트 누락 핫픽스**: 배포된 커스텀 도메인(`https://ceostaffben.com`,
   `https://www.ceostaffben.com`)이 `server/src/index.ts`의 `ALLOWED_ORIGINS`에
   없어 로그인 이후 `/api/analyze/usage`·`/api/companies/typeahead`·
@@ -44,7 +71,6 @@
   확인. 재발 방지로 Security Principles 실전 발견 이력 18번 + "새 프로젝트/기능
   착수 시 체크리스트"에 "커스텀 도메인 추가 시 CORS 화이트리스트도 함께 갱신" 항목
   추가.
-- **ICP Insights(discovery questions 큐레이션) 완전 제거**: 서버 —
 - **ICP Insights(discovery questions 큐레이션) 완전 제거**: 서버 —
   `server/src/lib/discoveryQuestions.ts`/`server/src/routes/icpInsights.ts`/
   `server/scripts/testDiscoveryQuestions.ts` 파일 삭제, `claude.ts`의
@@ -124,9 +150,12 @@
   계열의 한도 — 9/1 이후 재검증 필요.
 
 ### 다음 세션 우선순위
-1. CORS 핫픽스(`f1851d7`) 배포 후 `ceostaffben.com`에서 로그인+히스토리/산업별
-   보기/기업분석 검색 정상 동작 재현 테스트(최우선) — 확인되면 Ben 채팅 실제
-   브라우저 검증(스트리밍/대화 복원/폭 토글/모바일 드로어/레이트리밋)으로 이어감
+1. 배포 후 `ceostaffben.com`에서 실제 브라우저로 순서대로 재현 테스트: ① 로그인+
+   히스토리/산업별 보기/기업분석 검색 정상 동작(CORS 핫픽스 확인, 최우선) → ② 헤더
+   "Ben" 버튼이 모든 페이지에서 보이는지 + 클릭 시 오버레이 열림/닫힘/바깥클릭
+   닫힘 → ③ 리포트 하나 조회 후 다른 페이지로 이동해도 Ben이 그 회사 컨텍스트를
+   유지하는지 → ④ 실제로 메시지를 보내 스트리밍 응답이 오는지(API 사용량 한도
+   9/1 이후에나 가능) → ⑤ 아바타 클릭 드롭다운(설정/로그아웃) 동작
 
 ## Vision & Mission
 
