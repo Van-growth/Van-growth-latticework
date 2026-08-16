@@ -10,11 +10,13 @@
 > git log/커밋 메시지를 참고할 것.
 
 **날짜**: 2026-08-18
-**커밋**: `7b70a84`(ICP Insights 제거 + Ben 채팅 어시스턴트 신규, 전체 코드) — 로컬 커밋만,
-push 안 함(사용자 확인 후 push 예정).
-**Render 배포**: 미확인 — 이번 세션 push 없음(로컬 커밋만).
+**커밋**: `7b70a84`(ICP Insights 제거 + Ben 채팅 어시스턴트 신규, 전체 코드) +
+`c44d434`(CLAUDE.md 세션 핸드오프) — 둘 다 push 완료, `git rev-parse HEAD` ==
+`origin/main`(`c44d434`) 확인.
+**Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI가 없어 확인 수단 자체가 없음
+(push는 확인됨, 실제 배포 성공 여부는 사용자가 대시보드에서 직접 확인 필요).
 
-### 완료 (이번 세션 — 커밋 `7b70a84`, push 전)
+### 완료 (이번 세션 — 커밋 `7b70a84`/`c44d434`, push 완료)
 - **ICP Insights(discovery questions 큐레이션) 완전 제거**: 서버 —
   `server/src/lib/discoveryQuestions.ts`/`server/src/routes/icpInsights.ts`/
   `server/scripts/testDiscoveryQuestions.ts` 파일 삭제, `claude.ts`의
@@ -84,9 +86,7 @@ push 안 함(사용자 확인 후 push 예정).
   토큰 단위 스트리밍, 새로고침 후 대화 자동 복원, 초기화 버튼, "기본"/"넓게"
   토글 및 새로고침 후 유지, 모바일 폭에서 FAB+슬라이드오버 전환, 로그아웃
   상태에서 로그인 유도, `/share/*`에서 패널 미노출, 레이트리밋 40개 초과 시
-  안내 문구 — 다음 세션(push+배포 후)
-- **커밋 push 여부 사용자 확인** — 로컬 커밋(`7b70a84`)만 되어있고 원격 미반영,
-  push 시점은 사용자 판단 — 다음 세션
+  안내 문구 — 다음 세션(Render 배포 확인 후)
 
 ### 발견 (미처리)
 - Anthropic API 계정 사용량 한도 도달 — Ben 채팅 라이브 검증 중
@@ -96,8 +96,8 @@ push 안 함(사용자 확인 후 push 예정).
   계열의 한도 — 9/1 이후 재검증 필요.
 
 ### 다음 세션 우선순위
-1. 커밋 `7b70a84` push 여부 확인 → push 시 Render 배포 확인 → Ben 채팅 실제
-   브라우저 검증(스트리밍/대화 복원/폭 토글/모바일 드로어/레이트리밋)
+1. Render 배포 성공 여부 사용자 확인 후 Ben 채팅 실제 브라우저 검증(스트리밍/
+   대화 복원/폭 토글/모바일 드로어/레이트리밋)
 
 ## Vision & Mission
 
