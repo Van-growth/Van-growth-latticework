@@ -6,7 +6,6 @@ import { useAuth } from '@/app/context/AuthContext';
 import { buildAuthHeaders } from '@/lib/authHeaders';
 import { trackEvent } from '@/lib/analytics';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
@@ -42,7 +41,6 @@ import {
   FounderV2,
   GrowthScenarioV2,
   SecBenchmarkComparison,
-  UserProfile,
   IcpInsightResponse,
   DiscoveryQuestionItem,
 } from '@/types';
@@ -1608,9 +1606,6 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
   status: 'idle' | 'loading' | 'error';
   setStatus: Dispatch<SetStateAction<'idle' | 'loading' | 'error'>>;
 }) {
-  // 설정에 ICP가 전부 비어있으면 생성 버튼 위에 안내만 띄운다(진행은 막지 않음) — 탭을
-  // 열 때만 조회, 다른 탭 보는 동안엔 불필요한 /api/profile 호출을 하지 않는다.
-  const [icpAllEmpty, setIcpAllEmpty] = useState(false);
   // 별점/코멘트 제출 실패 토스트 — HomeContent.tsx의 showToast와 동일한 패턴(로컬
   // useState + setTimeout). 성공은 조용히 두고(위젯이 "감사합니다"로 대체), 실패했을
   // 때만 띄워서 "제출됐다"는 착각을 막는다(CLAUDE.md 비동기 액션 침묵 리턴 금지 원칙).
@@ -1619,20 +1614,6 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
     setRatingToast(uiT.icpInsight.ratingFailed);
     setTimeout(() => setRatingToast(''), 2500);
   }, [uiT]);
-
-  useEffect(() => {
-    if (!session?.access_token) return;
-    let cancelled = false;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-    fetch(`${apiUrl}/api/profile`, { headers: buildAuthHeaders(null, session.access_token) })
-      .then(r => (r.ok ? r.json() : null))
-      .then((p: UserProfile | null) => {
-        if (cancelled) return;
-        setIcpAllEmpty(!p?.icp_product && !p?.icp_target_industry && !p?.icp_target_role);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [session]);
 
   const handleGenerate = useCallback(async () => {
     if (!session) { signInWithGoogle(); return; }
@@ -1682,12 +1663,6 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
   if (!result) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-        {icpAllEmpty && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 max-w-xs leading-relaxed">
-            {uiT.icpInsight.hintEmptyIcp}{' '}
-            <Link href="/settings" className="underline font-medium">{uiT.icpInsight.goToSettings}</Link>
-          </p>
-        )}
         {status === 'error' && <p className="text-xs text-red-500">{uiT.icpInsight.failed}</p>}
         <Lightbulb size={20} className="text-amber-400" />
         <button
@@ -1720,6 +1695,12 @@ function IcpInsightTab({ analysisId, companyName, session, signInWithGoogle, uiT
         <ul className="space-y-3">
           {questions.map((item, i) => (
             <li key={i} className="pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+              {/* 근거 연결 문구(2026-08-17) — purpose 미입력 경로(rationale 없음)는 생략,
+                  질문만 그대로. sharp vs generic insight 원칙: 사실이 아니라 그 사실이
+                  만드는 함의(근거→질문 연결)를 먼저 보여준다. */}
+              {item.rationale && (
+                <p className="text-[11px] text-gray-400 italic mb-1 leading-relaxed">{item.rationale} →</p>
+              )}
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0">
                   {uiT.icpInsight.sectionLabel[item.section] ?? item.section}
@@ -1771,6 +1752,12 @@ function SharedIcpQuestionsTab({ questions, ownerLabel, uiT }: {
         <ul className="space-y-3">
           {questions.map((item, i) => (
             <li key={i} className="pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+              {/* 근거 연결 문구(2026-08-17) — purpose 미입력 경로(rationale 없음)는 생략,
+                  질문만 그대로. sharp vs generic insight 원칙: 사실이 아니라 그 사실이
+                  만드는 함의(근거→질문 연결)를 먼저 보여준다. */}
+              {item.rationale && (
+                <p className="text-[11px] text-gray-400 italic mb-1 leading-relaxed">{item.rationale} →</p>
+              )}
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0">
                   {uiT.icpInsight.sectionLabel[item.section] ?? item.section}
@@ -2666,6 +2653,62 @@ function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: 
   );
 }
 
+// 스크롤-스택 문서(2026-08-17)의 섹션 하나 — 구 탭 콘텐츠 패널을 대체. id는 상단 sticky
+// 그리드의 jumpToSection()이 scrollIntoView로 찾는 앵커. scroll-mt로 sticky 그리드에
+// 가려지지 않게 오프셋을 준다. emphasis는 Pain Diagnosis 전용 앰버 강조.
+function ReportSection({ id, title, icon: Icon, emphasis, children }: {
+  id: string;
+  title: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  emphasis?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      id={`section-${id}`}
+      className={`scroll-mt-20 rounded-xl border p-5 ${emphasis ? 'border-amber-200 ring-1 ring-amber-200 bg-amber-50/30' : 'border-gray-100 bg-white'}`}
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <Icon size={15} className={emphasis ? 'text-amber-500' : 'text-gray-400'} />
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// 출처(신규, 2026-08-17) — 각 섹션 하단에 이미 개별 표시되는 출처와 별개로 전 섹션 출처를
+// 한 곳에 모은 통합 목록(PDF의 "마지막 페이지 통합 출처 목록"과 동일한 개념). 각 섹션의
+// 실제 렌더링 컴포넌트가 쓰는 것과 동일한 출처 소스(자체 .sources 필드 우선, 없으면
+// data.sources 폴백)를 그대로 재사용 — 신규 데이터 없음, 신규 렌더링만.
+function AllSourcesSummary({ data, uiT }: { data: AnalysisDetail; uiT: ReturnType<typeof getUiStrings> }) {
+  const groups: Array<{ label: string; sources: Source[] | undefined }> = [
+    { label: uiT.tabs.summary.label,              sources: data.summary_v2?.sources ?? data.sources?.summary },
+    { label: uiT.tabs.value_chain.label,           sources: data.value_chain_v2?.sources ?? data.sources?.value_chain },
+    { label: uiT.tabs.business_model.label,        sources: data.business_model_v2?.sources ?? data.sources?.business_model },
+    { label: uiT.tabs.competitors.label,           sources: data.competitors_v2?.sources ?? data.sources?.competitors },
+    { label: uiT.tabs.cross_industry_nudge.label,  sources: data.cross_industry_nudge_v1?.sources },
+    { label: uiT.tabs.financials.label,            sources: data.financials_v2?.sources ?? data.sources?.financials },
+    { label: uiT.tabs.strategy.label,              sources: data.strategy_v2?.sources ?? data.sources?.strategy },
+    { label: uiT.tabs.industry_history.label,      sources: data.industry_history_v2?.sources ?? data.sources?.industry_history },
+    { label: uiT.tabs.tech_evolution.label,        sources: data.tech_evolution_v2?.sources ?? data.sources?.tech_evolution },
+  ].filter(g => g.sources?.length);
+
+  if (groups.length === 0) {
+    return <p className="text-sm text-gray-500 py-4 text-center">아직 표시할 출처가 없습니다.</p>;
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      {groups.map(g => (
+        <div key={g.label}>
+          <p className="text-xs font-semibold text-gray-500 mb-1">{g.label}</p>
+          <SourcesList sources={g.sources} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // 섹션 로딩 UI 공통 컴포넌트 — 배치 스트리밍(최초 생성)/탭별 재분석/ICP 인사이트 생성
 // 전부 이 하나로 통일한다(2026-08-15, "산업역사 탭만 스피너+예상 소요시간, 나머지는
 // 스켈레톤 shimmer"였던 불일치 해소 — 예전엔 SummarySkeleton/CardsSkeleton/TableSkeleton/
@@ -3049,14 +3092,6 @@ function CopyButton({ getMarkdown, label = '복사', shortLabel, copiedLabel = '
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-// 사이드바 2그룹 분리(2026-08) — "기업분석"은 기존 8개 탭 그대로, "pain 진단"은
-// 크로스인더스트리 넛지(신규, 배치2) + 산업역사/기술역사(온디맨드, "pain 진단 시작" 버튼)로
-// 구성된다. 그룹은 표시 순서/헤더 렌더링에만 쓰이고 TabKey 자체는 그대로 flat union.
-const TAB_GROUPS = [
-  { key: 'company', label: '기업분석' },
-  { key: 'pain',    label: 'pain 진단' },
-] as const;
-
 const TABS = [
   { key: 'summary',              group: 'company', label: '요약',         icon: Briefcase,  tooltip: '이 회사가 뭐 하는 곳인지 한눈에 확인할 수 있어요' },
   { key: 'value_chain',          group: 'company', label: '밸류체인',     icon: GitBranch,  tooltip: '이 회사가 산업 내 어디에 위치하는지 확인할 수 있어요' },
@@ -3096,12 +3131,6 @@ const TAB_BATCH: Record<TabKey, number> = {
   icp_insight:          0,
 };
 
-// 최상위 3단 탭(Company Intelligence/Pain Diagnosis/AE Skills, 2026-08)에서 활성 그룹이
-// 바뀔 때 그 그룹의 첫 탭을 골라주는 헬퍼 — activeGroup이 없으면(ShareContent 등 기존
-// 호출부) 항상 'summary'로 폴백해 기존 동작 그대로 유지.
-function firstTabOfGroup(group?: 'company' | 'pain'): TabKey {
-  return (group ? TABS.find(t => t.group === group)?.key : undefined) ?? 'summary';
-}
 
 // 탭 바 체크마크(✓)와 탭 콘텐츠 렌더 게이트(V2Tab vs 빈 상태 UI)가 공유하는 단일 판정
 // 함수 — TAB_BATCH(위 주석 참고, 스켈레톤 표시용일 뿐 실제 완료 순서와 무관)와는 완전히
@@ -3168,15 +3197,11 @@ export function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: Fina
 // 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
 const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
 
-function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, activeGroup, isShareView }: {
+function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isShareView }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
   onReanalyze?: (tab: string) => void;
   isPremium?: boolean;
-  // 최상위 3단 탭(2026-08, HomeContent.tsx)이 "Company Intelligence"/"Pain Diagnosis" 중
-  // 무엇을 골랐는지 — 지정되면 그 그룹의 탭만 필터링해서 보여준다. undefined면(ShareContent
-  // 등 기존 호출부) 기존처럼 두 그룹 다 표시 — 하위호환, 새 사이드바 컴포넌트 안 만듦.
-  activeGroup?: 'company' | 'pain';
   // 공유 링크 전용(ShareContent.tsx, 2026-08-15) — ICP 인사이트 탭을 인터랙티브 생성/재생성/
   // 별점 위젯이 있는 IcpInsightTab 대신, data.icpDiscoveryQuestions(소유자가 이미 생성해둔
   // 결과, 서버가 미리 필터링해서 줌)만 읽기 전용으로 보여주는 SharedIcpQuestionsTab로 바꾼다.
@@ -3190,10 +3215,19 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, acti
   const { language: globalLanguage } = useLanguage();
   const reportLanguage = data.language === 'ko' || data.language === 'en' ? data.language : globalLanguage;
   const uiT = getUiStrings(reportLanguage);
-  const [tab, setTab] = useState<TabKey>(() => firstTabOfGroup(activeGroup));
-  const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
+  // 2026-08-17부터 탭 전환 UI가 사라지고 전 섹션이 세로로 이어지는 스크롤 문서로 바뀌면서
+  // tab은 더 이상 "지금 보이는 탭"이 아니다 — 상단 sticky 그리드에서 마지막으로 클릭한
+  // 섹션만 추적, 헤더의 "이 섹션 복사" 버튼(getActiveTabMarkdown)이 이 값을 참조한다.
+  const [tab, setTab] = useState<TabKey>('summary');
   const [, startTransition] = useTransition();
   const { completedBatches } = useAnalysis();
+  // 그리드 클릭/섹션 내부 링크 클릭 시 공통으로 쓰는 헬퍼 — tab state를 갱신하고(복사
+  // 버튼용) 해당 섹션 id로 스무스 스크롤한다. scroll-mt-* 유틸로 sticky 그리드에
+  // 가려지지 않게 오프셋을 준다(각 섹션 래퍼에 적용).
+  const jumpToSection = useCallback((key: TabKey | 'pain_diagnosis') => {
+    startTransition(() => setTab(key === 'pain_diagnosis' ? 'industry_history' : key));
+    document.getElementById(`section-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
   // batchDone: true when not streaming OR when that batch has completed
   const batchDone = (n: number) => completedBatches.size === 0 || completedBatches.has(n);
   // isReanalyzing: that tab is being reanalyzed right now
@@ -3209,20 +3243,6 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, acti
       </button>
     </div>
   ) : null;
-
-  // Task 1: 분석 시작 시 (activeGroup의) 요약격 탭으로 자동 이동
-  useEffect(() => {
-    if (completedBatches.size === 1 && completedBatches.has(-1)) {
-      startTransition(() => setTab(firstTabOfGroup(activeGroup)));
-    }
-  }, [completedBatches, activeGroup]);
-
-  // 최상위 3단 탭에서 activeGroup이 바뀌면(Company Intelligence ↔ Pain Diagnosis 전환)
-  // 지금 보고 있던 탭이 새 그룹에 없을 수 있으므로 그 그룹의 첫 탭으로 자동 전환.
-  useEffect(() => {
-    if (!activeGroup) return;
-    setTab(prev => TABS.find(t => t.key === prev)?.group === activeGroup ? prev : firstTabOfGroup(activeGroup));
-  }, [activeGroup]);
 
   // ICP 인사이트 결과 — IcpInsightTab은 다른 탭과 달리 데이터를 상위 data prop이 아니라
   // 이 상태에서만 받는다. 탭 전환에도 언마운트 안 되는 여기(AnalysisCardInner)에 둔다 —
@@ -3308,174 +3328,120 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, acti
         </div>
       </div>
 
-      {/* Tab bar — 2026-08부터 기업분석/pain 진단 2그룹으로 분리, 그룹 라벨만 추가되고
-          개별 탭 버튼 로직(체크마크/스피너 등)은 그대로. activeGroup이 지정되면(최상위
-          3단 탭, HomeContent.tsx) 그 그룹만 필터링해서 보여주고 그룹 라벨은 생략 —
-          상단 탭이 이미 그룹을 나타내므로 중복. undefined면(ShareContent 등) 기존처럼
-          두 그룹 다 보여줌 */}
-      <div className="flex overflow-x-auto border-b border-gray-100 bg-white px-2">
-        {(activeGroup ? TAB_GROUPS.filter(g => g.key === activeGroup) : TAB_GROUPS).map((g, gi) => (
-          <div key={g.key} className={`flex items-stretch shrink-0 ${gi > 0 ? 'border-l border-gray-100 ml-1 pl-1' : ''}`}>
-            {!activeGroup && (
-              <div className="flex items-center shrink-0 px-2">
-                <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 whitespace-nowrap">{uiT.tabGroups[g.key]}</span>
-              </div>
-            )}
-            {TABS.filter(t => t.group === g.key).map(t => {
-              const Icon = t.icon;
-              const active = tab === t.key;
-              const isStreaming = completedBatches.has(-1);
-              const batch1Done = completedBatches.has(1);
-              // tabDone: 배치 번호가 아니라 해당 탭 데이터가 실제로 존재하는지로만 판정 —
-              // industry_history/tech_evolution은 온디맨드라 배치 번호 자체가 없다.
-              const tabDone = hasTabData(t.key, data, financialsV2Local);
-              // waiting: streaming, batch1 not done, non-summary tab (batches haven't notified yet)
-              const isWaiting    = isStreaming && !batch1Done && t.key !== 'summary';
-              // in-progress: streaming, batch1 done (or is summary tab), this tab not done
-              const isInProgress = isStreaming && !tabDone && !isWaiting;
-              // done: streaming and this tab's batch has arrived
-              const isDoneNow    = isStreaming && tabDone;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => {
-                    trackEvent('tab_clicked', { tab: t.key });
-                    if (t.key === 'financials') trackEvent('financials_tab_reached', { companyName: data.companyName });
-                    startTransition(() => setTab(t.key));
-                  }}
-                  onMouseEnter={() => setHoveredTooltip(uiT.tabs[t.key].tooltip)}
-                  onMouseLeave={() => setHoveredTooltip(null)}
-                  className={`shrink-0 flex items-center gap-1 py-3 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
-                    active
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <Icon size={12} />
-                  {uiT.tabs[t.key].label}
-                  {t.key === 'growth_scenario' && !isPremium && (
-                    <span className="text-[9px] font-bold text-amber-500 bg-amber-50 border border-amber-200 rounded px-1 py-[1px] ml-0.5 leading-none">
-                      PRO
+      {/* 상단 sticky 상태 그리드(2026-08-17) — 구 좌우 스크롤 탭바를 완전히 대체하는
+          유일한 섹션 내비게이션. 스트리밍 중이든 완료된 캐시 리포트를 바로 열든 항상
+          보임(구 넛지 그리드의 3초 자동 숨김 없음) — HomeContent.tsx의 진행 카드 그리드와
+          동일한 상태 판정(hasTabData/completedBatches)을 그대로 재사용해 여기로 이관.
+          클릭 시 jumpToSection()으로 해당 섹션까지 스무스 스크롤. */}
+      {(() => {
+        const isStreaming = completedBatches.has(-1);
+        const batch1Done = completedBatches.has(1);
+        const navCards: Array<{ key: TabKey | 'pain_diagnosis'; label: string; done: boolean; isPain?: boolean }> = [
+          { key: 'summary',              label: uiT.tabs.summary.label,              done: hasTabData('summary', data, financialsV2Local) },
+          { key: 'value_chain',          label: uiT.tabs.value_chain.label,          done: hasTabData('value_chain', data, financialsV2Local) },
+          { key: 'business_model',       label: uiT.tabs.business_model.label,       done: hasTabData('business_model', data, financialsV2Local) },
+          { key: 'competitors',          label: uiT.tabs.competitors.label,          done: hasTabData('competitors', data, financialsV2Local) },
+          { key: 'cross_industry_nudge', label: uiT.tabs.cross_industry_nudge.label, done: hasTabData('cross_industry_nudge', data, financialsV2Local) },
+          { key: 'financials',           label: uiT.tabs.financials.label,           done: hasTabData('financials', data, financialsV2Local) },
+          { key: 'strategy',             label: uiT.tabs.strategy.label,             done: hasTabData('strategy', data, financialsV2Local) },
+          { key: 'founder',              label: uiT.tabs.founder.label,              done: hasTabData('founder', data, financialsV2Local) },
+          { key: 'sources' as TabKey,    label: uiT.home.progressCardSources,        done: completedBatches.has(4) },
+          {
+            key: 'pain_diagnosis', label: uiT.home.progressCardPainDiagnosis, isPain: true,
+            done: hasTabData('industry_history', data, financialsV2Local) && hasTabData('tech_evolution', data, financialsV2Local),
+          },
+        ];
+        return (
+          <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-100 px-4 py-3">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+              {navCards.map(card => {
+                const isWaiting = isStreaming && !batch1Done && card.key !== 'summary';
+                const isInProgress = isStreaming && !card.done && !isWaiting;
+                return (
+                  <button
+                    key={card.key}
+                    onClick={() => {
+                      trackEvent('tab_clicked', { tab: card.key });
+                      if (card.key === 'financials') trackEvent('financials_tab_reached', { companyName: data.companyName });
+                      jumpToSection(card.key);
+                    }}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center transition-colors ${
+                      card.isPain
+                        ? `ring-1 ${card.done ? 'ring-amber-300 bg-amber-50 border-amber-200' : 'ring-amber-200 bg-amber-50/40 border-amber-100'}`
+                        : card.done ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' : 'bg-white border-gray-100 hover:border-gray-200'
+                    }`}
+                  >
+                    {card.done ? (
+                      <span className="text-emerald-500 text-xs font-bold leading-none">✓</span>
+                    ) : isInProgress ? (
+                      <span className="w-2.5 h-2.5 border border-current text-gray-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="flex gap-[2px]" aria-hidden>
+                        {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-medium leading-tight ${card.done ? 'text-emerald-700' : 'text-gray-500'}`}>
+                      {card.label}
                     </span>
-                  )}
-                  {isWaiting && (
-                    <span className="flex gap-[2px] items-center ml-0.5" aria-hidden>
-                      {[0,1,2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
-                    </span>
-                  )}
-                  {isInProgress && (
-                    <span className="w-2 h-2 shrink-0 border border-current border-t-transparent rounded-full animate-spin opacity-40 ml-0.5" />
-                  )}
-                  {isDoneNow && (
-                    <span key={`done-${t.key}`} className="text-emerald-500 text-[10px] font-bold anim-fadein leading-none ml-0.5">✓</span>
-                  )}
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
-      {/* Tab tooltip strip — desktop only */}
-      <div className="hidden md:block h-7 bg-white border-b border-gray-100 px-4 flex items-center">
-        {hoveredTooltip && (
-          <span className="text-[11px] text-gray-400 leading-none">{hoveredTooltip}</span>
-        )}
-      </div>
-
-      {/* Tab content — only active tab is mounted */}
-      <div className="p-5 bg-gray-50 min-h-[300px]">
-        {tab === 'summary' && (
-          !batchDone(TAB_BATCH.summary) ? <SectionGenerating label={uiT.tabs.summary.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+      {/* Scroll-stack document — 전 섹션이 탭 전환 없이 순서대로 이어진다(2026-08-17).
+          각 블록의 !batchDone → SectionGenerating : hasTabData ? <Tab/> : <EmptySectionState/>
+          게이트 로직은 기존 그대로(재분석 버튼 포함) — 조건문만 "탭 선택 시"에서 "항상"으로 바뀜. */}
+      <div className="p-5 bg-gray-50 flex flex-col gap-4">
+        <ReportSection id="summary" title={uiT.tabs.summary.label} icon={Briefcase}>
+          {!batchDone(TAB_BATCH.summary) ? <SectionGenerating label={uiT.tabs.summary.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.summary_v2
             ? (hasTabData('summary', data, financialsV2Local)
-                ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => startTransition(() => setTab(key as TabKey))} />
+                ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => jumpToSection(key as TabKey)} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('summary') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <SummaryTab data={data} />
-        )}
-        {tab === 'cross_industry_nudge' && (
-          (isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <SectionGenerating label={uiT.tabs.cross_industry_nudge.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
-          data.cross_industry_nudge_v1
-            ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
-                ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
-                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('nudge')}<p className="text-sm text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>
-        )}
-        {/* industry_history/tech_evolution(Pain Diagnosis): 2026-08-16부터 배치5로
-            승격되어 다른 8개 배치 섹션과 동일한 batchDone/hasTabData/EmptySectionState
-            패턴을 쓴다(구 "pain 진단 시작" 버튼 온디맨드 트리거는 제거됨). */}
-        {tab === 'industry_history' && (
-          (isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
-          data.industry_history_v2
-            ? (hasTabData('industry_history', data, financialsV2Local)
-                ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
-                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('industry') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
-        )}
-        {tab === 'tech_evolution' && (
-          (isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
-          data.tech_evolution_v2
-            ? (hasTabData('tech_evolution', data, financialsV2Local)
-                ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
-                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('tech') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <p className="text-sm text-gray-500 py-16 text-center">아직 생성되지 않은 섹션입니다.</p>
-        )}
-        {/* ICP 인사이트: 다른 배치 섹션과 달리 analyses 행에 결과를 저장하지 않고
-            별도 icp_insights 테이블로 관리 — batchDone 게이트를 거치지 않고 IcpInsightTab이
-            클릭→로딩→결과를 전부 자체적으로 처리한다. 결과 자체(icpInsightResult/
-            icpInsightStatus)는 AnalysisCardInner에 끌어올려져 있다 — 탭 전환마다 IcpInsightTab은 다른 모든
-            탭처럼 언마운트/재마운트되지만, 값은 여기 살아있어 재생성 없이 복원된다.
-            공유 뷰(isShareView)는 인터랙티브 생성/재생성/별점 위젯 없이 서버가 이미 골라준
-            소유자의 결과만 읽기 전용으로 보여준다(SharedIcpQuestionsTab, 2026-08-15). */}
-        {tab === 'icp_insight' && (
-          isShareView
-            ? <SharedIcpQuestionsTab questions={data.icpDiscoveryQuestions} ownerLabel={data.icpOwnerLabel} uiT={uiT} />
-            : <IcpInsightTab
-                analysisId={data.id}
-                companyName={data.companyName}
-                session={session}
-                signInWithGoogle={signInWithGoogle}
-                uiT={uiT}
-                result={icpInsightResult}
-                setResult={setIcpInsightResult}
-                status={icpInsightStatus}
-                setStatus={setIcpInsightStatus}
-              />
-        )}
-        {tab === 'value_chain' && (
-          (isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <SectionGenerating label={uiT.tabs.value_chain.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+            : <SummaryTab data={data} />}
+        </ReportSection>
+
+        <ReportSection id="value_chain" title={uiT.tabs.value_chain.label} icon={GitBranch}>
+          {(isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <SectionGenerating label={uiT.tabs.value_chain.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.value_chain_v2
             ? (hasTabData('value_chain', data, financialsV2Local)
                 ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('value_chain') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('value_chain')}<ValueChainTab data={data} /></>
-        )}
-        {tab === 'business_model' && (
-          (isReanalyzing('business_model') || !batchDone(TAB_BATCH.business_model)) ? <SectionGenerating label={uiT.tabs.business_model.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+            : <>{reanalyzeBtn('value_chain')}<ValueChainTab data={data} /></>}
+        </ReportSection>
+
+        <ReportSection id="business_model" title={uiT.tabs.business_model.label} icon={DollarSign}>
+          {(isReanalyzing('business_model') || !batchDone(TAB_BATCH.business_model)) ? <SectionGenerating label={uiT.tabs.business_model.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.business_model_v2
             ? (hasTabData('business_model', data, financialsV2Local)
                 ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('business_model') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('business_model')}<BusinessModelTab data={data} /></>
-        )}
-        {tab === 'competitors' && (
-          (isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <SectionGenerating label={uiT.tabs.competitors.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+            : <>{reanalyzeBtn('business_model')}<BusinessModelTab data={data} /></>}
+        </ReportSection>
+
+        <ReportSection id="competitors" title={uiT.tabs.competitors.label} icon={Users}>
+          {(isReanalyzing('competitors') || !batchDone(TAB_BATCH.competitors)) ? <SectionGenerating label={uiT.tabs.competitors.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.competitors_v2
             ? (hasTabData('competitors', data, financialsV2Local)
                 ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} dataSource={data.dataSource} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('competitors') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>
-        )}
-        {tab === 'strategy' && (
-          (isReanalyzing('strategy') || !batchDone(TAB_BATCH.strategy)) ? <SectionGenerating label={uiT.tabs.strategy.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
-          data.strategy_v2
-            ? (hasTabData('strategy', data, financialsV2Local)
-                ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
-                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('strategy') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('strategy')}<StrategyTab data={data} /></>
-        )}
-        {tab === 'financials' && (
-          (isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <SectionGenerating label={uiT.tabs.financials.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+            : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>}
+        </ReportSection>
+
+        <ReportSection id="cross_industry_nudge" title={uiT.tabs.cross_industry_nudge.label} icon={Lightbulb}>
+          {(isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <SectionGenerating label={uiT.tabs.cross_industry_nudge.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+          data.cross_industry_nudge_v1
+            ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
+                ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+            : <>{reanalyzeBtn('nudge')}<p className="text-sm text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>}
+        </ReportSection>
+
+        <ReportSection id="financials" title={uiT.tabs.financials.label} icon={BarChart2}>
+          {(isReanalyzing('financials') || !batchDone(TAB_BATCH.financials)) ? <SectionGenerating label={uiT.tabs.financials.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           financialsV2Local
             ? (data.dataSource !== 'edgar' && data.dataSource !== 'dart'
                 // EDGAR/DART 둘 다 미공시(비상장·비영리 등) — 재분석해도 달라지지 않으므로
@@ -3492,23 +3458,90 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, acti
                       dataSource={data.dataSource}
                     />
                   : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('financials') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>
-        )}
-        {tab === 'founder' && (
-          (isReanalyzing('founder') || !batchDone(TAB_BATCH.founder)) ? <SectionGenerating label={uiT.tabs.founder.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+            : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>}
+        </ReportSection>
+
+        <ReportSection id="strategy" title={uiT.tabs.strategy.label} icon={Target}>
+          {(isReanalyzing('strategy') || !batchDone(TAB_BATCH.strategy)) ? <SectionGenerating label={uiT.tabs.strategy.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+          data.strategy_v2
+            ? (hasTabData('strategy', data, financialsV2Local)
+                ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('strategy') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+            : <>{reanalyzeBtn('strategy')}<StrategyTab data={data} /></>}
+        </ReportSection>
+
+        <ReportSection id="founder" title={uiT.tabs.founder.label} icon={User}>
+          {(isReanalyzing('founder') || !batchDone(TAB_BATCH.founder)) ? <SectionGenerating label={uiT.tabs.founder.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.founder_v2
             ? (hasTabData('founder', data, financialsV2Local)
                 ? <FounderV2Tab f={data.founder_v2} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('founder') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('founder')}<p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>
-        )}
-        {tab === 'growth_scenario' && (
-          !isPremium ? <GrowthScenarioLocked /> :
+            : <>{reanalyzeBtn('founder')}<p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>}
+        </ReportSection>
+
+        {/* 출처(신규, 2026-08-17) — 각 섹션 하단에 이미 개별 표시되는 출처와 별개로,
+            전 섹션 출처를 한 곳에 모은 통합 목록(PDF의 "마지막 페이지 통합 출처 목록"과
+            동일한 개념). data.sources는 이미 있는 필드라 데이터 신규 추가 없음. */}
+        <ReportSection id="sources" title={uiT.home.progressCardSources} icon={BookOpen}>
+          <AllSourcesSummary data={data} uiT={uiT} />
+        </ReportSection>
+
+        {/* Pain Diagnosis(industry_history+tech_evolution 통합, 2026-08-16부터 배치5) —
+            앰버 강조로 차별화 기능임을 표시. */}
+        <ReportSection id="pain_diagnosis" title={uiT.home.progressCardPainDiagnosis} icon={Lightbulb} emphasis>
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 mb-2">{uiT.tabs.industry_history.label}</h4>
+              {(isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+              data.industry_history_v2
+                ? (hasTabData('industry_history', data, financialsV2Local)
+                    ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
+                    : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('industry') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+                : <p className="text-sm text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
+            </div>
+            <div className="pt-6 border-t border-amber-100">
+              <h4 className="text-xs font-semibold text-gray-500 mb-2">{uiT.tabs.tech_evolution.label}</h4>
+              {(isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+              data.tech_evolution_v2
+                ? (hasTabData('tech_evolution', data, financialsV2Local)
+                    ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
+                    : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('tech') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+                : <p className="text-sm text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
+            </div>
+          </div>
+        </ReportSection>
+
+        {/* growth_scenario/icp_insight: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 스택
+            맨 끝에 유지 — 기존 인터랙션(PRO 배지/생성 버튼) 그대로. */}
+        <ReportSection id="growth_scenario" title={uiT.tabs.growth_scenario.label} icon={TrendingUp}>
+          {!isPremium ? <GrowthScenarioLocked /> :
           !batchDone(TAB_BATCH.growth_scenario) ? <SectionGenerating label={uiT.tabs.growth_scenario.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.growth_scenario_v2
             ? <GrowthScenarioV2Tab g={data.growth_scenario_v2} />
-            : <p className="text-sm text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>
-        )}
+            : <p className="text-sm text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>}
+        </ReportSection>
+
+        {/* ICP 인사이트: 다른 배치 섹션과 달리 analyses 행에 결과를 저장하지 않고 별도
+            icp_insights 테이블로 관리 — batchDone 게이트 없이 IcpInsightTab이 클릭→로딩→
+            결과를 전부 자체 처리한다. 결과 자체(icpInsightResult/icpInsightStatus)는
+            AnalysisCardInner에 끌어올려져 있어 재마운트돼도 복원된다. 공유 뷰(isShareView)는
+            인터랙티브 생성/재생성/별점 위젯 없이 서버가 이미 골라준 소유자의 결과만
+            읽기 전용으로 보여준다(SharedIcpQuestionsTab, 2026-08-15). */}
+        <ReportSection id="icp_insight" title={uiT.tabs.icp_insight.label} icon={Lightbulb}>
+          {isShareView
+            ? <SharedIcpQuestionsTab questions={data.icpDiscoveryQuestions} ownerLabel={data.icpOwnerLabel} uiT={uiT} />
+            : <IcpInsightTab
+                analysisId={data.id}
+                companyName={data.companyName}
+                session={session}
+                signInWithGoogle={signInWithGoogle}
+                uiT={uiT}
+                result={icpInsightResult}
+                setResult={setIcpInsightResult}
+                status={icpInsightStatus}
+                setStatus={setIcpInsightStatus}
+              />}
+        </ReportSection>
       </div>
     </div>
   );

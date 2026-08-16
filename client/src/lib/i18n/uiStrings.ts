@@ -142,7 +142,6 @@ interface UiStringDict {
     tech_evolution: { label: string; tooltip: string };
     icp_insight: { label: string; tooltip: string };
   };
-  tabGroups: { company: string; pain: string };
   actions: {
     reanalyzeSection: string;
     copyAll: string;
@@ -160,8 +159,6 @@ interface UiStringDict {
     industryMedian: string;
   };
   icpInsight: {
-    hintEmptyIcp: string;
-    goToSettings: string;
     generateButton: string;
     regenerateButton: string;
     generatedAgo: (days: number) => string;
@@ -352,7 +349,6 @@ const ko: UiStringDict = {
     tech_evolution:       { label: '기술변화',     tooltip: '현재 기술 트렌드와 앞으로의 방향을 확인할 수 있어요' },
     icp_insight:          { label: 'ICP 인사이트', tooltip: '내 ICP 기준으로 이 회사와 관련해 무엇이 중요한지 확인할 수 있어요' },
   },
-  tabGroups: { company: '기업분석', pain: 'pain 진단' },
   actions: {
     reanalyzeSection: '↻ 이 섹션 다시 분석',
     copyAll: '전체 복사',
@@ -368,8 +364,6 @@ const ko: UiStringDict = {
     industryMedian: '업종 중앙값',
   },
   icpInsight: {
-    hintEmptyIcp: '설정에서 ICP를 입력하면 더 정확한 인사이트를 받을 수 있어요',
-    goToSettings: '설정으로 이동',
     generateButton: 'ICP 인사이트 생성하기',
     regenerateButton: '↻ 다시 생성',
     generatedAgo: (days: number) => (days === 0 ? '이 ICP로 오늘 생성됨' : `이 ICP로 ${days}일 전 생성됨`),
@@ -568,7 +562,6 @@ const en: UiStringDict = {
     tech_evolution:        { label: 'Tech Evolution',  tooltip: 'See current tech trends and where they’re headed' },
     icp_insight:           { label: 'ICP Insight',     tooltip: "See what matters about this company for your ICP" },
   },
-  tabGroups: { company: 'Company Intel', pain: 'Pain Diagnosis' },
   actions: {
     reanalyzeSection: '↻ Re-analyze this section',
     copyAll: 'Copy all',
@@ -584,8 +577,6 @@ const en: UiStringDict = {
     industryMedian: 'Industry median',
   },
   icpInsight: {
-    hintEmptyIcp: 'Set your ICP in Settings for more accurate insights',
-    goToSettings: 'Go to Settings',
     generateButton: 'Generate ICP insight',
     regenerateButton: '↻ Regenerate',
     generatedAgo: (days: number) => (days === 0 ? 'Generated today for this ICP' : `Generated ${days} day${days === 1 ? '' : 's'} ago for this ICP`),

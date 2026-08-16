@@ -540,6 +540,9 @@ export interface DiscoveryQuestionItem {
   question: string;
   section: string;
   sources: Source[];
+  // "왜 이 질문이 나왔는지" 1문장 근거(2026-08-17) — purpose 미입력(결정론적 선택) 경로는
+  // Claude를 호출하지 않아 이 필드가 없다, 있으면만 렌더링.
+  rationale?: string;
 }
 
 export interface IcpInsightResponse {

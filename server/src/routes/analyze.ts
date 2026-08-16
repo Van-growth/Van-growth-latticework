@@ -1084,15 +1084,24 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/analyze/:id/icp-insight — "ICP 인사이트"(디스커버리 질문) 탭 (2026-08-15 개편) ──
+// ── POST /api/analyze/:id/icp-insight — "ICP 인사이트"(디스커버리 질문) 탭 (2026-08-17
+// 입력소스를 온보딩 ICP → 매 요청 purpose로 전환) ──
 // 9개 섹션(discoveryQuestions.ts, summary_v2~founder_v2 + cross_industry_nudge_v1의 기존
-// financial_impact_question)이 이미 생성해둔 discovery_questions 후보 풀에서, 이 유저의
-// ICP와 관련도 높은 3-5개를 선별한다. ICP가 전부 비어있으면 Claude 호출 없이 결정론적으로
-// 선택(pickDefaultDiscoveryQuestions), 하나라도 있으면 Claude 큐레이션(curateDiscoveryQuestions)
-// 호출 — 신규 web_search 없는 단일 호출이라 90초로 잡음.
-// /reanalyze와 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시
-// 협업 UX). analysis_id + icp_fingerprint 캐시(icp_insights 테이블)는 기존 그대로 재사용 —
-// 별도 캐시 테이블 신규 생성 없음.
+// financial_impact_question)이 이미 생성해둔 discovery_questions 후보 풀에서, 이 분석의
+// purpose_category/purpose_detail과 관련도 높은 질문을 섹션별로 선별한다(섹션당 3-5개,
+// capPerSection — 전체 총량 캡 아님). purpose_category가 비어있으면 Claude 호출 없이
+// 결정론적으로 선택(pickDefaultDiscoveryQuestions), 있으면 Claude 큐레이션
+// (curateDiscoveryQuestions) 호출 — 신규 web_search 없는 단일 호출이라 90초로 잡음.
+// **2026-08-17 전환 배경**: 이전엔 profiles.icp_product/icp_target_industry/icp_target_role
+// (설정 페이지 저장값)을 입력으로 썼는데, 이 앱의 타겟이 AE에서 CEO 목적 기준으로
+// 바뀌면서 CEO 타겟 유저는 이 온보딩 ICP 필드를 채울 일이 사실상 없어 — 항상
+// "ICP 비어있음" 결정론적 경로로만 빠지고 있었다(코드 확인으로 재검증됨). purpose는
+// 분석 생성 시 analyses 행에 1회 고정되므로(같은 회사를 보는 모든 유저가 같은
+// purpose_category/detail을 본다) icp_insights 캐시도 유저별이 아닌 분석별로 자연히
+// 공용화된다 — 기존 icp_insights 테이블 스키마 변경 없음(icp_product 등 컬럼은 이제
+// 항상 null로 남고, purpose는 signals_used JSONB에 기록 — 재현성 확인용이라는 그 필드의
+// 기존 용도와 정확히 일치, 신규 컬럼/마이그레이션 불필요).
+// /reanalyze와 동일하게 하드 401만 적용, 소유권(403) 체크 없음(공용 캐시 협업 UX).
 // 60s→90s(2026-08-15): curateDiscoveryQuestions()가 JSON 파싱 실패 시 1회 재시도하도록
 // 바뀌면서, 이 상수가 재시도까지 포함한 전체 호출을 감싼다 — 기존 60s는 1회 호출
 // 기준으로 여유를 잡은 값이라 재시도가 추가되면 정상적인 2회차 시도가 이 타임아웃에
@@ -1100,16 +1109,11 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
 // 회당 11~17s)으로는 2회 합쳐도 90s에 크게 못 미치지만, 네트워크 변동을 감안해 여유를 뒀다.
 const DISCOVERY_QUESTION_TIMEOUT = 90 * 1000;
 
-function normalizeIcpField(v: string | null | undefined): string | null {
-  const trimmed = v?.trim();
-  return trimmed ? trimmed : null;
-}
-
-// analysis_id + icp_fingerprint가 icp_insights 조회 키 — 3필드를 정규화(trim+소문자) 후
-// md5 해시. 같은 ICP를 다르게 표기해도(공백/대소문자) 같은 fingerprint로 수렴. 3필드가
-// 전부 비어있어도 하나의 고정된 fingerprint로 수렴하므로 "ICP 없음" 상태도 정상 캐시된다.
-function computeIcpFingerprint(icp: { product: string | null; targetIndustry: string | null; targetRole: string | null }): string {
-  const key = [icp.product, icp.targetIndustry, icp.targetRole].map(v => (v ?? '').toLowerCase()).join('|');
+// analysis_id + purpose_fingerprint가 icp_insights 조회 키 — purpose_category/detail을
+// 정규화(trim+소문자) 후 md5 해시. purpose가 비어있어도(구 캐시 행 등) 하나의 고정된
+// fingerprint로 수렴하므로 "purpose 없음" 상태도 정상 캐시된다.
+function computePurposeFingerprint(purpose: { category: string | null; detail: string | null }): string {
+  const key = [purpose.category, purpose.detail].map(v => (v ?? '').trim().toLowerCase()).join('|');
   return createHash('md5').update(key).digest('hex');
 }
 
@@ -1117,6 +1121,7 @@ interface StoredDiscoveryQuestion {
   question: string;
   section: string; // 근거 섹션(summary_v2 등) — 원본 데이터로 추적 가능하게, UI에선 짧은 라벨로 표시
   sources: SectionSource[];
+  rationale?: string; // "왜 이 질문이 나왔는지" 1문장 근거(2026-08-17 신규) — purpose 미입력 시 없음
 }
 
 router.post('/:id/icp-insight', async (req: Request, res: Response) => {
@@ -1127,10 +1132,7 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
   }
 
   const analysisId = String(req.params.id ?? '').trim();
-  const { companyName, icp: icpOverride } = req.body as {
-    companyName?: string;
-    icp?: { product?: string | null; targetIndustry?: string | null; targetRole?: string | null };
-  };
+  const { companyName } = req.body as { companyName?: string };
   if (!analysisId || !companyName?.trim()) {
     res.status(400).json({ error: 'companyName이 필요합니다.' });
     return;
@@ -1138,25 +1140,31 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
   const name = companyName.trim();
 
   try {
-    // ICP는 설정 페이지에 저장된 값이 기본, body override는 "설정 저장 전 미리보기" 용도.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('icp_product, icp_target_industry, icp_target_role')
-      .eq('id', authUser.id)
+    const { data: analysis, error: fetchErr } = await supabase
+      .from('analyses')
+      .select('language, purpose_category, purpose_detail, summary_v2, financials_v2, business_model_v2, competitors_v2, value_chain_v2, strategy_v2, industry_history_v2, tech_evolution_v2, founder_v2, cross_industry_nudge_v1')
+      .eq('id', analysisId)
       .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!analysis) {
+      res.status(404).json({ error: '분석을 찾을 수 없습니다.' });
+      return;
+    }
+    const language: Language = (analysis as any).language === 'ko' ? 'ko' : 'en';
 
-    const icp = {
-      product: normalizeIcpField(icpOverride?.product ?? profile?.icp_product),
-      targetIndustry: normalizeIcpField(icpOverride?.targetIndustry ?? profile?.icp_target_industry),
-      targetRole: normalizeIcpField(icpOverride?.targetRole ?? profile?.icp_target_role),
+    // purpose는 분석 생성 시 이미 확정된 값 — 이 요청에서 새로 입력받지 않는다(요청 body에
+    // purpose override 없음, 온보딩 ICP의 body override 패턴과 달리 재요청해도 값이 안 바뀜).
+    const purpose = {
+      category: (analysis as any).purpose_category?.trim() || null,
+      detail: (analysis as any).purpose_detail?.trim() || null,
     };
-    const fingerprint = computeIcpFingerprint(icp);
+    const fingerprint = computePurposeFingerprint(purpose);
 
-    // 동일 기업 + 동일 ICP 조합이면 재생성 없이 즉시 반환.
+    // 동일 기업 + 동일 purpose 조합이면 재생성 없이 즉시 반환. purpose가 분석당 고정값이라
+    // 사실상 analysis_id만으로도 결정되지만, 과거 icp_fingerprint 캐시 행과의 키 구조
+    // 일관성을 위해 fingerprint 컬럼은 그대로 유지.
     // rating/rating_comment도 같이 반환 — 프론트가 탭 재진입 시 이미 평가했는지
-    // 복원할 유일한 경로가 이 응답이다(POST /api/icp-insights/:id/rate로 저장은
-    // 이미 되고 있었지만, 이 응답에 안 실려서 매번 미평가 상태로 보였던 버그 수정,
-    // 2026-08-15 — AnalysisCard.tsx의 상태 끌어올리기 작업과 함께).
+    // 복원할 유일한 경로가 이 응답이다.
     const { data: existing } = await supabase
       .from('icp_insights')
       .select('id, content, created_at, rating, rating_comment')
@@ -1171,30 +1179,20 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: analysis, error: fetchErr } = await supabase
-      .from('analyses')
-      .select('language, summary_v2, financials_v2, business_model_v2, competitors_v2, value_chain_v2, strategy_v2, industry_history_v2, tech_evolution_v2, founder_v2, cross_industry_nudge_v1')
-      .eq('id', analysisId)
-      .maybeSingle();
-    if (fetchErr) throw fetchErr;
-    if (!analysis) {
-      res.status(404).json({ error: '분석을 찾을 수 없습니다.' });
-      return;
-    }
-    const language: Language = (analysis as any).language === 'ko' ? 'ko' : 'en';
-
     const candidates = collectDiscoveryQuestionCandidates(analysis as any);
-    const icpIsEmpty = !icp.product && !icp.targetIndustry && !icp.targetRole;
+    const purposeIsEmpty = !purpose.category;
 
-    console.log(`[icp-insight] START for "${name}" (${candidates.length} candidates, icpEmpty=${icpIsEmpty})`);
+    console.log(`[icp-insight] START for "${name}" (${candidates.length} candidates, purposeEmpty=${purposeIsEmpty})`);
 
-    let selected: DiscoveryQuestionCandidate[];
-    if (icpIsEmpty) {
-      // ICP 미입력(선택 입력이라 흔함) — 불필요한 Claude 호출 없이 결정론적으로 선택.
+    let selected: Array<DiscoveryQuestionCandidate & { rationale?: string }>;
+    if (purposeIsEmpty) {
+      // purpose 미입력(구 캐시 행 등 — 신규 분석은 검색 화면에서 필수 선택) — 불필요한
+      // Claude 호출 없이 결정론적으로 선택. rationale은 이 경로에서 생성 안 함(Claude 미호출
+      // 원칙 유지) — 프론트는 rationale이 없으면 그 줄만 생략.
       selected = pickDefaultDiscoveryQuestions(candidates, (analysis as any).financials_v2 ?? null);
     } else {
       const curated = await withTimeout(
-        curateDiscoveryQuestions(name, candidates, icp, language),
+        curateDiscoveryQuestions(name, candidates, purpose, language),
         DISCOVERY_QUESTION_TIMEOUT,
         'icp-insight',
       );
@@ -1202,21 +1200,22 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
         res.status(422).json({ error: 'ICP 인사이트 생성에 실패했습니다. 잠시 후 다시 시도해주세요.' });
         return;
       }
-      // Claude가 재구성한 문구는 취하되, section/sources는 서버가 원본 후보에서 id로
-      // 다시 찾아 붙인다 — 근거 추적이 Claude의 재구성 정확도에 의존하지 않게.
+      // Claude가 재구성한 문구/rationale은 취하되, section/sources는 서버가 원본 후보에서
+      // id로 다시 찾아 붙인다 — 근거 추적이 Claude의 재구성 정확도에 의존하지 않게.
       const byId = new Map(candidates.map(c => [c.id, c]));
       selected = curated
         .map(item => {
           const original = byId.get(item.id);
-          return original ? { ...original, question: item.question } : null;
+          return original ? { ...original, question: item.question, rationale: item.rationale } : null;
         })
-        .filter((c): c is DiscoveryQuestionCandidate => c !== null);
+        .filter((c): c is NonNullable<typeof c> => c !== null);
     }
 
     const questions: StoredDiscoveryQuestion[] = selected.map(c => ({
       question: c.question,
       section: c.section,
       sources: c.sources,
+      rationale: c.rationale,
     }));
     const content = { questions };
 
@@ -1225,12 +1224,9 @@ router.post('/:id/icp-insight', async (req: Request, res: Response) => {
       .insert({
         analysis_id: analysisId,
         created_by: authUser.id,
-        icp_product: icp.product,
-        icp_target_industry: icp.targetIndustry,
-        icp_target_role: icp.targetRole,
         icp_fingerprint: fingerprint,
         content,
-        signals_used: { candidates },
+        signals_used: { candidates, purpose },
       })
       .select('id, content, created_at')
       .single();

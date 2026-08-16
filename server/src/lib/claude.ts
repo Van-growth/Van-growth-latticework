@@ -1626,57 +1626,66 @@ export async function generateBenchmarkDiscoveryQuestion(
 // 선택한다(불필요한 Claude 호출 방지).
 
 function discoveryQuestionCurationSystem(language: Language): string {
-  return `You are a B2B sales/BD strategist selecting discovery-call questions for someone about to research or meet this company, tailored to their ICP (Ideal Customer Profile).
+  return `You are a B2B sales/BD strategist selecting discovery-call questions for someone about to research or meet this company, tailored to the stated purpose of their analysis.
 Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. ${LANGUAGE_DIRECTIVE[language]}
 
 [Task]
-You're given a numbered pool of candidate questions grouped by originating section (each already grounded in this company's actual analysis data — no candidate is speculative, that filtering already happened upstream). For EACH section that has at least one candidate, select up to 3-5 of that section's candidates most relevant to the reader's ICP (fewer than 3 only if that section itself has fewer than 3, or none if none of that section's candidates fit the ICP at all). Do not impose any cap across the whole pool — the total return size should scale with however many sections have relevant candidates.
+You're given a numbered pool of candidate questions grouped by originating section (each already grounded in this company's actual analysis data — no candidate is speculative, that filtering already happened upstream). For EACH section that has at least one candidate, select up to 3-5 of that section's candidates most relevant to the reader's stated purpose (fewer than 3 only if that section itself has fewer than 3, or none if none of that section's candidates fit the purpose at all). Do not impose any cap across the whole pool — the total return size should scale with however many sections have relevant candidates.
 
 [Rephrasing — optional, must stay grounded]
-You may lightly rephrase a candidate's wording to sharpen it for this specific ICP (e.g. naming the reader's product category instead of a generic phrase) — but the question must still be answerable from the same underlying fact as the original candidate. Never introduce a new fact, number, or claim that wasn't in the original candidate. If a candidate is already sharp as-is, return it unchanged.
+You may lightly rephrase a candidate's wording to sharpen it for this specific purpose (e.g. naming the reader's stated angle instead of a generic phrase) — but the question must still be answerable from the same underlying fact as the original candidate. Never introduce a new fact, number, or claim that wasn't in the original candidate. If a candidate is already sharp as-is, return it unchanged.
 
-[ICP-aware framing]
-Any ICP field marked "(not provided)" must NOT be used to narrow selection — fall back to picking on general business relevance for that dimension. Never invent ICP details the reader didn't give you.
+[Purpose-aware framing]
+If purpose_detail is marked "(not provided)", rely on purpose_category alone (it is always provided) — never invent purpose details the reader didn't give you.
 
 [Question form — non-negotiable]
 Every returned question must be phrased as something you'd ask the company, not a statement of fact you already know. No investor language (valuation/P/E/ROE/stock price).
 
+[Rationale — sharp vs. generic insight principle]
+For each selected item, also write a 1-sentence "rationale" explaining WHY this question follows — name 1-2 specific source_facts (verbatim or lightly paraphrased, from the "source_facts" list for that candidate) and connect them to the stated purpose. This is not a restatement of the question — it's the evidence trail a reader would want before asking it (e.g. "$7B capex announcement + a recent regen-medicine acquisition together suggest a shift in R&D priorities"). Never cite a fact that isn't in that candidate's source_facts. If a candidate has no source_facts at all, omit "rationale" for that item rather than inventing one.
+
 [Selection]
-Return up to 3-5 items per originating section (never more than 5 from any single section), ordered by relevance to this ICP within each section. Always return each item's original "id" copied verbatim from the candidate pool — never invent a new id.`;
+Return up to 3-5 items per originating section (never more than 5 from any single section), ordered by relevance to this purpose within each section. Always return each item's original "id" copied verbatim from the candidate pool — never invent a new id.`;
 }
 
 export interface CuratedDiscoveryQuestion {
   id: number;
   question: string;
+  rationale?: string;
 }
 
 export async function curateDiscoveryQuestions(
   companyName: string,
   candidates: DiscoveryQuestionCandidate[],
-  icp: { product: string | null; targetIndustry: string | null; targetRole: string | null },
+  purpose: { category: string | null; detail: string | null },
   language: Language = 'en',
 ): Promise<CuratedDiscoveryQuestion[] | null> {
   if (candidates.length === 0) return [];
   const t0 = Date.now();
 
-  const icpLines = [
-    `product: ${icp.product || '(not provided)'}`,
-    `target_industry: ${icp.targetIndustry || '(not provided)'}`,
-    `target_role: ${icp.targetRole || '(not provided)'}`,
+  const purposeLines = [
+    `purpose_category: ${purpose.category || '(not provided)'}`,
+    `purpose_detail: ${purpose.detail || '(not provided)'}`,
   ].join('\n');
 
-  const candidatesJson = JSON.stringify(candidates.map(c => ({ id: c.id, section: c.section, question: c.question })), null, 2);
+  // source_facts: 각 후보가 discovery_questions 생성 당시 근거로 삼았던 그 섹션의 출처
+  // 스니펫(SectionSource.content, 이미 있는 필드) — rationale이 이 중 1-2개를 구체적으로
+  // 인용하도록 근거 자료로 넘긴다(2026-08-17 신규, 없는 사실 지어내기 방지).
+  const candidatesJson = JSON.stringify(
+    candidates.map(c => ({ id: c.id, section: c.section, question: c.question, source_facts: c.sources.map(s => s.content) })),
+    null, 2,
+  );
 
   const schema = `Output only a JSON object matching this schema:
-{"selected":[{"id":<candidate id, copied verbatim from the pool below>,"question":"The question — the original wording, or lightly rephrased for this ICP"}]}
+{"selected":[{"id":<candidate id, copied verbatim from the pool below>,"question":"The question — the original wording, or lightly rephrased for this purpose","rationale":"1 sentence citing 1-2 source_facts — omit this key if that candidate has no source_facts"}]}
 Up to 3-5 items per originating section (see [Selection] above) — do not cap the total across sections.`;
 
   const userMessage = `Company: ${companyName}
 
-[Reader's ICP]
-${icpLines}
+[Analysis purpose]
+${purposeLines}
 
-[Candidate questions — id, originating section, question text]
+[Candidate questions — id, originating section, question text, source_facts]
 ${candidatesJson}
 
 ---
@@ -1696,9 +1705,9 @@ ${schema}`;
     try {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-5',
-        // 2026-08-17 섹션별 캡 전환 이전엔 전체 5개로 응답이 작았지만, 이제 최대 9개 섹션
-        // × 5개 = ~45개까지 나올 수 있어 1500으로는 잘릴 위험이 있음 — 여유 있게 상향.
-        max_tokens: 4000,
+        // 2026-08-17: 섹션별 캡 전환(최대 9섹션×5개≈45개) + 항목마다 rationale 1문장이
+        // 추가되면서 출력이 한층 더 커짐 — 4000→6000으로 재상향.
+        max_tokens: 6000,
         system: [{ type: 'text', text: discoveryQuestionCurationSystem(language), cache_control: { type: 'ephemeral' } }] as any,
         messages: [{ role: 'user', content: userMessage }],
       });
@@ -1707,7 +1716,7 @@ ${schema}`;
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map(b => b.text)
         .join('');
-      const parsed = extractJson<{ selected: Array<{ id: number; question: string }> }>(raw, 'discovery_question_curation');
+      const parsed = extractJson<{ selected: Array<{ id: number; question: string; rationale?: string }> }>(raw, 'discovery_question_curation');
       if (!parsed?.selected || !Array.isArray(parsed.selected)) {
         console.error(`[claude] discovery_question_curation FAIL (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms — no selected array in response`);
         if (attempt < MAX_ATTEMPTS) continue;
@@ -1721,9 +1730,12 @@ ${schema}`;
       const validIds = new Map(candidates.map(c => [c.id, c.section]));
       const filtered = parsed.selected
         .filter(item => typeof item.id === 'number' && validIds.has(item.id) && typeof item.question === 'string' && item.question.trim())
-        .map(item => ({ id: item.id, question: item.question.trim(), section: validIds.get(item.id)! }));
+        .map(item => ({
+          id: item.id, question: item.question.trim(), section: validIds.get(item.id)!,
+          rationale: typeof item.rationale === 'string' && item.rationale.trim() ? item.rationale.trim() : undefined,
+        }));
       const result: CuratedDiscoveryQuestion[] = capPerSection(filtered)
-        .map(({ id, question }) => ({ id, question }));
+        .map(({ id, question, rationale }) => ({ id, question, rationale }));
 
       console.log(`[claude] discovery_question_curation OK (attempt ${attempt}/${MAX_ATTEMPTS}) ${Date.now() - t0}ms (${result.length}/${candidates.length} candidates selected)`);
       return result;

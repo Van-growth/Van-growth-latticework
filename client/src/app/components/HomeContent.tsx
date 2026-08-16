@@ -28,8 +28,9 @@ const PENDING_SELECTION_KEY = 'pending_company_selection';
 
 // 최상위 4탭 (2026-08-16 — 기존 Company Intelligence/Pain Diagnosis/AE Skills 3탭 대체).
 // Pain Diagnosis가 배치5로 승격되어 자동 생성되므로 별도 최상위 모드가 필요 없어졌다 —
-// "기업분석" 탭이 기존 검색+리포트 플로우를 그대로 이어받는다(사이드바는 activeGroup 없이
-// company+pain 두 그룹을 항상 함께 보여줌). AE Skills는 이번 스코프에서 내비게이션
+// "기업분석" 탭이 기존 검색+리포트 플로우를 그대로 이어받는다(2026-08-17부터는 AnalysisCard
+// 내부 탭 전환 자체가 sticky 그리드+스크롤 문서로 바뀌어 activeGroup 개념 자체가 삭제됨,
+// company+pain 두 그룹은 스크롤 문서 안에 항상 함께 보임). AE Skills는 이번 스코프에서 내비게이션
 // 진입점만 빠지고 컴포넌트(AeSkillsView.tsx)는 코드에 남아있다. 산업별 보기/최근 조회/
 // 즐겨찾기 중 산업별 보기만 실제 데이터 연동, 나머지 둘은 빈 상태 스텁.
 type TopTabKey = 'company' | 'industry' | 'recent' | 'favorites';
@@ -184,7 +185,6 @@ export default function HomeContent() {
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [toast, setToast] = useState('');
-  const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [reanalyzingTabs, setReanalyzingTabs] = useState<Set<string>>(new Set());
   const [isFirstLookup, setIsFirstLookup] = useState(false);
   const [rateLimitInfo, setRateLimitInfo] = useState<{ message: string; nextAvailableAt: string | null; usedCount: number } | null>(null);
@@ -736,36 +736,6 @@ export default function HomeContent() {
   const phase1 = loading && completedBatches.has(-1) && !completedBatches.has(1);
   const showCard = result ?? (loading && completedBatches.has(1) ? (displayData ?? emptyBase(companyName.trim())) : null);
 
-  // 실행 상태 카드: 9개 섹션 + Pain Diagnosis(industry_history+tech_evolution 통합 1장) —
-  // batch1 완료 후 스트리밍 중 노출. 배치5(Pain Diagnosis)는 다른 섹션과 병렬 실행되지만
-  // 시각적으로만 구분해서 차별화 기능임을 표시한다(강조 테두리, 아래 렌더 참고).
-  const isStreaming = completedBatches.has(-1);
-  const tabsT = getUiStrings(language).tabs;
-  const progressCards = [
-    { key: 'summary',              label: tabsT.summary.label,              done: completedBatches.has(1) },
-    { key: 'business_model',       label: tabsT.business_model.label,       done: completedBatches.has(2) },
-    { key: 'competitors',          label: tabsT.competitors.label,          done: completedBatches.has(2) },
-    { key: 'cross_industry_nudge', label: tabsT.cross_industry_nudge.label, done: completedBatches.has(2) },
-    { key: 'value_chain',          label: tabsT.value_chain.label,          done: completedBatches.has(3) },
-    { key: 'strategy',             label: tabsT.strategy.label,             done: completedBatches.has(3) },
-    { key: 'financials',           label: tabsT.financials.label,           done: completedBatches.has(40) || completedBatches.has(3) },
-    { key: 'founder',              label: tabsT.founder.label,              done: completedBatches.has(4) },
-    { key: 'sources',              label: t.progressCardSources,            done: completedBatches.has(4) },
-    { key: 'pain_diagnosis',       label: t.progressCardPainDiagnosis,      done: completedBatches.has(5), isPain: true },
-  ];
-  const allNudgeDone = progressCards.every(it => it.done);
-  const showNudge = isStreaming && completedBatches.has(1) && !nudgeDismissed;
-
-  // Reset dismissed state when a new analysis begins, auto-dismiss 3s after all done
-  useEffect(() => {
-    if (isStreaming && !completedBatches.has(1)) setNudgeDismissed(false);
-  }, [isStreaming, completedBatches]);
-
-  useEffect(() => {
-    if (!allNudgeDone || nudgeDismissed) return;
-    const t = setTimeout(() => setNudgeDismissed(true), 3000);
-    return () => clearTimeout(t);
-  }, [allNudgeDone, nudgeDismissed]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -986,51 +956,6 @@ export default function HomeContent() {
         </div>
       )}
 
-      {/* 실행 상태 카드 그리드 — 9개 섹션 + Pain Diagnosis 1장(대기/진행중/완료). 배치1
-          완료 후 스트리밍 중에만 노출, 전부 완료되면 기존 넛지 배너와 동일하게 3초 후
-          자동으로 사라진다(nudgeDismissed 재사용). Pain Diagnosis 카드만 앰버 강조 테두리로
-          차별화 기능임을 표시. */}
-      {showNudge && (
-        <div className="max-w-2xl mx-auto mb-6">
-          {allNudgeDone ? (
-            <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-2">
-              <span className="anim-fadein inline-block">✓</span>
-              {t.nudgeComplete}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {progressCards.map(card => {
-                const isWaiting    = !completedBatches.has(1) && card.key !== 'summary';
-                const isInProgress = !card.done && !isWaiting;
-                return (
-                  <div
-                    key={card.key}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 text-center transition-colors duration-300 ${
-                      card.isPain
-                        ? `ring-1 ${card.done ? 'ring-amber-300 bg-amber-50 border-amber-200' : 'ring-amber-200 bg-amber-50/40 border-amber-100'}`
-                        : card.done ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100'
-                    }`}
-                  >
-                    {card.done ? (
-                      <span className="anim-fadein text-emerald-500 text-xs font-bold leading-none">✓</span>
-                    ) : isInProgress ? (
-                      <span className="w-2.5 h-2.5 border border-current text-gray-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <span className="flex gap-[2px]" aria-hidden>
-                        {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-medium leading-tight ${card.done ? 'text-emerald-700' : 'text-gray-500'}`}>
-                      {card.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Phase 1: full loading screen before summary arrives */}
       {phase1 && !error && (
         <AnalysisLoadingScreen companyName={companyName.trim() || t.defaultCompanyName} isFirstLookup={isFirstLookup} />
@@ -1136,8 +1061,8 @@ export default function HomeContent() {
             </div>
           )}
 
-          {/* Pain Diagnosis가 배치5로 자동 생성되므로 별도 activeGroup 필터링 없이
-              기업분석/pain 진단 두 그룹을 사이드바에 항상 함께 보여준다. */}
+          {/* 2026-08-17부터 AnalysisCard가 탭 전환 없는 sticky 그리드+스크롤 문서로
+              바뀌면서 기업분석/pain 진단 두 그룹이 항상 함께 이어져 보인다. */}
           <AnalysisCard data={showCard} reanalyzingTabs={reanalyzingTabs} onReanalyze={handleReanalyzeTab} isPremium={usage?.isPremium ?? false} />
         </div>
       )}
