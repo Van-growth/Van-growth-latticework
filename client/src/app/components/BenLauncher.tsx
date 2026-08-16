@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageCircle } from 'lucide-react';
 import BenPanel, { BenWidthPreset } from './BenPanel';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useLanguage } from '@/app/context/LanguageContext';
@@ -44,7 +43,7 @@ export default function BenLauncher() {
         aria-expanded={isOpen}
         className="flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1.5 shadow-sm hover:bg-gray-50 transition-colors shrink-0"
       >
-        <MessageCircle size={14} className="text-navy-500" />
+        <span aria-hidden="true">🧑‍💼</span>
         {t.panelTitle}
       </button>
 
