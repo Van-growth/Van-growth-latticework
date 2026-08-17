@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CEO Staff Ben — 사용 가이드</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
+
+  :root{
+    --ink:#111214;
+    --navy:#132340;
+    --navy-deep:#0B1830;
+    --paper:#FFFFFF;
+    --canvas:#F6F5F2;
+    --line:#E7E5E0;
+    --line-strong:#D3D0C8;
+    --muted:#6E6C64;
+    --faint:#A6A399;
+    --success:#1F6E45;
+    --success-bg:#EAF3EC;
+    --danger:#9A3030;
+    --danger-bg:#F8EDEC;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Noto Sans KR',-apple-system,'Apple SD Gothic Neo',sans-serif;
+    background:var(--canvas);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.6;
+  }
+  .serif{font-family:'Noto Serif KR',Georgia,serif;}
+
+  .wrap{max-width:760px;margin:0 auto;padding:56px 24px 100px;}
+
+  /* Header */
+  .brand-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:48px;}
+  .brand{font-family:'Noto Serif KR',serif;font-size:20px;font-weight:700;color:var(--navy-deep);}
+  .brand-tag{font-size:12px;color:var(--faint);letter-spacing:0.03em;}
+
+  /* Hero */
+  .hero{text-align:center;margin-bottom:56px;}
+  .eyebrow{
+    display:inline-block;font-size:11px;font-weight:700;color:var(--navy-deep);
+    background:#EEF0F5;padding:6px 14px;border-radius:20px;letter-spacing:0.06em;
+    margin-bottom:16px;
+  }
+  .hero h1{
+    font-family:'Noto Serif KR',serif;font-size:32px;font-weight:700;
+    margin:0 0 14px;letter-spacing:-0.01em;line-height:1.35;
+  }
+  .hero p{font-size:15px;color:var(--muted);margin:0;max-width:480px;margin:0 auto;}
+
+  /* Section */
+  .section{margin-bottom:52px;}
+  .section-label{
+    font-size:11px;font-weight:700;color:var(--navy-deep);text-transform:uppercase;
+    letter-spacing:0.1em;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+  }
+  .section-label::before{content:'';width:3px;height:12px;background:var(--navy-deep);border-radius:2px;}
+  .section h2{font-family:'Noto Serif KR',serif;font-size:22px;font-weight:700;margin:0 0 24px;letter-spacing:-0.01em;}
+
+  /* 3-step flow */
+  .steps{display:flex;flex-direction:column;gap:0;}
+  .step{display:flex;gap:20px;padding:20px 0;border-bottom:1px solid var(--line);}
+  .step:last-child{border-bottom:none;}
+  .step-num{
+    flex-shrink:0;width:36px;height:36px;border-radius:50%;background:var(--navy-deep);
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    font-family:'Noto Serif KR',serif;font-weight:700;font-size:15px;
+  }
+  .step-body h3{font-size:16px;font-weight:700;margin:2px 0 6px;}
+  .step-body p{font-size:14px;color:var(--muted);margin:0;}
+
+  /* Cards grid */
+  .card-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+  .card{
+    background:var(--paper);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;
+  }
+  .card.wide{grid-column:1 / -1;}
+  .card-icon{font-size:18px;margin-bottom:8px;}
+  .card h4{font-size:14px;font-weight:700;margin:0 0 4px;}
+  .card p{font-size:13px;color:var(--muted);margin:0;line-height:1.55;}
+
+  /* Purpose use-case table */
+  .purpose-list{display:flex;flex-direction:column;gap:10px;}
+  .purpose-row{
+    display:flex;gap:16px;align-items:flex-start;background:var(--paper);
+    border:1px solid var(--line);border-radius:10px;padding:14px 18px;
+  }
+  .purpose-tag{
+    flex-shrink:0;width:76px;font-size:12px;font-weight:700;color:#fff;
+    background:var(--navy-deep);border-radius:6px;padding:5px 0;text-align:center;
+  }
+  .purpose-row p{font-size:13.5px;margin:0;color:#2A2B2D;line-height:1.6;}
+  .purpose-row .ex{color:var(--muted);font-size:12.5px;margin-top:3px;}
+
+  /* Tips */
+  .tip-box{
+    background:var(--paper);border:1px solid var(--line);border-radius:12px;
+    padding:20px 22px;
+  }
+  .tip-box ul{margin:0;padding-left:0;list-style:none;}
+  .tip-box li{
+    display:flex;gap:10px;font-size:13.5px;color:#2A2B2D;padding:9px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .tip-box li:last-child{border-bottom:none;}
+  .tip-box li::before{content:'—';color:var(--faint);flex-shrink:0;}
+
+  /* Footer note */
+  .footer-note{
+    text-align:center;font-size:12px;color:var(--faint);margin-top:60px;
+    padding-top:24px;border-top:1px solid var(--line);
+  }
+
+  @media (max-width:520px){
+    .card-grid{grid-template-columns:1fr;}
+    .hero h1{font-size:26px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand-row">
+    <div class="brand">CEO Staff Ben</div>
+    <div class="brand-tag">사용 가이드</div>
+  </div>
+
+  <div class="hero">
+    <span class="eyebrow">1분 기업분석</span>
+    <h1 class="serif">비서를 따로 두지 않아도,<br>1분이면 기업 하나를 파악합니다</h1>
+    <p>인수·투자·파트너십·고객사 검토 — 무엇을 위한 리서치든, 회사명 하나만 입력하면 됩니다.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">시작하기</div>
+    <h2 class="serif">3단계면 끝나요</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num serif">1</div>
+        <div class="step-body">
+          <h3>회사명을 입력하세요</h3>
+          <p>한국·미국 상장사 모두 검색됩니다. "삼성전자", "Apple" 처럼 편하게 입력하세요.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num serif">2</div>
+        <div class="step-body">
+          <h3>이 분석이 왜 필요한지 알려주세요</h3>
+          <p>인수합병 / 투자 / 파트너십 / 고객 / 기타 중 하나를 고르고, 상황을 한두 줄로 적어주시면 리포트가 그 목적에 맞춰 만들어집니다.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num serif">3</div>
+        <div class="step-body">
+          <h3>분석하기를 누르고 기다리세요</h3>
+          <p>9개 섹션이 동시에 만들어져요. 완료된 것부터 바로 읽으실 수 있고, 전체 완료까지 1~2분 정도 걸립니다.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">리포트 안에 있는 것</div>
+    <h2 class="serif">한 번에 9가지 + 1</h2>
+    <div class="card-grid">
+      <div class="card"><div class="card-icon">📋</div><h4>요약</h4><p>이 회사가 무엇을 하는 곳인지, 핵심만 세 줄로.</p></div>
+      <div class="card"><div class="card-icon">🔗</div><h4>밸류체인</h4><p>이 회사가 산업 안 어디에 위치하는지.</p></div>
+      <div class="card"><div class="card-icon">🏢</div><h4>비즈니스모델</h4><p>어떻게 돈을 버는 회사인지.</p></div>
+      <div class="card"><div class="card-icon">⚔️</div><h4>경쟁사</h4><p>누구와 경쟁하고 있는지.</p></div>
+      <div class="card"><div class="card-icon">📊</div><h4>재무</h4><p>매출·이익·성장률 — 공식 공시 기준.</p></div>
+      <div class="card"><div class="card-icon">🎯</div><h4>전략</h4><p>지금 이 회사가 어디로 가려 하는지.</p></div>
+      <div class="card"><div class="card-icon">👤</div><h4>창업자·경영진</h4><p>누가 이끄는 회사인지.</p></div>
+      <div class="card"><div class="card-icon">📚</div><h4>출처</h4><p>모든 수치와 사실의 근거를 한 곳에 모아 보여드려요.</p></div>
+      <div class="card wide" style="border-color:var(--navy-deep);">
+        <div class="card-icon">💡</div>
+        <h4>Pain Diagnosis <span style="font-weight:400;color:var(--muted);">— CEO Staff Ben만의 기능</span></h4>
+        <p>이 산업이 지금 어떤 국면에 있고, 어떤 기술 변화가 이 회사를 흔들고 있는지 — 겉으로 드러난 숫자 너머의 맥락을 짚어드립니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">더 깊이 물어보기</div>
+    <h2 class="serif">AI CEO Staff, Ben에게 직접 질문하세요</h2>
+    <p style="font-size:14px;color:var(--muted);margin:-12px 0 20px;">Ben은 분석 요청한 기업의 정보를 바탕으로 의사결정을 지원합니다.</p>
+    <div class="tip-box">
+      <ul>
+        <li>리포트 옆 채팅창의 Ben은 방금 만든 리포트 내용을 전부 알고 있어요.</li>
+        <li>"이 회사 재무 건전성이 우리 인수 조건에 맞나?" 처럼, 궁금한 걸 그대로 물어보시면 됩니다.</li>
+        <li>정해진 질문 목록이 아니라, 그때그때 떠오르는 걸 편하게 물어보시는 용도예요.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">상황별 활용</div>
+    <h2 class="serif">목적에 따라 이렇게 써보세요</h2>
+    <div class="purpose-list">
+      <div class="purpose-row">
+        <div class="purpose-tag">인수합병</div>
+        <div>
+          <p>인수 후보군을 좁힐 때, 재무 건전성과 사업 적합성을 먼저 훑어보세요.</p>
+          <p class="ex">예: "우리가 인수할 만한 OO 분야 회사를 찾아, 재무 건전성을 확인하고 싶어"</p>
+        </div>
+      </div>
+      <div class="purpose-row">
+        <div class="purpose-tag">투자</div>
+        <div>
+          <p>투자 검토 전, 산업 내 포지션과 성장 시나리오를 한눈에 확인하세요.</p>
+        </div>
+      </div>
+      <div class="purpose-row">
+        <div class="purpose-tag">파트너십</div>
+        <div>
+          <p>제휴·협업을 제안하기 전, 상대 회사와의 fit을 미리 가늠해보세요.</p>
+        </div>
+      </div>
+      <div class="purpose-row">
+        <div class="purpose-tag">고객</div>
+        <div>
+          <p>미팅 전, 고객사의 현재 상황과 관심사를 빠르게 파악하세요.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">알아두면 좋은 것</div>
+    <h2 class="serif">이용 팁</h2>
+    <div class="tip-box">
+      <ul>
+        <li><strong>산업별 보기</strong> 탭에서는 업종별 매출 상위 기업을 바로 훑어볼 수 있어요.</li>
+        <li><strong>히스토리</strong> 탭에서 예전에 본 회사를 다시 찾을 수 있고, 별표를 눌러두면 즐겨찾기로 상단에 고정돼요.</li>
+        <li>수치 옆의 🟢🟡⚪ 표시는 출처 신뢰도예요 — 🟢공식(SEC·DART 등 공시), 🟡참고, ⚪추정.</li>
+        <li>같은 회사를 다시 검색해도 최근 분석 결과를 바로 불러오니, 매번 새로 기다릴 필요 없어요.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer-note">CEO Staff Ben · 회장님의 리서치를 대신하는 1분</div>
+
+</div>
+</body>
+</html>
