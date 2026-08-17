@@ -331,6 +331,9 @@ export interface CrossIndustryNudgeV1 {
     description: string[];
     financial_impact_question: string;
   };
+  // 2026-08-17 신규 — industry_pain과 cross_industry_example을 잇는 연결 인사이트.
+  // optional — 이 필드 이전에 생성된 캐시 데이터는 없을 수 있음(sources/key_bullets와 동일 취급).
+  connection_insight?: string;
   cross_industry_example: {
     source_industry: string;
     case_name: string;

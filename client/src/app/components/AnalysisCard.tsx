@@ -10,7 +10,7 @@ import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
-  TrendingUp, Lock, Copy, Check, Lightbulb, Star, ArrowUp,
+  TrendingUp, Lock, Copy, Check, Lightbulb, Star, ArrowUp, ArrowDown,
 } from 'lucide-react';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
 import {
@@ -1485,6 +1485,19 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
         )}
       </SectionCard>
 
+      {/* 2026-08-17 신규 — 위 산업 문제와 아래 타산업 사례가 왜 연결되는지 명시 (관찰
+          기록: "사례가 뜬금없이 튀어나온 것처럼 보인다"는 지적 계기). 옛 캐시 데이터는
+          필드 자체가 없을 수 있어 조건부 렌더링. */}
+      {n.connection_insight && (
+        <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 border border-gray-100 rounded-lg">
+          <ArrowDown size={14} className="text-navy-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">연결고리</div>
+            <p className="text-sm text-gray-700 leading-relaxed italic">{n.connection_insight}</p>
+          </div>
+        </div>
+      )}
+
       <SectionCard title="타산업 해결 사례" dotColor="bg-navy-400">
         <div className="flex items-center gap-2 mb-1.5">
           <Tag label={n.cross_industry_example.source_industry} color="navy" />
@@ -2715,6 +2728,7 @@ function crossIndustryNudgeToMd(n: CrossIndustryNudgeV1): string {
     n.key_bullets?.length ? `**핵심 요약**\n${mdList(n.key_bullets)}` : '',
     `**${n.industry_pain.title}**\n${mdList(n.industry_pain.description)}`,
     n.industry_pain.financial_impact_question,
+    n.connection_insight ? `> 연결고리: ${n.connection_insight}` : '',
     `**타산업 사례 (${n.cross_industry_example.source_industry})**: ${n.cross_industry_example.case_name} — ${n.cross_industry_example.solution_description}`,
     mdSourcesBlock(n.sources),
   ]);

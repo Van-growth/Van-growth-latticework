@@ -1339,6 +1339,20 @@ function CrossIndustryNudgeSection({ v, t }: { v: CrossIndustryNudgeV1; t: TFn }
         </View>
       )}
 
+      {/* 2026-08-17 신규 — 위 산업 문제와 아래 타산업 사례를 잇는 연결 인사이트(관찰
+          기록: "사례가 뜬금없이 튀어나온 것처럼 보인다"는 지적 계기). 옛 캐시 데이터는
+          필드 자체가 없을 수 있어 조건부 렌더링. */}
+      {v.connection_insight && (
+        <View style={{ backgroundColor: C.bg, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 8, borderLeft: `2 solid ${C.light}` }}>
+          <Text style={{ fontSize: 7, fontWeight: 700, color: C.light, letterSpacing: 0.5, marginBottom: 2 }}>
+            {t('연결고리', 'THE CONNECTION')}
+          </Text>
+          <Text style={{ fontSize: 8.5, color: C.mid, lineHeight: 1.5, fontStyle: 'italic' }}>
+            {sp(v.connection_insight)}
+          </Text>
+        </View>
+      )}
+
       {v.cross_industry_example && (
         <View style={[s.card, { borderLeftColor: C.green }]}>
           <Text style={s.cardTitle}>
