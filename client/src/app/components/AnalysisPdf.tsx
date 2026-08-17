@@ -85,7 +85,7 @@ function purposeCategoryLabel(category: string, t: TFn): string {
 // 렌더링 깨짐이 실측으로 확인됨(2026-08-12) — 텍스트 기호로 치환.
 function sp(text: string | undefined | null): string {
   if (!text) return '';
-  return text
+  return stripUnsupportedCjk(text
     .replace(/₩/g, 'W')
     .replace(/©/g, '(c)')
     .replace(/®/g, '(R)')
@@ -102,7 +102,32 @@ function sp(text: string | undefined | null): string {
     .replace(/[✓✔]/g, '(v)')
     .replace(/[✗✘]/g, '(x)')
     .replace(/⚠/g, '(!)')
-    .replace(/[●■★]/g, '*');
+    .replace(/[●■★]/g, '*'));
+}
+
+// noto-sans-kr/noto-serif-kr WOFF 서브셋은 한글(+라틴/구두점)만 담고 있고 히라가나·가타카나·
+// CJK 한자(칸지/한자)는 전혀 커버하지 않음 — fontkit으로 폰트 파일 글리프 커버리지를 직접
+// 실측해 확정(2026-08-17, 리베라웨어 창업자 섹션 텍스트 겹침 버그 조사). 미지원 글리프는
+// .notdef로 advance width가 정상 처리되지 않아 뒤따르는 문자들이 같은 좌표에 겹쳐 찍히는
+// 렌더링 붕괴로 이어진다 — 일본 기업뿐 아니라 한자 병기가 나오는 어떤 콘텐츠(중국 기업 등)든
+// 동일하게 재현될 수 있는 문제라 "일본어 제거"가 아니라 "이 폰트가 지원 안 하는 CJK 범위
+// 제거"로 접근한다. 대상: 히라가나(U+3040–309F), 가타카나(U+30A0–30FF, 확장 U+31F0–31FF,
+// 반각 U+FF65–FF9F), CJK 통합 한자(U+4E00–9FFF, 확장A U+3400–4DBF).
+const UNSUPPORTED_CJK = /[぀-ゟ゠-ヿㇰ-ㇿ･-ﾟ一-鿿㐀-䶿]/g;
+
+function stripUnsupportedCjk(text: string): string {
+  if (!UNSUPPORTED_CJK.test(text)) return text; // 대부분 텍스트엔 해당 문자가 없음 — 빠른 경로
+  return text
+    .replace(UNSUPPORTED_CJK, '')
+    // 문자 제거로 생긴 빈 괄호("이름()") 또는 구두점만 남은 괄호("(，)") 제거
+    .replace(/[（(]\s*[，,、]?\s*[）)]/g, '')
+    // "(, 사외이사)"처럼 선행 쉼표만 남은 괄호를 "(사외이사)"로 정리
+    .replace(/[（(]\s*[，,、]\s*/g, '(')
+    // "前 이사"의 "前"만 제거돼 생긴 "( 이사"/"이사 )" 같은 괄호 안쪽 여백 정리
+    .replace(/([（(])\s+/g, '$1')
+    .replace(/\s+([）)])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 // Claude가 생성하는 자유서술 텍스트(bull_case, oneLiner, career_trajectory 등)엔 위 특수기호가
