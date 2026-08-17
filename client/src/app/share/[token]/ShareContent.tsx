@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AnalysisCard from '@/app/components/AnalysisCard';
+import LoginPromptModal from '@/app/components/LoginPromptModal';
+import { useAuth } from '@/app/context/AuthContext';
 import { AnalysisDetail } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -11,12 +13,8 @@ export default function ShareContent({ token }: { token: string }) {
   const [data, setData] = useState<AnalysisDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [toast, setToast] = useState('');
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2500);
-  }
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const { signInWithGoogle } = useAuth();
 
   useEffect(() => {
     fetch(`${API_URL}/api/share/${token}`)
@@ -49,13 +47,13 @@ export default function ShareContent({ token }: { token: string }) {
               </span>
             )}
             <button
-              onClick={() => showToast('준비 중입니다')}
+              onClick={() => setShowLoginModal(true)}
               className="text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg transition-colors"
             >
               로그인
             </button>
             <button
-              onClick={() => showToast('준비 중입니다')}
+              onClick={() => setShowLoginModal(true)}
               className="text-xs text-white bg-navy-600 hover:bg-navy-700 px-3 py-1.5 rounded-lg transition-colors"
             >
               회원가입
@@ -93,11 +91,14 @@ export default function ShareContent({ token }: { token: string }) {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
-          {toast}
-        </div>
+      {/* 로그인/회원가입 — 구글 OAuth 단일 로그인이라 둘 다 같은 모달을 연다.
+          기존 HomeContent.tsx 흐름과 동일하게 LoginPromptModal 재사용. */}
+      {showLoginModal && (
+        <LoginPromptModal
+          companyName={data?.companyName ?? ''}
+          onClose={() => setShowLoginModal(false)}
+          onContinue={() => { signInWithGoogle(); setShowLoginModal(false); }}
+        />
       )}
     </div>
   );

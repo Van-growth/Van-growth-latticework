@@ -257,7 +257,7 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
         title={error ? 'PDF 생성 오류 — 다시 시도' : 'PDF 파일로 내보내기'}
         className={`
           flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
-          border transition-colors
+          border transition-colors shrink-0 whitespace-nowrap
           ${error
             ? 'border-risk-border text-risk bg-risk-bg hover:bg-risk-bg'
             : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50 hover:border-gray-300'

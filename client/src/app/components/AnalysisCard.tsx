@@ -327,7 +327,7 @@ const DATA_SOURCE_CONFIG: Record<DataSource, { label: string; level: SourceLevel
 function DataSourceBadge({ source }: { source: DataSource }) {
   const cfg = DATA_SOURCE_CONFIG[source];
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE[cfg.level].cls}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-medium px-2.5 py-1 rounded-full shrink-0 ${LEVEL_BADGE[cfg.level].cls}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT[cfg.level]}`} />
       {cfg.label}
     </span>
@@ -2894,7 +2894,7 @@ function CopyButton({ getMarkdown, label = '복사', shortLabel, copiedLabel = '
     <button
       type="button"
       onClick={handleCopy}
-      className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0"
+      className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0 whitespace-nowrap"
     >
       {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
       {shortLabel ? (
@@ -3136,8 +3136,8 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       {/* Header */}
       <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Building2 size={18} className="text-gray-400" />
               <h2 className="text-2xl font-semibold text-gray-900 leading-none">{data.companyName}</h2>
@@ -3150,7 +3150,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 있으면 그걸, 없으면(옛 캐시 등) 원문으로 폴백 — PDF와 동일 우선순위. */}
             {data.purposeCategory && (
               <div className="flex items-center gap-1.5 ml-6 mt-1.5">
-                <span className="inline-flex items-center text-[11px] font-medium text-navy-700 bg-navy-50 border border-navy-100 rounded-full px-2.5 py-0.5">
+                <span className="inline-flex items-center whitespace-nowrap text-[11px] font-medium text-navy-700 bg-navy-50 border border-navy-100 rounded-full px-2.5 py-0.5">
                   {uiT.home.purposeSectionTitle}: {purposeCategoryLabel(data.purposeCategory, uiT)}
                 </span>
                 {(data.purposeDetailFormatted ?? data.purposeDetail) && (
@@ -3161,7 +3161,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {!isShareView && (
               <button
                 type="button"

@@ -47,6 +47,9 @@ interface UiStringDict {
     bodyGeneric: string;
     bodySub: string;
     continueWithGoogle: string;
+    privacyConsentPrefix: string;
+    privacyConsentLinkLabel: string;
+    privacyConsentSuffix: string;
   };
   // 2026-08-17 신규(같은 날 공시확인+목적확인 통합으로 확장) — "분석하기" 클릭 시
   // EDGAR/DART 공시 데이터 존재 여부(사전 리서치/Claude 호출 없이 typeahead 매핑만으로
@@ -259,6 +262,9 @@ const ko: UiStringDict = {
     bodyGeneric: '기업 분석을 시작하려면 로그인이 필요해요.',
     bodySub: '로그인하면 무료로 2회 기업 분석을 이용할 수 있어요.',
     continueWithGoogle: '구글로 계속하기',
+    privacyConsentPrefix: '계속하면 ',
+    privacyConsentLinkLabel: '개인정보처리방침',
+    privacyConsentSuffix: '에 동의하는 것으로 간주됩니다.',
   },
   preAnalysisConfirmModal: {
     closeAria: '닫기',
@@ -480,6 +486,9 @@ const en: UiStringDict = {
     bodyGeneric: 'Log in to start analyzing a company.',
     bodySub: 'Once you log in, you get 2 free company analyses.',
     continueWithGoogle: 'Continue with Google',
+    privacyConsentPrefix: 'By continuing, you agree to our ',
+    privacyConsentLinkLabel: 'Privacy Policy',
+    privacyConsentSuffix: '.',
   },
   preAnalysisConfirmModal: {
     closeAria: 'Close',

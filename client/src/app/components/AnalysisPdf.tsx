@@ -996,13 +996,13 @@ function SummarySection({ v, t }: { v: SummaryV2; t: TFn }) {
 
       {/* Growth momentum / Key risks */}
       <View style={s.grid2}>
-        {v.bull_case?.length > 0 && (
+        {Array.isArray(v.bull_case) && v.bull_case.length > 0 && (
           <View style={[s.gridLeft, s.card, { borderLeftColor: C.green }]}>
             <Text style={s.cardTitle}>{t('성장 모멘텀', 'Growth Momentum')}</Text>
             {v.bull_case.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
           </View>
         )}
-        {v.bear_case?.length > 0 && (
+        {Array.isArray(v.bear_case) && v.bear_case.length > 0 && (
           <View style={[s.gridRight, s.card, { borderLeftColor: C.red }]}>
             <Text style={s.cardTitle}>{t('핵심 리스크', 'Key Risks')}</Text>
             {v.bear_case.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
@@ -1131,13 +1131,13 @@ function ValueChainSection({ v, t }: { v: ValueChainV2; t: TFn }) {
     <View style={s.section}>
       <SectionHeader num={2} title={`${t('밸류체인', 'Value Chain')} — ${v.industry}`} id="sec-2" />
       <KeyBulletsPdf bullets={v.key_bullets} />
-      {v.value_flow?.length > 0 && (
+      {Array.isArray(v.value_flow) && v.value_flow.length > 0 && (
         <View style={{ marginBottom: 4 }}>
           <Text style={s.cardTitle}>{t('가치 흐름', 'Value Flow')}</Text>
           {v.value_flow.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
         </View>
       )}
-      {v.subject_position?.length > 0 && (
+      {Array.isArray(v.subject_position) && v.subject_position.length > 0 && (
         <View style={{ marginBottom: 4 }}>
           <Text style={s.cardTitle}>{t('분석 기업 위치', 'Subject Company Position')}</Text>
           {v.subject_position.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}
@@ -1372,7 +1372,7 @@ function CrossIndustryNudgeSection({ v, t }: { v: CrossIndustryNudgeV1; t: TFn }
           <Text style={{ fontSize: 7, fontWeight: 700, color: C.light, letterSpacing: 0.5, marginBottom: 2 }}>
             {t('연결고리', 'THE CONNECTION')}
           </Text>
-          <Text style={{ fontSize: 8.5, color: C.mid, lineHeight: 1.5, fontStyle: 'italic' }}>
+          <Text style={{ fontSize: 8.5, color: C.mid, lineHeight: 1.5 }}>
             {sp(v.connection_insight)}
           </Text>
         </View>
@@ -1449,7 +1449,7 @@ function StrategySection({ v, t }: { v: StrategyV2; t: TFn }) {
           <Text style={s.para}>{v.strategy_coherence}</Text>
         </>
       )}
-      {v.ten_year_durability?.length > 0 && (
+      {Array.isArray(v.ten_year_durability) && v.ten_year_durability.length > 0 && (
         <>
           <SubHeader>{t('10년 지속 가능성', '10-Year Durability')}</SubHeader>
           {v.ten_year_durability.map((b, i) => <Bullet key={i}>{sp(b)}</Bullet>)}

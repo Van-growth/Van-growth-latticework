@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { X } from 'lucide-react';
 import { GoogleIcon } from './Header';
 import { useLanguage } from '@/app/context/LanguageContext';
@@ -47,6 +48,13 @@ export default function LoginPromptModal({ companyName, onClose, onContinue }: L
           <GoogleIcon />
           {t.continueWithGoogle}
         </button>
+        <p className="text-[11px] text-gray-400 text-center mt-3">
+          {t.privacyConsentPrefix}
+          <Link href="/privacy" className="underline hover:text-gray-500" onClick={e => e.stopPropagation()}>
+            {t.privacyConsentLinkLabel}
+          </Link>
+          {t.privacyConsentSuffix}
+        </p>
       </div>
     </div>
   );
