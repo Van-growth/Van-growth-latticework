@@ -10,40 +10,48 @@
 > git log/커밋 메시지를 참고할 것.
 
 **날짜**: 2026-08-17
-**커밋**: `f3aa3bc`, `915a2b5`, `4f43e90`, `029652a`, `42cbe69`, `45dcd1b`
+**커밋**: `f3aa3bc`, `915a2b5`, `4f43e90`, `029652a`, `42cbe69`, `45dcd1b` (이번 라운드
+작업은 미커밋 — 아래 "남음" 참고)
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI/대시보드 접근 수단이 없음
-(반복 확인된 제약, 변동 없음). 위 커밋 전부 푸시 완료 — 실제 배포 반영 여부는
-사용자가 직접 확인 필요.
+(반복 확인된 제약, 변동 없음). 위 커밋들은 푸시 완료, 이번 라운드 작업은 아직
+로컬에만 있음 — 실제 배포 반영 여부는 사용자가 직접 확인 필요.
 
 ### 완료
-- 섹션 생성 간헐적 실패 관찰 기록 조사 + founder_v2 로깅 결함/max_tokens 통일
-  (6000→8000, git blame으로 의도치 않은 실수 확정) — `f3aa3bc`
-- PDF 생성 "데이터 수집" 단계 정지 버그 원인 확정+수정 — CSP `connect-src`에
-  `data:` 스킴이 없어 yoga-layout(react-pdf 내부 flexbox WASM 엔진)의
-  `fetch(data:application/octet-stream;base64,...)`가 차단되던 것 확인.
-  Playwright + 실제 프로덕션 빌드로 재현 — 수정 전 CSP에서 사용자 제보 콘솔
-  에러와 토씨 하나 다르지 않게 재현, 수정 후 0건. **단서**: 격리 테스트에서는
-  yoga 자체 fallback으로 PDF 생성이 끝까지 완료됐음(무한 정지 아님) — "완전
-  멈춤" 증상의 전체 원인이라 단정하지 않음, 상세는 `next.config.ts` CSP 주석
-  참고. 같이 처리: 경과 초 숫자 표시 제거(무한 애니메이션만 유지), 로딩 메시지
-  9종을 신뢰감 있는 톤으로 교체(실존 인용/데이터소스 언급 금지), PDF 표지에
-  분석 목적(purpose) 배지 신규(그 과정에서 `purpose_category`가 `GET /api/
-  analyses/:id`·SSE `done` 어디에도 반환 안 되던 배관 공백 발견해 연결) — `915a2b5`
-- 크로스인더스트리 넛지 섹션에 `connection_insight`(연결 인사이트) 신규 필드
-  추가 — 업종 pain과 타산업 사례 사이 명시적 연결 문장이 없어 "사례가 뜬금없이
-  튀어나온다"는 관찰 계기. 스키마/Quality Gate/웹탭/PDF/마크다운 복사 전 경로
-  반영, `callSection()` 직접 호출로 실측 검증 2건(리베라웨어: 드론 배터리
-  트레이드오프→NIO 배터리 스왑, TSMC: 수율 램프업→보잉 787 학습곡선) — 둘 다
-  구체적 공유 메커니즘을 짚는 문장 생성 확인, 산업문제→연결문장→사례 순서로
-  자연스럽게 읽힘 — `4f43e90`
-- 기존 미커밋 파일 정리(사용자 지시) — Haiku vs Sonnet 비교 리포트 산출물 4개
-  (`029652a`), DART 재무 신뢰성 검증 스크립트 2개(`42cbe69`), CEO Staff Ben
-  가이드 초안 HTML(`45dcd1b`)
+- 섹션 생성 간헐적 실패 관찰 기록 조사 + founder_v2 로깅 결함/max_tokens 통일,
+  PDF 생성 CSP 버그 확정+수정(+로딩UX 개편/표지 목적표시), 크로스인더스트리
+  넛지 `connection_insight` 신규, 기존 미커밋 파일 정리 — 상세는 git log
+  (`f3aa3bc`~`45dcd1b`) 참고, 전부 푸시 완료
+- **분석 시작 전 공시 데이터 존재 여부 사전 확인 + 확인 다이얼로그 신규**(미커밋)
+  — "분석하기" 클릭 시 typeahead 선택 시점에 이미 받아둔 `listings`(corp_master/
+  cik_master 매칭 여부)만으로 즉시(추가 API 호출 없음, 0ms) 판정해
+  `FilingCheckModal` 표시: 공시 확인됨 → "진행", 미확인 → "그래도 진행"/"취소".
+  크레딧 차감 로직은 결제 시스템 미구현 상태라 실제 연동 없이 안내 문구만
+  선반영(`filingCheckModal.creditNote`, "취소하면 크레딧이 차감되지 않아요") —
+  **실제 크레딧 시스템 자체가 아직 없음, 결제 시스템 구현 시점에 별도 연동 예정.**
+  KO/EN 둘 다 uiStrings.ts에 정식 반영(이 기능은 신규 하드코딩 없음)
+- **corp_master DART 전체 확장**(사용자 결정, 미커밋) — 기존 3,971개(상장만)에서
+  DART corpCode.xml 전체 118,712개(상장 3,983 / 비상장 외감법인 등 114,729)로
+  확장. `server/scripts/fetchDartCorpMaster.ts` 신규(ZIP 응답 처리를 위해
+  `adm-zip` 의존성 추가, XML 파싱은 기존 cheerio 재사용) — 일회성 수동 스크립트,
+  cron 미연결. "우아한형제들"(비상장 외감법인) 등 실제 DART API로 정상 매칭
+  확인. **부수 발견+즉시 수정**: 확장 직후 "삼성" 검색 시 무명 비상장 관계사가
+  삼성전자 등 실제 상장사를 top-8에서 밀어내는 회귀를 실측 발견 —
+  `companies.ts`의 typeahead를 상장사 우선 2단 조회(상장 먼저 채우고 부족분만
+  비상장으로 보충)로 수정, "삼성"/"카카오"/"현대" 재검증 완료
+- CLAUDE.md DB schema 섹션의 corp_master 설명(3,971개 표기)도 함께 갱신
 
 ### 남음
-- 실 admin 로그인 + 실 배포 환경에서 PDF 다운로드 끝까지 완료 재현 검증 — 이
-  세션엔 실 구글 로그인 수단이 없어 격리 Playwright 테스트로 갈음, 배포 후
-  사용자 직접 확인 필요
+- **이번 라운드 작업(공시 사전확인 다이얼로그 + corp_master 확장 + typeahead
+  랭킹 수정) 커밋+푸시** — 사용자 지시 대기 중, 다음 세션 시작 시 확인. 변경
+  파일: `client/src/app/components/HomeContent.tsx`, 신규
+  `FilingCheckModal.tsx`, `client/src/lib/i18n/uiStrings.ts`,
+  `server/src/routes/companies.ts`, 신규 `server/scripts/
+  fetchDartCorpMaster.ts`, `server/package.json`/`package-lock.json`
+  (adm-zip), `CLAUDE.md`
+- 실 admin 로그인 + 실 배포 환경에서 이번 라운드 다이얼로그 클릭 플로우(취소/
+  진행/그래도 진행) 실사용 검증 — 이 세션엔 실 구글 로그인 수단이 없어
+  `/api/companies/typeahead` 직접 호출(우아한형제들/삼성전자/카카오/현대
+  실측)로 갈음, 배포 후 사용자 직접 확인 필요
 - PDF/웹 개편 전체 실제 브라우저 재현 테스트(로딩 문구·표지 목적배지·
   연결인사이트 렌더링·진행률바·폰트·색상·목차·출처순서·CAGR+차트) — 다음 세션
 - 2026-08-17 이전 세션 작업(색상 팔레트/내비게이션 1단 구조/즐겨찾기 등) 실제
@@ -54,14 +62,19 @@
   위험까지는 검증 어려움, 사용자 요청 시 별도 세션
 
 ### 발견 (미처리)
-- PDF "완전 정지" 증상의 전체 원인 미확정 — CSP `data:` 위반은 확정 수정했으나
-  격리 테스트상 yoga 자체 fallback으로 무한 정지가 재현되지 않음, 실제 대용량
-  한글 리포트에서도 재현되는지는 배포 후 확인 필요(`next.config.ts` CSP 주석 참고)
-- ⚠️ KR/EN 미확인 — `ExportPdfButton.tsx` 전체가 하드코딩 한국어 고정(기존부터
-  그랬음, 변동 없음). `CrossIndustryNudgeV1Tab`의 "업종 공통 Pain"/"타산업 해결
-  사례"/신규 "연결고리" 카드 제목도 동일하게 하드코딩 한국어(기존 컴포넌트
-  패턴 그대로 따름, 신규 회귀 아님) — 언어 토글 적용 시 이 두 컴포넌트 전체
-  재작업 필요. `AnalysisPdf.tsx` 쪽은 `t()`로 이미 정상 이중언어 지원.
+- typeahead 랭킹이 여전히 순수 알파벳순이라, 상장사 우선 수정 이후에도 "가장
+  잘 알려진 회사"가 top-8에 늘 오는 건 아님(예: "현대" 검색 시 HD현대 계열은
+  잘 뜨지만 "현대차"는 알파벳 순서상 밀릴 수 있음) — 이건 이번에 corp_master를
+  키워서 새로 생긴 문제가 아니라 원래도 있던(3,971개 시절부터) 알파벳순 정렬의
+  한계. exact-match/시작-일치 우선순위 같은 진짜 관련도 랭킹은 이번 스코프
+  밖 — 필요해지면 별도 작업으로
+- corp_master 118,712행 정기 갱신 미자동화 — 최초 1회 전량 적재만 완료, 신규
+  상장/외감법인 지정·폐업 등을 반영할 주기적 재실행 체계가 없음(원래도 없었던
+  것과 동일 — cron 연결은 이번 스코프 밖으로 판단)
+- 크레딧 UI는 카피만 존재, 실제 크레딧 잔액/차감 시스템은 전혀 없음(의도된
+  범위 — 결제 시스템 구현 시 별도 연동)
+- ⚠️ KR/EN 미확인 — `ExportPdfButton.tsx`/`CrossIndustryNudgeV1Tab` 내부 카드
+  제목 하드코딩 한국어(기존부터 그랬음, 변동 없음) — 언어 토글 적용 시 재작업 필요
 - DART 현금흐름표 데이터 파이프라인 구조적 공백 — `fnlttSinglAcnt.json`이
   현금흐름표 미포함, PDF+웹 재무 탭 공통 영향, 신규 엔드포인트 연동 필요(별도 백로그)
 - Anthropic API 계정 사용량 한도 — 2026-09-01 00:00 UTC 재개 예정, 그 전까지
@@ -69,8 +82,8 @@
 - 비용/토큰 실측 인프라 부재 — Render 로그 접근 수단/Anthropic Admin API 키 둘 다 없음
 
 ### 다음 세션 우선순위
-1. 배포 후 실 로그인으로 PDF(CSP fix/로딩UX/표지 목적표시)와 크로스인더스트리
-   넛지(connection_insight) 실제 렌더링 재현 검증
+1. 공시 사전확인 다이얼로그 + corp_master 확장 커밋+푸시 → 배포 후 실 로그인으로
+   전체 라운드(PDF/connection_insight/공시확인) 실제 렌더링·클릭 플로우 재현 검증
 
 ## Vision & Mission
 
@@ -385,7 +398,13 @@ cd client && npm install && npm run dev
 여전히 전 유저 공용 캐시이고 이 컬럼은 "생성자"만 기록할 뿐 "유일한 열람/수정 권한자"를
 뜻하지 않음).
 
-**corp_master**(추가 컬럼): `ksic_code`, `sector_tag` — DART 상장기업(3,971개) 전수 적재 완료
+**corp_master**(추가 컬럼): `ksic_code`, `sector_tag` — 2026-08-17까지 DART 상장기업
+3,971개만 적재돼 있었으나, "분석 시작 전 공시 데이터 존재 여부 사전 확인" 기능 계기로
+DART corpCode.xml 전체(상장+비상장 외감법인 등 118,712개, 상장 3,983/비상장 등 114,729)로
+확장(`server/scripts/fetchDartCorpMaster.ts`, 일회성 수동 스크립트 — cron 미연결, 정기
+갱신 없음). `ksic_code`/`sector_tag`는 여전히 상장기업만 채워져 있음(`fetchKsicCodes.ts`가
+`stock_code IS NOT NULL` 대상으로만 실행됨, 신규 비상장 11만여 건은 미실행 — 산업
+벤치마크/섹터 정리 용도로는 기존과 동일하게 상장기업만 유효, typeahead 검색 커버리지만 확장됨)
 
 **cik_master**(추가 컬럼): `sic_code`, `sic_description`, `sector_tag` — EDGAR 전체(8,021개) 적재 중
 
