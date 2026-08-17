@@ -84,6 +84,18 @@ function flagOf(country: string): string {
   return COUNTRY_FLAG[country.trim()] ?? COUNTRY_FLAG[country.trim().split(/[,/ ]/)[0]] ?? '';
 }
 
+// AnalysisPdf.tsx의 동명 헬퍼와 동일 매핑, uiT.home.purposeMa 등 이미 있는 문자열을
+// 그대로 재사용(새 문자열 불필요) — 2026-08-17 웹 표지 목적 표시 신규 계기.
+function purposeCategoryLabel(category: string, uiT: ReturnType<typeof getUiStrings>): string {
+  const map: Record<string, string> = {
+    ma: uiT.home.purposeMa,
+    investment: uiT.home.purposeInvestment,
+    partnership: uiT.home.purposePartnership,
+    customer: uiT.home.purposeCustomer,
+  };
+  return map[category] ?? uiT.home.purposeOther;
+}
+
 // ── Primitives ────────────────────────────────────────────────────────────────
 
 function Tag({ label, color = 'gray' }: { label: string; color?: string }) {
@@ -3133,6 +3145,21 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             <p className="text-xs text-gray-400 ml-6">
               {new Date(data.createdAt).toLocaleString(reportLanguage === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
+            {/* 분석 목적 배지 — PDF 표지엔 이미 있었으나 웹엔 없던 것을 신규 추가
+                (2026-08-17, 사전 확인 다이얼로그 통합 작업 계기). purposeDetailFormatted가
+                있으면 그걸, 없으면(옛 캐시 등) 원문으로 폴백 — PDF와 동일 우선순위. */}
+            {data.purposeCategory && (
+              <div className="flex items-center gap-1.5 ml-6 mt-1.5">
+                <span className="inline-flex items-center text-[11px] font-medium text-navy-700 bg-navy-50 border border-navy-100 rounded-full px-2.5 py-0.5">
+                  {uiT.home.purposeSectionTitle}: {purposeCategoryLabel(data.purposeCategory, uiT)}
+                </span>
+                {(data.purposeDetailFormatted ?? data.purposeDetail) && (
+                  <span className="text-[11px] text-gray-400 truncate max-w-[280px]">
+                    {data.purposeDetailFormatted ?? data.purposeDetail}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {!isShareView && (

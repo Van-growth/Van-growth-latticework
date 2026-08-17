@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import {
   analyzeCompany, AnalysisData, AnalysisSources, FinancialsV2, SectionSource, reanalyzeSingleSection,
-  generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations,
+  generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, generateReformattedPurpose,
   SecBenchmarkComparison, Language,
 } from '../lib/claude';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
@@ -380,6 +380,9 @@ function buildDonePayload(
     // 값과 다를 수 있음: 부분캐시/완전캐시 경로는 이 요청의 purposeCategory를 analyses
     // 행에 소급 반영하지 않는다는 기존 설계와 동일한 한계).
     purposeCategory?: string; purposeDetail?: string;
+    // 2026-08-17 사전 확인 다이얼로그에서 정리된 목적 텍스트(표시 전용) — purposeCategory/
+    // purposeDetail과 동일한 "이 요청 기준 표시값" 한계를 그대로 따른다.
+    purposeDetailFormatted?: string;
   },
 ) {
   // 성장 시나리오는 계산/저장은 항상 수행하되, 응답 페이로드는 프리미엄 유저에게만 포함
@@ -415,6 +418,7 @@ function buildDonePayload(
     dataSource:          meta.dataSource,
     purposeCategory:     meta.purposeCategory ?? null,
     purposeDetail:       meta.purposeDetail ?? null,
+    purposeDetailFormatted: meta.purposeDetailFormatted ?? null,
   };
 }
 
@@ -557,6 +561,43 @@ router.get('/usage', async (req: Request, res: Response) => {
   res.json({ isPremium: false, isAdmin, usedCount: usage.usedCount, limit: 2, nextAvailableAt: usage.nextAvailableAt ?? null });
 });
 
+// POST /api/analyze/reformat-purpose — "분석하기" 클릭 시 뜨는 사전 확인 다이얼로그용
+// (2026-08-17). purposeDetail 원문의 오탈자/구어체를 표시용으로만 정리 — 이 결과는
+// analyses.purpose_detail_formatted에 저장되고 웹/PDF 표지 표시에만 쓰인다. 9섹션
+// 생성 프롬프트는 계속 원문(purposeDetail)을 쓴다(claude.ts의 purposeBlock 참고,
+// 사용자 의도 왜곡 방지 원칙). 크레딧/레이트리밋 시스템과 무관 — checkAnalysisUsage
+// 호출 없음(로그인 게이트만 적용).
+router.post('/reformat-purpose', async (req: Request, res: Response) => {
+  const authUser = await resolveAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+    return;
+  }
+
+  const { purposeCategory: rawPurposeCategory, purposeDetail, language: rawLanguage } = req.body as {
+    purposeCategory?: string;
+    purposeDetail?: string;
+    language?: string;
+  };
+  if (!purposeDetail?.trim()) {
+    res.status(400).json({ error: '목적 상세 내용이 필요합니다.' });
+    return;
+  }
+  const language: Language = rawLanguage === 'ko' ? 'ko' : 'en';
+  const purposeCategory = PURPOSE_CATEGORIES.includes(rawPurposeCategory ?? '') ? rawPurposeCategory! : null;
+
+  try {
+    // generateReformattedPurpose() 내부에서 이미 실패를 삼켜 null을 반환하므로,
+    // formatted:null도 200으로 응답 — "정리 실패"는 서버 에러가 아니라 클라이언트가
+    // 원문 그대로 진행하는 폴백 UX로 처리할 정상 결과.
+    const formatted = await generateReformattedPurpose(purposeCategory, purposeDetail, language);
+    res.json({ formatted });
+  } catch (err) {
+    console.error('[POST /api/analyze/reformat-purpose]', err);
+    res.status(500).json({ error: '목적 정리 중 오류가 발생했습니다.' });
+  }
+});
+
 // ── Streaming POST /api/analyze/stream ───────────────────────────────────────
 
 router.post('/stream', async (req: Request, res: Response) => {
@@ -568,7 +609,7 @@ router.post('/stream', async (req: Request, res: Response) => {
 
   const {
     companyName, companyId, forceRefresh, sectorTag, baseRevenue,
-    language: rawLanguage, purposeCategory: rawPurposeCategory, purposeDetail,
+    language: rawLanguage, purposeCategory: rawPurposeCategory, purposeDetail, purposeDetailFormatted,
   } = req.body as {
     companyName?: string;
     companyId?: string;
@@ -581,6 +622,9 @@ router.post('/stream', async (req: Request, res: Response) => {
     // 분석 요청마다 입력받는 목적(매 요청 단위) — 각 섹션 프롬프트에 해석 레이어로 주입.
     purposeCategory?: string;
     purposeDetail?: string;
+    // 2026-08-17 사전 확인 다이얼로그에서 정리된 목적(표시 전용, POST /reformat-purpose
+    // 결과) — 섹션 프롬프트에는 주입되지 않음, purposeDetail 원문만 계속 사용.
+    purposeDetailFormatted?: string;
   };
   // 기본값 EN(언어 정책 SSOT) — 클라이언트가 안 보내거나 알 수 없는 값이면 안전하게 폴백
   const language: Language = rawLanguage === 'ko' ? 'ko' : 'en';
@@ -744,7 +788,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           send('done', buildDonePayload(
             { ...cached, financials_v2: effectiveFinancials, competitors_v2: effectiveCompetitors },
             name,
-            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium, language, purposeCategory, purposeDetail },
+            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium, language, purposeCategory, purposeDetail, purposeDetailFormatted },
           ));
           return res.end();
         }
@@ -784,7 +828,11 @@ router.post('/stream', async (req: Request, res: Response) => {
         // 적용됨 — 이미 캐시된 섹션 콘텐츠를 소급 변경하진 않음, "주입 배관만" 스코프).
         if (purposeCategory) {
           await supabase.from('analyses')
-            .update({ purpose_category: purposeCategory, purpose_detail: purposeDetail?.trim() || null })
+            .update({
+              purpose_category: purposeCategory,
+              purpose_detail: purposeDetail?.trim() || null,
+              purpose_detail_formatted: purposeDetailFormatted?.trim() || null,
+            })
             .eq('id', cached.id);
         }
 
@@ -859,6 +907,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           language,
           purposeCategory,
           purposeDetail,
+          purposeDetailFormatted,
         }));
         return res.end();
       }
@@ -918,6 +967,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               data_source: dataSource,
               purpose_category: purposeCategory ?? null,
               purpose_detail:   purposeDetail?.trim() || null,
+              purpose_detail_formatted: purposeDetailFormatted?.trim() || null,
               summary_v2:          data.summary_v2 ?? null,
               industry_history_v2: null,
               tech_evolution_v2:   null,
@@ -977,6 +1027,7 @@ router.post('/stream', async (req: Request, res: Response) => {
       language,
       purposeCategory,
       purposeDetail,
+      purposeDetailFormatted,
     }));
     res.end();
 

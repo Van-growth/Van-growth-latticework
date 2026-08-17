@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw, Target } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import LoginPromptModal from './LoginPromptModal';
-import FilingCheckModal from './FilingCheckModal';
+import PreAnalysisConfirmModal, { PurposeReformatState } from './PreAnalysisConfirmModal';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
@@ -159,10 +159,17 @@ export default function HomeContent() {
   const [selectedCompany, setSelectedCompany] = useState<{ name: string; companyId: string; listings: CompanyListing[] } | null>(null);
   const [resolveResult, setResolveResult] = useState<CompanyResolveResponse | null>(null);
   const [resolving, setResolving] = useState(false);
-  // "분석하기" 클릭 시 실제 리서치 시작 전 보여주는 공시 데이터 확인 다이얼로그
-  // (2026-08-17 신규) — hasFilingData는 selectedCompany.listings로만 판정(새 API
-  // 호출 없음), 이 state는 "지금 이 다이얼로그를 보여줘야 하는가"만 담당.
-  const [filingCheck, setFilingCheck] = useState<{ hasFilingData: boolean } | null>(null);
+  // "분석하기" 클릭 시 실제 리서치 시작 전 보여주는 통합 확인 다이얼로그(공시 데이터
+  // 확인 + 목적 정리 확인, 2026-08-17 병합) — hasFilingData는 selectedCompany.listings로
+  // 즉시 판정(새 API 호출 없음, 0ms). purposeReformat은 purposeDetail 유무에 따라 별도
+  // 상태 관리: 'skipped'(입력 없어 API 호출 자체를 안 함), 'loading'(호출 중),
+  // 'success'(정리된 텍스트 있음), 'error'(호출 실패 — 원문 그대로 진행 폴백 UX용).
+  const [preAnalysisCheck, setPreAnalysisCheck] = useState<{ hasFilingData: boolean } | null>(null);
+  const [purposeReformat, setPurposeReformat] = useState<PurposeReformatState>({ status: 'skipped' });
+  // 다이얼로그 확정("네, 이대로 진행") 시점에만 채워지는 최종 값 — 모달이 열려있는 동안엔
+  // purposeReformat.text가 미리보기일 뿐, 실제로 서버에 보낼 값은 이 state가 결정한다.
+  const [confirmedPurposeDetailFormatted, setConfirmedPurposeDetailFormatted] = useState<string | undefined>(undefined);
+  const purposeDetailRef = useRef<HTMLTextAreaElement | null>(null);
   // 비로그인 상태에서 드롭다운을 클릭한 경우 — resolve를 바로 부르는 대신 이 값을
   // 채워서 LoginPromptModal을 띄운다. 로그인은 페이지 전체가 리로드되는 OAuth
   // 리다이렉트라 이 React state 자체는 로그인 후 못 살림 — "구글로 계속하기" 클릭
@@ -495,6 +502,7 @@ export default function HomeContent() {
           companyName: name, forceRefresh, companyId, language,
           purposeCategory: purposeCategory ?? undefined,
           purposeDetail: purposeDetail.trim() || undefined,
+          purposeDetailFormatted: confirmedPurposeDetailFormatted ?? undefined,
         }),
       });
 
@@ -610,20 +618,67 @@ export default function HomeContent() {
   // 버튼으로만 진행)면 제출을 막는다.
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (loading || resolving) return;
+    // preAnalysisCheck !== null이 곧 "요청 진행 중" 가드 — 아래에서 동기적으로 바로
+    // 세팅되므로(reformat-purpose 호출을 기다리기 전에) 다이얼로그가 열리기도 전에
+    // 중복 클릭이 막힌다.
+    if (loading || resolving || preAnalysisCheck) return;
     if (!session) { signInWithGoogle(); return; }
     if (!selectedCompany || selectedCompany.name !== companyName.trim() || resolveResult?.cached) return;
-    // 실제 리서치/생성을 시작하기 전에 공시 데이터 존재 여부를 먼저 확인시킨다
-    // (2026-08-17 신규, 불필요한 API 비용 방지) — listings는 typeahead 선택 시점에
-    // 이미 받아둔 값이라 새 조회 없이 즉시 판정된다. 확인/그래도 진행은
-    // handleFilingCheckConfirm이 이어받는다.
-    setFilingCheck({ hasFilingData: selectedCompany.listings.length > 0 });
+
+    // 실제 리서치/생성을 시작하기 전에 (1) 공시 데이터 존재 여부, (2) 정리된 목적 문장을
+    // 먼저 확인시킨다(2026-08-17 신규, 통합 다이얼로그) — 공시 판정은 typeahead 선택
+    // 시점에 이미 받아둔 listings로 즉시(0ms), 목적 정리는 purposeDetail이 있을 때만
+    // 별도 API 호출. 확정("네, 이대로 진행"/"그래도 진행")은 handlePreAnalysisProceed가
+    // 이어받는다.
+    setConfirmedPurposeDetailFormatted(undefined);
+    setPreAnalysisCheck({ hasFilingData: selectedCompany.listings.length > 0 });
+
+    const detail = purposeDetail.trim();
+    if (!detail) {
+      setPurposeReformat({ status: 'skipped' });
+      return;
+    }
+    setPurposeReformat({ status: 'loading' });
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+      const clientId = getClientId();
+      const res = await fetch(`${API_URL}/api/analyze/reformat-purpose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(clientId, session.access_token) },
+        body: JSON.stringify({ purposeCategory: purposeCategory ?? undefined, purposeDetail: detail, language }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.formatted) {
+        setPurposeReformat({ status: 'success', text: data.formatted });
+      } else {
+        setPurposeReformat({ status: 'error' });
+      }
+    } catch {
+      setPurposeReformat({ status: 'error' }); // 네트워크 에러/타임아웃 — 동일 폴백
+    }
   }
 
-  async function handleFilingCheckConfirm() {
-    setFilingCheck(null);
+  function handlePreAnalysisProceed() {
+    if (purposeReformat.status === 'success') {
+      setConfirmedPurposeDetailFormatted(purposeReformat.text);
+    }
+    // status가 error|skipped면 confirmedPurposeDetailFormatted는 undefined로 남고,
+    // 서버가 purpose_detail_formatted ?? purpose_detail로 원문에 자연 폴백한다.
+    setPreAnalysisCheck(null);
     if (!selectedCompany) return;
-    await startAnalysis(selectedCompany.name, false, selectedCompany.companyId);
+    startAnalysis(selectedCompany.name, false, selectedCompany.companyId);
+  }
+
+  function handlePreAnalysisBackToEdit() {
+    setPreAnalysisCheck(null);
+    purposeDetailRef.current?.focus();
+  }
+
+  function handlePreAnalysisCancel() {
+    setPreAnalysisCheck(null);
   }
 
   async function handleForceRefresh(companyId?: string, name?: string) {
@@ -812,7 +867,7 @@ export default function HomeContent() {
           {selectedCompany && resolveResult && !resolveResult.cached ? (
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !!preAnalysisCheck}
               className="px-6 py-3 rounded-xl bg-navy-600 text-white font-medium shadow-sm hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
             >
               {loading ? t.analyzing : t.startNew}
@@ -862,6 +917,7 @@ export default function HomeContent() {
           })}
         </div>
         <textarea
+          ref={purposeDetailRef}
           value={purposeDetail}
           onChange={e => setPurposeDetail(e.target.value)}
           disabled={loading}
@@ -1053,12 +1109,15 @@ export default function HomeContent() {
         />
       )}
 
-      {filingCheck && selectedCompany && (
-        <FilingCheckModal
+      {preAnalysisCheck && selectedCompany && (
+        <PreAnalysisConfirmModal
           companyName={selectedCompany.name}
-          hasFilingData={filingCheck.hasFilingData}
-          onCancel={() => setFilingCheck(null)}
-          onConfirm={handleFilingCheckConfirm}
+          hasFilingData={preAnalysisCheck.hasFilingData}
+          purposeDetail={purposeDetail.trim()}
+          purposeReformat={purposeReformat}
+          onCancel={handlePreAnalysisCancel}
+          onBackToEdit={handlePreAnalysisBackToEdit}
+          onProceed={handlePreAnalysisProceed}
         />
       )}
     </div>

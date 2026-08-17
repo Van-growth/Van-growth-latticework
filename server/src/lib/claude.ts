@@ -1567,3 +1567,61 @@ export async function generateSecBenchmarkInterpretations(
   }
 }
 
+// ── Purpose 텍스트 정리(표현 정리, "판단" 아님) — 사전 확인 다이얼로그용 (2026-08-17) ──
+// 원문 purposeDetail은 절대 여기서 대체되지 않는다 — 9섹션 프롬프트는 계속 원문을 쓰고
+// (purposeBlock, ~line 1225/1436), 이 함수의 결과는 오직 표시용(analyses.
+// purpose_detail_formatted)이다. 재무 수치를 다루지 않아 2026-08-16 Haiku 티어링
+// 평가의 "재무 판단 부정확성" 리스크와는 무관하지만, 같은 평가에서 함께 발견된
+// "language 지시 무시(9개 중 2개 섹션)" 리스크는 이 작업에도 그대로 적용될 수 있어
+// 모델 선택 전 실측 필요(server/scripts/testPurposeReformatHaikuVsSonnet.ts 참고).
+function reformatPurposeSystem(language: Language): string {
+  return `You are a light copy-editor. The user typed a short, informal note explaining why
+they want to research a company — expect typos, sentence fragments, casual register.
+Your ONLY job: fix typos, convert to polite written register, make it read as a complete
+sentence. Do NOT add information not in the original, do NOT infer additional intent,
+do NOT evaluate/judge the content, do NOT change what the user is actually asking for.
+${LANGUAGE_DIRECTIVE[language]}
+Rules:
+- Output exactly one sentence (two short sentences at most) — never pad or expand.
+- Never invent company names, numbers, or facts not present in the original text.
+- If already clean, return with minimal changes — don't force a rewrite for its own sake.
+- Output pure text only — no quotes, no markdown, no explanation of changes.`;
+}
+
+export async function generateReformattedPurpose(
+  purposeCategory: string | null,
+  purposeDetail: string,
+  language: Language = 'en',
+): Promise<string | null> {
+  const trimmed = purposeDetail.trim();
+  if (!trimmed) return null;
+  const userPrompt = purposeCategory
+    ? `Purpose category: ${purposeCategory}\nUser's raw note: ${trimmed}`
+    : `User's raw note: ${trimmed}`;
+
+  try {
+    // 2026-08-17 실측(testPurposeReformatHaikuVsSonnet.ts, ko 오탈자·구어체 3건 + en
+    // 1건) — Haiku 4.5가 4/4 전부 language 지시 준수(2026-08-16 평가에서 발견된
+    // "9개 중 2개 무시" 리스크가 이 표현정리 작업에서는 재현되지 않음), 의미 보존·
+    // 자연스러움도 Sonnet 5와 동등, 응답속도는 2배 이상 빠름(~1000ms vs ~2400ms) —
+    // 재무 수치를 다루지 않는 순수 표현 정리라 Haiku의 알려진 약점(수치 판단 오류)과
+    // 무관해 채택.
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: reformatPurposeSystem(language),
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+    logCacheUsage('purpose_reformat', response.usage);
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('')
+      .trim();
+    return text || null;
+  } catch (err) {
+    console.error('[claude] purpose_reformat FAIL', err);
+    return null;
+  }
+}
+

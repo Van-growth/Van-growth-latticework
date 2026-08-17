@@ -787,9 +787,9 @@ function CoverPage({ data, shareUrl, language, t }: { data: AnalysisDetail; shar
           <Text style={[s.tag, { fontSize: 8, paddingHorizontal: 6, paddingVertical: 3, alignSelf: 'flex-start' }]}>
             {t('분석 목적', 'Purpose')}: {purposeCategoryLabel(data.purposeCategory, t)}
           </Text>
-          {data.purposeDetail && (
+          {(data.purposeDetailFormatted ?? data.purposeDetail) && (
             <Text style={{ fontSize: 8, color: C.mid, marginTop: 4, lineHeight: 1.5, maxWidth: 380 }}>
-              {sp(data.purposeDetail)}
+              {sp(data.purposeDetailFormatted ?? data.purposeDetail)}
             </Text>
           )}
         </View>

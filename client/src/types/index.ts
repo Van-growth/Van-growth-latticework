@@ -587,6 +587,9 @@ export interface AnalysisDetail {
   // GET /api/analyses/:id 양쪽에서 채워짐. purpose_category가 없던 과거 분석은 둘 다 null.
   purposeCategory?: string | null;
   purposeDetail?: string | null;
+  // 2026-08-17 사전 확인 다이얼로그에서 정리된 목적(표시 전용) — 있으면 웹/PDF 표시에서
+  // purposeDetail 대신 이걸 우선 사용. 이 필드 이전에 생성된 분석은 null(원문 폴백).
+  purposeDetailFormatted?: string | null;
   createdAt: string;
   cached?: boolean;
   is_shared?: boolean;

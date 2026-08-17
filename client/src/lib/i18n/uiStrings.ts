@@ -48,18 +48,26 @@ interface UiStringDict {
     bodySub: string;
     continueWithGoogle: string;
   };
-  // 2026-08-17 신규 — "분석하기" 클릭 시 EDGAR/DART 공시 데이터 존재 여부를 먼저
-  // 보여주는 확인 다이얼로그(사전 리서치/Claude 호출 없이 typeahead 매핑만으로 판정).
+  // 2026-08-17 신규(같은 날 공시확인+목적확인 통합으로 확장) — "분석하기" 클릭 시
+  // EDGAR/DART 공시 데이터 존재 여부(사전 리서치/Claude 호출 없이 typeahead 매핑만으로
+  // 즉시 판정)와, purposeDetail을 정리한 문장 확인을 한 다이얼로그에서 같이 보여준다.
   // creditNote 문구는 크레딧 시스템이 아직 없는 상태에서 결제 시스템 도입을 미리
   // 감안한 자리표시자 카피 — 실제 차감 로직은 이번 작업 범위 밖(CLAUDE.md 참고).
-  filingCheckModal: {
+  preAnalysisConfirmModal: {
     closeAria: string;
-    foundTitle: string;
-    foundBody: (company: string) => string;
-    notFoundTitle: string;
-    notFoundBody: (company: string) => string;
+    filingFoundTitle: string;
+    filingFoundBody: (company: string) => string;
+    filingNotFoundTitle: string;
+    filingNotFoundBody: (company: string) => string;
+    purposeSectionTitle: string;
+    purposeConfirmedLabel: string;
+    purposeLoadingLabel: string;
+    purposeEmptyBody: string;
+    purposeErrorBody: string;
     creditNote: string;
     cancel: string;
+    backToEdit: string;
+    addDetail: string;
     proceed: string;
     proceedAnyway: string;
   };
@@ -252,15 +260,22 @@ const ko: UiStringDict = {
     bodySub: '로그인하면 무료로 2회 기업 분석을 이용할 수 있어요.',
     continueWithGoogle: '구글로 계속하기',
   },
-  filingCheckModal: {
+  preAnalysisConfirmModal: {
     closeAria: '닫기',
-    foundTitle: '공시 데이터 확인됨',
-    foundBody: (company: string) => `SEC EDGAR/DART에서 ${company}의 공시 데이터가 확인됐어요. 이어서 분석을 진행할까요?`,
-    notFoundTitle: '공식 공시 데이터 없음',
-    notFoundBody: (company: string) => `${company}은(는) 공식 공시 데이터(SEC EDGAR/DART)가 확인되지 않아요. 웹 리서치만으로 분석하시겠어요? 재무 데이터는 제한적일 수 있어요.`,
+    filingFoundTitle: '공시 데이터 확인됨',
+    filingFoundBody: (company: string) => `SEC EDGAR/DART에서 ${company}의 공시 데이터가 확인됐어요.`,
+    filingNotFoundTitle: '공식 공시 데이터 없음',
+    filingNotFoundBody: (company: string) => `${company}은(는) 공식 공시 데이터(SEC EDGAR/DART)가 확인되지 않아요. 재무 데이터는 제한적일 수 있어요.`,
+    purposeSectionTitle: '분석 목적 확인',
+    purposeConfirmedLabel: '입력하신 목적을 이렇게 이해했어요',
+    purposeLoadingLabel: '입력하신 목적을 정리하고 있어요...',
+    purposeEmptyBody: '추가 상세 내용이 없습니다 — 상세 설명 없이 진행하면 구체적인 인사이트를 받지 못하실 수 있는 점 양해 부탁드립니다.',
+    purposeErrorBody: '죄송해요, 목적 정리에 실패했어요. 원문 그대로 진행할까요?',
     creditNote: '취소하면 크레딧이 차감되지 않아요.',
     cancel: '취소',
-    proceed: '진행',
+    backToEdit: '아니요, 다시 작성할게요',
+    addDetail: '상세 내용 추가하기',
+    proceed: '네, 이대로 진행',
     proceedAnyway: '그래도 진행',
   },
   onboarding: {
@@ -466,15 +481,22 @@ const en: UiStringDict = {
     bodySub: 'Once you log in, you get 2 free company analyses.',
     continueWithGoogle: 'Continue with Google',
   },
-  filingCheckModal: {
+  preAnalysisConfirmModal: {
     closeAria: 'Close',
-    foundTitle: 'Filing data confirmed',
-    foundBody: (company: string) => `We found official filing data for ${company} on SEC EDGAR/DART. Continue with the analysis?`,
-    notFoundTitle: 'No official filing data',
-    notFoundBody: (company: string) => `We couldn't confirm official filing data (SEC EDGAR/DART) for ${company}. Analyze using web research only? Financial data may be limited.`,
+    filingFoundTitle: 'Filing data confirmed',
+    filingFoundBody: (company: string) => `We found official filing data for ${company} on SEC EDGAR/DART.`,
+    filingNotFoundTitle: 'No official filing data',
+    filingNotFoundBody: (company: string) => `We couldn't confirm official filing data (SEC EDGAR/DART) for ${company}. Financial data may be limited.`,
+    purposeSectionTitle: 'Confirm your purpose',
+    purposeConfirmedLabel: "Here's how we understood your purpose",
+    purposeLoadingLabel: 'Tidying up what you wrote...',
+    purposeEmptyBody: "You didn't add any extra detail — without it, the report may miss the specific insights you're after.",
+    purposeErrorBody: "Sorry, we couldn't clean up your purpose text. Continue with your original wording?",
     creditNote: "You won't be charged a credit if you cancel.",
     cancel: 'Cancel',
-    proceed: 'Continue',
+    backToEdit: 'No, let me rewrite it',
+    addDetail: 'Add more detail',
+    proceed: 'Yes, continue',
     proceedAnyway: 'Continue anyway',
   },
   onboarding: {

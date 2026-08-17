@@ -152,6 +152,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       // 자체는 이미 조회돼 있었고, 응답 객체에 매핑만 빠져있었다.
       purposeCategory: row.purpose_category ?? null,
       purposeDetail:   row.purpose_detail ?? null,
+      purposeDetailFormatted: row.purpose_detail_formatted ?? null,
       createdAt: row.created_at,
       is_shared: row.is_shared ?? false,
       share_token: row.share_token ?? null,
