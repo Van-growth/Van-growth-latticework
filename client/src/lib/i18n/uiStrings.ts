@@ -48,6 +48,21 @@ interface UiStringDict {
     bodySub: string;
     continueWithGoogle: string;
   };
+  // 2026-08-17 신규 — "분석하기" 클릭 시 EDGAR/DART 공시 데이터 존재 여부를 먼저
+  // 보여주는 확인 다이얼로그(사전 리서치/Claude 호출 없이 typeahead 매핑만으로 판정).
+  // creditNote 문구는 크레딧 시스템이 아직 없는 상태에서 결제 시스템 도입을 미리
+  // 감안한 자리표시자 카피 — 실제 차감 로직은 이번 작업 범위 밖(CLAUDE.md 참고).
+  filingCheckModal: {
+    closeAria: string;
+    foundTitle: string;
+    foundBody: (company: string) => string;
+    notFoundTitle: string;
+    notFoundBody: (company: string) => string;
+    creditNote: string;
+    cancel: string;
+    proceed: string;
+    proceedAnyway: string;
+  };
   onboarding: {
     saveError: string;
     title: string;
@@ -236,6 +251,17 @@ const ko: UiStringDict = {
     bodyGeneric: '기업 분석을 시작하려면 로그인이 필요해요.',
     bodySub: '로그인하면 무료로 2회 기업 분석을 이용할 수 있어요.',
     continueWithGoogle: '구글로 계속하기',
+  },
+  filingCheckModal: {
+    closeAria: '닫기',
+    foundTitle: '공시 데이터 확인됨',
+    foundBody: (company: string) => `SEC EDGAR/DART에서 ${company}의 공시 데이터가 확인됐어요. 이어서 분석을 진행할까요?`,
+    notFoundTitle: '공식 공시 데이터 없음',
+    notFoundBody: (company: string) => `${company}은(는) 공식 공시 데이터(SEC EDGAR/DART)가 확인되지 않아요. 웹 리서치만으로 분석하시겠어요? 재무 데이터는 제한적일 수 있어요.`,
+    creditNote: '취소하면 크레딧이 차감되지 않아요.',
+    cancel: '취소',
+    proceed: '진행',
+    proceedAnyway: '그래도 진행',
   },
   onboarding: {
     saveError: '저장에 실패했어요. 다시 시도해주세요.',
@@ -439,6 +465,17 @@ const en: UiStringDict = {
     bodyGeneric: 'Log in to start analyzing a company.',
     bodySub: 'Once you log in, you get 2 free company analyses.',
     continueWithGoogle: 'Continue with Google',
+  },
+  filingCheckModal: {
+    closeAria: 'Close',
+    foundTitle: 'Filing data confirmed',
+    foundBody: (company: string) => `We found official filing data for ${company} on SEC EDGAR/DART. Continue with the analysis?`,
+    notFoundTitle: 'No official filing data',
+    notFoundBody: (company: string) => `We couldn't confirm official filing data (SEC EDGAR/DART) for ${company}. Analyze using web research only? Financial data may be limited.`,
+    creditNote: "You won't be charged a credit if you cancel.",
+    cancel: 'Cancel',
+    proceed: 'Continue',
+    proceedAnyway: 'Continue anyway',
   },
   onboarding: {
     saveError: 'Failed to save. Please try again.',

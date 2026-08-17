@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Link, X, RefreshCw, Target } from 'lucide-react';
 import AnalysisCard from './AnalysisCard';
 import LoginPromptModal from './LoginPromptModal';
+import FilingCheckModal from './FilingCheckModal';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
@@ -158,6 +159,10 @@ export default function HomeContent() {
   const [selectedCompany, setSelectedCompany] = useState<{ name: string; companyId: string; listings: CompanyListing[] } | null>(null);
   const [resolveResult, setResolveResult] = useState<CompanyResolveResponse | null>(null);
   const [resolving, setResolving] = useState(false);
+  // "분석하기" 클릭 시 실제 리서치 시작 전 보여주는 공시 데이터 확인 다이얼로그
+  // (2026-08-17 신규) — hasFilingData는 selectedCompany.listings로만 판정(새 API
+  // 호출 없음), 이 state는 "지금 이 다이얼로그를 보여줘야 하는가"만 담당.
+  const [filingCheck, setFilingCheck] = useState<{ hasFilingData: boolean } | null>(null);
   // 비로그인 상태에서 드롭다운을 클릭한 경우 — resolve를 바로 부르는 대신 이 값을
   // 채워서 LoginPromptModal을 띄운다. 로그인은 페이지 전체가 리로드되는 OAuth
   // 리다이렉트라 이 React state 자체는 로그인 후 못 살림 — "구글로 계속하기" 클릭
@@ -608,6 +613,16 @@ export default function HomeContent() {
     if (loading || resolving) return;
     if (!session) { signInWithGoogle(); return; }
     if (!selectedCompany || selectedCompany.name !== companyName.trim() || resolveResult?.cached) return;
+    // 실제 리서치/생성을 시작하기 전에 공시 데이터 존재 여부를 먼저 확인시킨다
+    // (2026-08-17 신규, 불필요한 API 비용 방지) — listings는 typeahead 선택 시점에
+    // 이미 받아둔 값이라 새 조회 없이 즉시 판정된다. 확인/그래도 진행은
+    // handleFilingCheckConfirm이 이어받는다.
+    setFilingCheck({ hasFilingData: selectedCompany.listings.length > 0 });
+  }
+
+  async function handleFilingCheckConfirm() {
+    setFilingCheck(null);
+    if (!selectedCompany) return;
     await startAnalysis(selectedCompany.name, false, selectedCompany.companyId);
   }
 
@@ -1035,6 +1050,15 @@ export default function HomeContent() {
             sessionStorage.setItem(PENDING_SELECTION_KEY, JSON.stringify(pendingSuggestion));
             signInWithGoogle();
           }}
+        />
+      )}
+
+      {filingCheck && selectedCompany && (
+        <FilingCheckModal
+          companyName={selectedCompany.name}
+          hasFilingData={filingCheck.hasFilingData}
+          onCancel={() => setFilingCheck(null)}
+          onConfirm={handleFilingCheckConfirm}
         />
       )}
     </div>

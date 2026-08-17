@@ -12,6 +12,36 @@ const MAX_RESULTS = 8;
 type Listing = { source: 'EDGAR' | 'DART'; identifier: string; ticker: string | null };
 type TypeaheadResult = { name: string; listings: Listing[]; companyId?: string };
 
+type DartCandidate = { corp_code: string; corp_name: string; stock_code: string | null };
+
+// corp_master가 DART 전체(상장 + 비상장 외감법인 등, 2026-08-17부터 118k+행)를 담게
+// 되면서, 단순 ILIKE + 알파벳순만으로는 무명 비상장 관계사가 잘 알려진 상장사를
+// top-N 밖으로 밀어내는 회귀가 실측 확인됐다(예: "삼성" 검색 시 삼성전자/삼성물산
+// 등이 사라지고 "(의)삼성의료재단" 같은 결과만 남음) — 상장사(stock_code 있음)를
+// 먼저 채우고, MAX_RESULTS에 못 미칠 때만 비상장 후보로 나머지를 채운다.
+async function fetchDartCandidates(q: string): Promise<DartCandidate[]> {
+  const listed = await supabase
+    .from('corp_master')
+    .select('corp_code, corp_name, stock_code')
+    .ilike('corp_name', `%${q}%`)
+    .not('stock_code', 'is', null)
+    .order('corp_name')
+    .limit(MAX_RESULTS);
+  if (listed.error) throw listed.error;
+  const listedRows = listed.data ?? [];
+  if (listedRows.length >= MAX_RESULTS) return listedRows;
+
+  const unlisted = await supabase
+    .from('corp_master')
+    .select('corp_code, corp_name, stock_code')
+    .ilike('corp_name', `%${q}%`)
+    .is('stock_code', null)
+    .order('corp_name')
+    .limit(MAX_RESULTS - listedRows.length);
+  if (unlisted.error) throw unlisted.error;
+  return [...listedRows, ...(unlisted.data ?? [])];
+}
+
 // GET /api/companies/typeahead?q=검색어
 // corp_master(DART) + cik_master(EDGAR) 전체를 그때그때 직접 조회(지연 생성 —
 // companies/company_listings는 유저가 실제로 클릭할 때만 생성됨, resolve 참고).
@@ -24,13 +54,8 @@ router.get('/typeahead', async (req: Request, res: Response) => {
   }
 
   try {
-    const [dartRes, edgarRes] = await Promise.all([
-      supabase
-        .from('corp_master')
-        .select('corp_code, corp_name, stock_code')
-        .ilike('corp_name', `%${q}%`)
-        .order('corp_name')
-        .limit(MAX_RESULTS),
+    const [dartRows, edgarRes] = await Promise.all([
+      fetchDartCandidates(q),
       supabase
         .from('cik_master')
         .select('cik, name, ticker')
@@ -38,10 +63,8 @@ router.get('/typeahead', async (req: Request, res: Response) => {
         .order('name')
         .limit(MAX_RESULTS),
     ]);
-    if (dartRes.error) throw dartRes.error;
     if (edgarRes.error) throw edgarRes.error;
 
-    const dartRows = dartRes.data ?? [];
     const edgarRows = edgarRes.data ?? [];
 
     const dualRes = await supabase
