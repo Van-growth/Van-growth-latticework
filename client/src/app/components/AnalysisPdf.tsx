@@ -1692,9 +1692,9 @@ function FounderSection({ v, t }: { v: FounderV2; t: TFn }) {
             .map((ct, i) => (
             <View key={i} style={[s.row, { marginBottom: 4, paddingBottom: 4, borderBottom: `1 solid ${C.border}` }]}>
               <Text style={[s.label, { width: 80 }]}>{ct.period}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.value, { fontWeight: 700, marginBottom: 2 }]}>{ct.company}</Text>
-                <Text style={[s.value, { color: C.mid }]}>{ct.role}</Text>
+              <View style={{ flex: 1, flexDirection: 'column' }}>
+                <Text style={[s.value, { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', fontWeight: 700, marginBottom: 2 }]}>{ct.company}</Text>
+                <Text style={[s.value, { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', color: C.mid }]}>{ct.role}</Text>
               </View>
             </View>
           ))}
