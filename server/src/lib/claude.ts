@@ -1047,11 +1047,30 @@ career_trajectory: sort most recent first. Empty array [] if founding_history.pr
       `Company: ${companyName}\n\nGather founder/CEO information using this search order:\n1. "${companyName} founder CEO name background education"\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} investor board advisor"\n\nThen return the data using this schema:\n${schema}`,
       'claude-sonnet-5',
       3,
-      6000,
+      // 2026-08-17 git blame 조사(관찰 기록 확인 요청 계기) — 6000→8000. 의도된 설계가
+      // 아니었음을 확정: founder_v2는 2026-06-24 생성 당시 callSection()의 max_tokens
+      // (그때 4000)보다 오히려 높은 6000으로 시작했으나, callSection() 쪽만 2026-08-15에
+      // Sonnet 5 전환(같은 커밋 4a2f184에서 founder_v2도 동일하게 sonnet-4-6→sonnet-5
+      // 전환됨 — 새 토크나이저가 동일 내용도 ~30-35% 더 많은 토큰 소비, NVIDIA
+      // financials_v2 실측 재현) 대응으로 4000→6000→8000까지 두 차례 상향됐는데,
+      // callFounderSection()은 runWithWebSearch()를 쓰는 별도 호출부라 이 상향에서
+      // 빠짐(callSection()과 같은 anthropic.messages.create() 직접 호출이 아니라 놓치기
+      // 쉬운 구조). founder_v2도 같은 모델 전환을 겪었으니 같은 상향이 적용돼야 함 —
+      // max_tokens는 상한선이라 실제로 다 안 쓰면 비용 증가 없음(callSection과 동일 원칙).
+      8000,
       'founder_v2',
     );
     const result = extractJson<FounderV2>(raw, 'founder_v2');
-    console.log(`[claude] founder_v2 OK  ${Date.now() - t0}ms`);
+    // 2026-08-15 callSection()에서 고친 로깅 결함(파싱 실패해도 OK로 찍히던 것)이
+    // callFounderSection()엔 반영이 빠져있었음(2026-08-17 관찰 기록 조사에서 발견) —
+    // 동일하게 result null 여부로 OK/FAIL 분기. stop_reason/output_tokens는 runWithWebSearch가
+    // texts만 반환해 이 지점에서 접근 불가 — 대신 위 [gatherResearch][founder_v2] round
+    // 로그에 라운드별 stop_reason이 이미 남는다.
+    if (result !== null) {
+      console.log(`[claude] founder_v2 OK  ${Date.now() - t0}ms`);
+    } else {
+      console.error(`[claude] founder_v2 FAIL ${Date.now() - t0}ms — JSON 파싱 실패로 null 반환, DEFAULT_ANALYSIS_DATA 빈 placeholder로 대체됨`);
+    }
     return result;
   } catch (err) {
     console.error(`[claude] founder_v2 FAIL ${Date.now() - t0}ms`, err);
