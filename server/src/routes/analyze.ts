@@ -372,7 +372,15 @@ function getBatchDbFields(batchNum: number, data: Partial<AnalysisData>): Record
 function buildDonePayload(
   data: any,
   companyName: string,
-  meta: { cached: boolean; analysisId: string | null; createdAt: string; dataSource: string; growthScenario?: Record<string, any> | null; isPremium: boolean; language: Language },
+  meta: {
+    cached: boolean; analysisId: string | null; createdAt: string; dataSource: string;
+    growthScenario?: Record<string, any> | null; isPremium: boolean; language: Language;
+    // 2026-08-17 PDF 표지 목적 표시 작업 계기로 추가 — 이 요청에서 입력받은 목적(캐시
+    // 히트 여부와 무관하게 "지금 이 화면을 만든 요청"의 목적을 그대로 반영, DB에 저장된
+    // 값과 다를 수 있음: 부분캐시/완전캐시 경로는 이 요청의 purposeCategory를 analyses
+    // 행에 소급 반영하지 않는다는 기존 설계와 동일한 한계).
+    purposeCategory?: string; purposeDetail?: string;
+  },
 ) {
   // 성장 시나리오는 계산/저장은 항상 수행하되, 응답 페이로드는 프리미엄 유저에게만 포함
   const growthScenarioOut = meta.isPremium ? (meta.growthScenario ?? data.growth_scenario_v2 ?? null) : null;
@@ -405,6 +413,8 @@ function buildDonePayload(
     founder_v2:          data.founder_v2           ?? null,
     growth_scenario_v2:  growthScenarioOut,
     dataSource:          meta.dataSource,
+    purposeCategory:     meta.purposeCategory ?? null,
+    purposeDetail:       meta.purposeDetail ?? null,
   };
 }
 
@@ -734,7 +744,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           send('done', buildDonePayload(
             { ...cached, financials_v2: effectiveFinancials, competitors_v2: effectiveCompetitors },
             name,
-            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium, language },
+            { cached: true, analysisId: cached.id, createdAt: cached.created_at, dataSource: effectiveSource, isPremium, language, purposeCategory, purposeDetail },
           ));
           return res.end();
         }
@@ -847,6 +857,8 @@ router.post('/stream', async (req: Request, res: Response) => {
           growthScenario,
           isPremium,
           language,
+          purposeCategory,
+          purposeDetail,
         }));
         return res.end();
       }
@@ -963,6 +975,8 @@ router.post('/stream', async (req: Request, res: Response) => {
       growthScenario,
       isPremium,
       language,
+      purposeCategory,
+      purposeDetail,
     }));
     res.end();
 

@@ -8,17 +8,41 @@ import type { AnalysisDetail } from '@/types';
 import { Download, FileText } from 'lucide-react';
 import { trackEvent } from '@/lib/analytics';
 
-const MESSAGES = [
-  '밤새 조사하셨을 내용을 몇 분 만에 처리하고 있어요 🌙',
-  '인턴한테 시켰으면 3일 걸렸을 거예요 😅',
-  '미팅 전날 밤 구글링하던 시절은 안녕 👋',
-  '영업팀 리서치 담당자를 대신하는 중...',
-  '경쟁사 분석 PPT 만들 시간, 이제 영업에 쓰세요 💪',
-  'BD 미팅 전 밤샘 조사? 그건 옛날 얘기예요 ☕',
-  '전략팀이 1주일 걸릴 자료, 지금 뽑는 중 🚀',
-  'SEC 공시 수백 페이지를 대신 읽고 있어요 📄',
-  '이 PDF 하나로 미팅 준비 끝입니다 ✅',
+// 2026-08-17 개편 — 장난스러운 톤(이모지·인턴 드립 등)을 신뢰감 있는 톤으로 교체.
+// 원칙: (1) 실존 기업가 인용/명언 금지(저작권·정확성 리스크, 클리셰 위험) (2) EDGAR/DART
+// 등 특정 데이터 소스 언급 금지 — 공시 데이터가 없는 기업(재무 탭이 빈 상태)에는 사실과
+// 안 맞을 수 있어 전 기업에 공통 적용 가능한 소스 중립적 문구만 사용 (3) "지금 이 작업을
+// 하고 있어요" + 응원 톤.
+const BASE_MESSAGES = [
+  '숫자 뒤에 숨은 맥락까지 짚어드리려 하고 있어요.',
+  '이 리포트가 다음 결정에 확신을 더해드리길 바라요.',
+  '대표님의 다음 한 걸음을, 저희가 먼저 살펴보고 있어요.',
+  '빠른 판단은 좋은 정보에서 시작됩니다 — 거의 다 됐어요.',
+  '여러 자료를 교차 확인하며 놓친 부분이 없는지 살피고 있어요.',
+  '이 회사가 지금 처한 상황을 다각도로 정리하는 중이에요.',
+  '필요한 순간 바로 꺼내 쓸 수 있도록 다듬고 있어요.',
+  '복잡한 내용을 한눈에 들어오도록 구조화하는 중이에요.',
+  '조금만 더 기다려 주시면, 그만한 값어치로 보답할게요.',
 ];
+
+// purpose_category를 활용한 목적 요약 문구(2026-08-17, 여유 범위 내 반영) — 원본
+// purpose_detail(자유 입력 텍스트)은 문장 템플릿에 안전하게 끼워 넣기 어려워 사용하지
+// 않고, 카테고리 단위로만 요약한다.
+function purposeMessage(category?: string | null): string | null {
+  switch (category) {
+    case 'ma':          return '인수합병 목적에 맞춰 재무 건전성과 핏을 짚어보는 중이에요.';
+    case 'investment':  return '투자 판단에 도움이 될 지표들을 우선 정리하고 있어요.';
+    case 'partnership': return '파트너십 관점에서 이 회사와의 접점을 살펴보는 중이에요.';
+    case 'customer':    return '고객사로서 검토하실 때 필요한 정보를 챙기고 있어요.';
+    case 'other':        return '말씀하신 목적에 맞춰 필요한 내용을 짚어드리려 하고 있어요.';
+    default: return null;
+  }
+}
+
+function buildMessages(purposeCategory?: string | null): string[] {
+  const extra = purposeMessage(purposeCategory);
+  return extra ? [...BASE_MESSAGES, extra] : BASE_MESSAGES;
+}
 
 const STAGES = [
   { icon: '📊', label: '데이터 수집' },
@@ -26,15 +50,16 @@ const STAGES = [
   { icon: '📄', label: 'PDF 변환' },
 ] as const;
 
-function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel: () => void }) {
+function LoadingOverlay({ completed, onCancel, purposeCategory }: { completed: boolean; onCancel: () => void; purposeCategory?: string | null }) {
+  const messages = useRef(buildMessages(purposeCategory)).current;
   const [msgIdx, setMsgIdx]     = useState(0);
   const [msgVisible, setMsgVisible] = useState(true);
   const [elapsed, setElapsed]   = useState(0);
 
   // 메시지 초기 랜덤 선택
   useEffect(() => {
-    setMsgIdx(Math.floor(Math.random() * MESSAGES.length));
-  }, []);
+    setMsgIdx(Math.floor(Math.random() * messages.length));
+  }, [messages.length]);
 
   // 경과 시간
   useEffect(() => {
@@ -56,12 +81,12 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
     const id = setInterval(() => {
       setMsgVisible(false);
       setTimeout(() => {
-        setMsgIdx(i => (i + 1) % MESSAGES.length);
+        setMsgIdx(i => (i + 1) % messages.length);
         setMsgVisible(true);
       }, 300);
     }, 3000);
     return () => clearInterval(id);
-  }, []);
+  }, [messages.length]);
 
   // 단계: 0-20s → 20-45s → 45s+
   const stageIdx = elapsed < 20 ? 0 : elapsed < 45 ? 1 : 2;
@@ -84,7 +109,7 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
             transition: 'opacity 0.28s ease, transform 0.28s ease',
           }}
         >
-          {MESSAGES[msgIdx]}
+          {messages[msgIdx]}
         </p>
 
         {/* 단계 표시 */}
@@ -128,7 +153,9 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
         {/* 프로그레스 바 — 완료 전엔 무한(indeterminate) CSS 애니메이션, 완료 시 100% 고정
             (숫자 %는 표시하지 않음 — react-pdf가 실제 진행률을 안 주므로 항상 허구였고,
             메인 스레드가 막혀도 이 애니메이션은 계속 움직여 "멈춘 것처럼 보이는" 문제가
-            재발하지 않는다) */}
+            재발하지 않는다). 경과 초(N초) 표시도 2026-08-17에 제거 — 숫자가 멈추면
+            "고장난 것처럼" 보인다는 피드백. elapsed state 자체는 STAGES 하이라이트
+            전환(0-20s/20-45s/45s+)에 계속 쓰이므로 그대로 유지, 화면엔 안 그린다. */}
         <div className="w-full space-y-1.5">
           <style>{`
             @keyframes pdf-progress-indeterminate {
@@ -136,9 +163,8 @@ function LoadingOverlay({ completed, onCancel }: { completed: boolean; onCancel:
               100% { transform: translateX(250%); }
             }
           `}</style>
-          <div className="flex justify-between items-center text-[11px] text-gray-400">
+          <div className="flex justify-center items-center text-[11px] text-gray-400">
             <span>PDF 준비 중...</span>
-            <span>{elapsed}초</span>
           </div>
           <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
             {completed ? (
@@ -222,7 +248,9 @@ export default function ExportPdfButton({ data }: { data: AnalysisDetail }) {
 
   return (
     <>
-      {mounted && loading && <LoadingOverlay completed={completed} onCancel={handleCancel} />}
+      {mounted && loading && (
+        <LoadingOverlay completed={completed} onCancel={handleCancel} purposeCategory={data.purposeCategory} />
+      )}
       <button
         onClick={handleClick}
         disabled={loading}

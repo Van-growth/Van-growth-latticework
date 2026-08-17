@@ -39,13 +39,38 @@ if (process.env.NODE_ENV === 'production' && !supabaseUrl) {
 //
 // img-src에 lh3.googleusercontent.com — 구글 로그인 프로필 사진.
 // connect-src에 supabaseUrl — supabase-js의 세션 조회/갱신 fetch (구글 로그인, 2026-07-03).
+//
+// connect-src에 data: — PDF 생성 중 콘솔에 찍히던 CSP 위반(2026-08-17 조사) 원인 확정
+// 및 실측 재현. @react-pdf/renderer → @react-pdf/layout이 flexbox 레이아웃 엔진으로 쓰는
+// yoga-layout이 자신의 WASM 바이너리를 data:application/octet-stream;base64,... 문자열로
+// 코드에 인라인해두고, 그걸 fetch(dataUri)로 다시 읽어 WebAssembly.instantiateStreaming에
+// 넘긴다(node_modules/yoga-layout/dist/binaries/yoga-wasm-base64-esm.js, Emscripten 표준
+// 로더 패턴). 최근 추가된 SVG 차트/CAGR 배지와는 무관 — <Image> 컴포넌트 자체를 안 쓰므로
+// @react-pdf/image의 base64 이미지 경로도 아니었음. fetch()가 대상이 data: URI라도 Chrome은
+// connect-src로 이 호출을 막는데(실제 네트워크 연결은 없음에도), 여태 connect-src에 data:가
+// 없었던 것 — script-src의 'wasm-unsafe-eval'(2026-07-04, WASM 컴파일 허용)만으로는
+// 부족했다. Playwright로 실제 프로덕션 빌드(next build && next start)에 두 CSP를 각각
+// 적용해 재현 — 수정 전 CSP에서 사용자가 제보한 것과 토씨 하나 다르지 않은 콘솔 에러
+// 재현 확인, 수정 후엔 0건. ⚠️ 다만 이 콘솔 에러 자체가 PDF 생성을 "완전히 멈춤"으로
+// 만드는지는 검증 범위 밖 — yoga-layout이 스트리밍 컴파일 실패 시 fetch 재시도 →
+// 최종적으로 atob() 기반 동기 디코드로 폴백하는 3단 체인을 갖고 있어, 격리 테스트(간단한
+// 1페이지 문서)에서는 이 CSP 위반이 있어도 PDF 생성 자체는 끝까지 완료됐음(무한 정지 아님).
+// 다만 그 폴백 경로는 스트리밍 컴파일보다 느리고 메인 스레드를 더 오래 점유하는 동기
+// 디코드라, 실제 프로덕션 리포트(21+페이지, NotoSerifKR 풀 글리프셋)처럼 이미 메인 스레드
+// 점유가 큰 상황(2026-08-16 진행률 프리징 조사 참고)에서는 체감상 "멈춘 것처럼" 보일
+// 정도로 오래 걸렸을 가능성이 있다 — 배포 후 실사용 재현 테스트로 최종 확인 필요.
+// data: URI는 브라우저가 로컬에서 그대로 해석할 뿐 원격 서버로의 연결이 발생하지 않으므로
+// (exfiltration 벡터 없음) connect-src에 허용해도 이 지시어의 본래 방어 목적(공격자
+// 서버로의 데이터 유출 차단)을 훼손하지 않는다. yoga-layout이 export하는 로더가
+// 'yoga-layout/load' 단일 진입점뿐이라 데이터 URI를 안 쓰는 대체 로딩 경로 자체가 없음
+// (패치 없이는 우회 불가) — CSP 허용이 유일한 실용적 해결책.
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: https://lh3.googleusercontent.com`,
   "font-src 'self'",
-  `connect-src 'self' ${apiUrl} ${supabaseUrl}`.trim(),
+  `connect-src 'self' data: ${apiUrl} ${supabaseUrl}`.trim(),
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

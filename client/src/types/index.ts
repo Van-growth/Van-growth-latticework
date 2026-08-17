@@ -580,6 +580,10 @@ export interface AnalysisDetail {
   // Meta
   sources: AnalysisSources;
   dataSource?: DataSource;
+  // 분석 요청 시 입력받은 목적(2026-08-16, 온보딩 저장값 아님) — 서버 buildDonePayload()/
+  // GET /api/analyses/:id 양쪽에서 채워짐. purpose_category가 없던 과거 분석은 둘 다 null.
+  purposeCategory?: string | null;
+  purposeDetail?: string | null;
   createdAt: string;
   cached?: boolean;
   is_shared?: boolean;

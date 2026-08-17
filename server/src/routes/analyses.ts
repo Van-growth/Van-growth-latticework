@@ -147,6 +147,11 @@ router.get('/:id', async (req: Request, res: Response) => {
       financials_structured: row.financials_structured ?? null,
       sources: row.sources ?? {},
       dataSource: (row.data_source ?? 'web_search') as 'dart' | 'edgar' | 'web_search',
+      // 2026-08-17 PDF 표지 목적 표시 작업 계기로 추가 — 이 행 자체가 어떤 목적으로
+      // 생성됐는지(purpose_category가 없던 과거 분석은 둘 다 null). select('*')라 컬럼
+      // 자체는 이미 조회돼 있었고, 응답 객체에 매핑만 빠져있었다.
+      purposeCategory: row.purpose_category ?? null,
+      purposeDetail:   row.purpose_detail ?? null,
       createdAt: row.created_at,
       is_shared: row.is_shared ?? false,
       share_token: row.share_token ?? null,

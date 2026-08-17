@@ -67,6 +67,18 @@ function makeT(language: Language) {
 }
 type TFn = ReturnType<typeof makeT>;
 
+// 웹 UI(HomeContent.tsx PURPOSE_CATEGORIES)/uiStrings.ts와 동일한 라벨 — 새 문자열
+// 체계를 만들지 않고 그대로 재사용.
+function purposeCategoryLabel(category: string, t: TFn): string {
+  switch (category) {
+    case 'ma':          return t('인수합병', 'M&A');
+    case 'investment':  return t('투자', 'Investment');
+    case 'partnership': return t('파트너십', 'Partnership');
+    case 'customer':    return t('고객', 'Customer');
+    default:            return t('기타', 'Other');
+  }
+}
+
 // NotoSansKR woff subset may lack certain glyphs — replace with ASCII equivalents.
 // ▲/▼(YoY 증감 표시, financials_v2.income_statement[].yoy)와 ○/△/▼(outlook.shortTerm/
 // midLongTerm 접두 기호)는 이 서브셋에 없는 글리프라 PDF 뷰어에서 인접 문자와 겹쳐 보이는
@@ -745,6 +757,18 @@ function CoverPage({ data, shareUrl, language, t }: { data: AnalysisDetail; shar
         <Text style={s.coverMeta}>{t('밸류체인 위치', 'Value Chain Position')}: {v2.value_chain_position}</Text>
       )}
       <Text style={s.coverMeta}>{t('분석 일자', 'Analysis Date')}: {date}</Text>
+      {data.purposeCategory && (
+        <View style={{ marginTop: 10 }}>
+          <Text style={[s.tag, { fontSize: 8, paddingHorizontal: 6, paddingVertical: 3, alignSelf: 'flex-start' }]}>
+            {t('분석 목적', 'Purpose')}: {purposeCategoryLabel(data.purposeCategory, t)}
+          </Text>
+          {data.purposeDetail && (
+            <Text style={{ fontSize: 8, color: C.mid, marginTop: 4, lineHeight: 1.5, maxWidth: 380 }}>
+              {sp(data.purposeDetail)}
+            </Text>
+          )}
+        </View>
+      )}
       {v2?.oneLiner && (
         <>
           <Divider />
