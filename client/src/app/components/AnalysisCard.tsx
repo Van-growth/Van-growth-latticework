@@ -104,7 +104,7 @@ function Tag({ label, color = 'gray' }: { label: string; color?: string }) {
     navy: 'bg-navy-50 text-navy-700',
   };
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${map[color] ?? map.gray}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-sm font-medium ${map[color] ?? map.gray}`}>
       {label}
     </span>
   );
@@ -119,7 +119,7 @@ function SectionCard({ title, dotColor = 'bg-gray-300', children, className = ''
   return (
     <div className={`bg-white border border-gray-100 rounded-xl p-4 ${className}`}>
       {title && (
-        <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-2">
+        <div className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-2">
           <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${dotColor}`} />
           {title}
         </div>
@@ -197,22 +197,22 @@ function MetricCard({ value, label, trend, sourceIndex }: { value: string; label
   const isUnknown = cleaned === '확인 필요' || cleaned === '공개 없음' || cleaned === '해당없음' || cleaned === 'Not disclosed' || cleaned === 'Not applicable' || isPlaceholder(cleaned);
   const displayValue = isPlaceholder(cleaned) ? '—' : cleaned;
   const trendEl = trend === 'up'
-    ? <span className="text-navy-600 text-sm font-bold ml-1 leading-none shrink-0">▲</span>
+    ? <span className="text-navy-600 text-base font-bold ml-1 leading-none shrink-0">▲</span>
     : trend === 'down'
-    ? <span className="text-risk text-sm font-bold ml-1 leading-none shrink-0">▼</span>
+    ? <span className="text-risk text-base font-bold ml-1 leading-none shrink-0">▼</span>
     : trend === 'flat'
-    ? <span className="text-gray-400 text-sm ml-1 leading-none shrink-0">→</span>
+    ? <span className="text-gray-400 text-base ml-1 leading-none shrink-0">→</span>
     : null;
   return (
     <div className="bg-gray-50 rounded-lg p-3 min-w-0">
-      <div className="text-[11px] text-gray-400 mb-1 leading-tight">{label}</div>
-      <div className="font-semibold text-sm text-gray-900 leading-snug flex items-center min-w-0">
+      <div className="text-sm text-gray-400 mb-1 leading-tight">{label}</div>
+      <div className="font-semibold text-base text-gray-900 leading-snug flex items-center min-w-0">
         <span className="break-all min-w-0 flex-1">
           <DataValue text={displayValue} />
         </span>
         {!isUnknown && trendEl}
         {!isUnknown && sourceIndex != null && (
-          <sup className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-navy-100 text-navy-700 text-[9px] font-bold ml-0.5 align-top mt-0.5 shrink-0">
+          <sup className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-0.5 rounded bg-navy-100 text-navy-700 text-[11px] font-bold ml-0.5 align-top mt-0.5 shrink-0">
             {sourceIndex}
           </sup>
         )}
@@ -249,10 +249,10 @@ function CfMetricCard({ label, value, dotColor }: { label: string; value: string
     <div className="bg-gray-50 rounded-lg p-3">
       <div className="flex items-center gap-1.5 mb-1.5">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-        <span className="text-[11px] text-gray-400 leading-tight">{label}</span>
+        <span className="text-sm text-gray-400 leading-tight">{label}</span>
       </div>
-      <div className="text-sm font-medium text-gray-900 leading-snug break-words"><DataValue text={numPart} /></div>
-      {descPart && <div className="text-xs text-gray-500 leading-snug mt-0.5 break-words"><DataValue text={descPart} /></div>}
+      <div className="text-base font-medium text-gray-900 leading-snug break-words"><DataValue text={numPart} /></div>
+      {descPart && <div className="text-sm text-gray-500 leading-snug mt-0.5 break-words"><DataValue text={descPart} /></div>}
     </div>
   );
 }
@@ -277,16 +277,16 @@ function SourcesList({ sources }: { sources: Source[] | undefined }) {
     <div className="mt-4 pt-3 border-t border-gray-100">
       <div className="flex items-center gap-1.5 mb-2">
         <BookOpen size={11} className="text-gray-400" />
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">출처</span>
+        <span className="text-sm font-semibold uppercase tracking-widest text-gray-400">출처</span>
       </div>
       <div className="flex flex-col gap-1.5">
         {sources.map((s, i) => {
           const idx = s.index ?? i + 1;
           const badge = LEVEL_BADGE[s.level] ?? LEVEL_BADGE.L2;
           return (
-            <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
+            <div key={i} className="flex items-start gap-2 text-sm text-gray-600">
               <span className="shrink-0 font-bold text-gray-700 w-6 text-right mt-0.5">[{idx}]</span>
-              <span className={`shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none mt-0.5 ${badge.cls}`}>
+              <span className={`shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold leading-none mt-0.5 ${badge.cls}`}>
                 {badge.label}
               </span>
               <span className="leading-snug flex-1">
@@ -327,7 +327,7 @@ const DATA_SOURCE_CONFIG: Record<DataSource, { label: string; level: SourceLevel
 function DataSourceBadge({ source }: { source: DataSource }) {
   const cfg = DATA_SOURCE_CONFIG[source];
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-medium px-2.5 py-1 rounded-full shrink-0 ${LEVEL_BADGE[cfg.level].cls}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium px-2.5 py-1 rounded-full shrink-0 ${LEVEL_BADGE[cfg.level].cls}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT[cfg.level]}`} />
       {cfg.label}
     </span>
@@ -342,7 +342,7 @@ function KeyBulletsBlock({ bullets }: { bullets?: string[] | null }) {
     <div className="bg-gray-900 rounded-xl px-5 py-4">
       <ul className="space-y-1.5">
         {bullets.map((b, i) => (
-          <li key={i} className="text-white text-sm font-medium leading-snug flex items-start gap-2">
+          <li key={i} className="text-white text-base font-medium leading-snug flex items-start gap-2">
             <span className="text-navy-400 shrink-0 mt-0.5">•</span>
             <span>{b}</span>
           </li>
@@ -363,7 +363,7 @@ function CitedText({ text, className = '' }: { text: string | null | undefined; 
       {parts.map((part, i) => {
         const m = part.match(/^\[(\d+)\]$/);
         if (m) return (
-          <sup key={i} className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded bg-navy-100 text-navy-700 text-[9px] font-bold ml-0.5 align-top mt-0.5">
+          <sup key={i} className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-0.5 rounded bg-navy-100 text-navy-700 text-[11px] font-bold ml-0.5 align-top mt-0.5">
             {m[1]}
           </sup>
         );
@@ -375,7 +375,7 @@ function CitedText({ text, className = '' }: { text: string | null | undefined; 
 
 // ── Bullet list (콘텐츠 포맷 원칙 — 종합 해석은 기본이 불릿, 문단은 예외) ────────────
 
-function BulletList({ items, dotCls = 'bg-gray-400', textCls = 'text-sm text-gray-700' }: {
+function BulletList({ items, dotCls = 'bg-gray-400', textCls = 'text-base text-gray-700' }: {
   items: string[] | undefined | null;
   dotCls?: string;
   textCls?: string;
@@ -403,7 +403,7 @@ function BulletCallout({ title, items, boxCls, titleCls, dotCls }: {
   if (!items?.length) return null;
   return (
     <div className={`rounded-xl p-4 ${boxCls}`}>
-      <div className={`text-[11px] font-semibold uppercase tracking-widest mb-2 ${titleCls}`}>{title}</div>
+      <div className={`text-sm font-semibold uppercase tracking-widest mb-2 ${titleCls}`}>{title}</div>
       <BulletList items={items} dotCls={dotCls} />
     </div>
   );
@@ -490,13 +490,13 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
         <div className="bg-gray-900 rounded-xl px-5 py-4 flex items-start justify-between gap-3">
           <ul className="space-y-1.5 flex-1">
             {s.key_bullets.map((b, i) => (
-              <li key={i} className="text-white text-sm font-medium leading-snug flex items-start gap-2">
+              <li key={i} className="text-white text-base font-medium leading-snug flex items-start gap-2">
                 <span className="text-navy-400 shrink-0 mt-0.5">•</span>
                 <span>{b}</span>
               </li>
             ))}
           </ul>
-          <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full self-start ${vcPos.cls}`}>
+          <span className={`shrink-0 text-sm font-semibold px-2.5 py-1 rounded-full self-start ${vcPos.cls}`}>
             {vcPos.label}
           </span>
         </div>
@@ -513,7 +513,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && filteredMetrics.length > 0 && (
         <div className="flex justify-end">
-          <button onClick={() => onTabChange('financials')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">재무 상세 보기 →</button>
+          <button onClick={() => onTabChange('financials')} className="text-sm text-navy-500 hover:text-navy-700 font-medium">재무 상세 보기 →</button>
         </div>
       )}
 
@@ -525,7 +525,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
                 EDGAR 10-K 실측)만이 유일한 비중 출처. 이름+정성적 설명만 표시. */}
             <ul className="space-y-2">
               {s.products.map((p, i) => (
-                <li key={i} className="text-xs">
+                <li key={i} className="text-sm">
                   <span className="font-medium text-gray-800">{p.name}</span>
                   {p.description && <span className="text-gray-500"> — {p.description}</span>}
                 </li>
@@ -539,7 +539,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
             <div className="space-y-2.5">
               {s.key_markets.map((m, i) => (
                 <div key={i}>
-                  <div className="flex justify-between text-xs mb-1">
+                  <div className="flex justify-between text-sm mb-1">
                     <span className="text-gray-700">{flagOf(m.country)} {m.country}</span>
                     <span className="font-medium text-gray-800">{m.revenue_share}%</span>
                   </div>
@@ -553,7 +553,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && (s.products.length > 0 || s.key_markets.length > 0) && (
         <div className="flex justify-end -mt-1">
-          <button onClick={() => onTabChange('business_model')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">비즈니스모델 보기 →</button>
+          <button onClick={() => onTabChange('business_model')} className="text-sm text-navy-500 hover:text-navy-700 font-medium">비즈니스모델 보기 →</button>
         </div>
       )}
 
@@ -576,7 +576,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
             )}
             {hasValidCc ? (
               <div className="space-y-2 mt-2">
-                <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg font-medium ${
+                <div className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg font-medium ${
                   cc.is_concentrated
                     ? 'bg-risk-bg text-risk border border-risk-border'
                     : 'bg-navy-50 text-navy-700 border border-navy-100'
@@ -592,7 +592,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
                   <div className="space-y-1.5 pt-1">
                     {validCustomers.map((c, i) => (
                       <div key={i}>
-                        <div className="flex justify-between text-xs mb-0.5">
+                        <div className="flex justify-between text-sm mb-0.5">
                           <span className="text-gray-600">{c.name}</span>
                           <span className="font-medium text-gray-700">{c.revenue_share}%</span>
                         </div>
@@ -604,7 +604,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
               </div>
             ) : (
               !s.top_customers.length && (
-                <p className="text-xs text-gray-400 mt-1">집중도 데이터 없음</p>
+                <p className="text-sm text-gray-400 mt-1">집중도 데이터 없음</p>
               )
             )}
           </SectionCard>
@@ -613,7 +613,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && (s.top_customers.length > 0 || s.customer_concentration) && (
         <div className="flex justify-end">
-          <button onClick={() => onTabChange('competitors')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">경쟁사 분석 보기 →</button>
+          <button onClick={() => onTabChange('competitors')} className="text-sm text-navy-500 hover:text-navy-700 font-medium">경쟁사 분석 보기 →</button>
         </div>
       )}
 
@@ -631,14 +631,14 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
           <div className="space-y-3">
             {s.trigger_events.map((ev, i) => (
               <div key={i} className="flex items-start gap-3">
-                <span className="shrink-0 text-[11px] font-medium text-gray-400 w-20 pt-0.5">{ev.date}</span>
+                <span className="shrink-0 text-sm font-medium text-gray-400 w-20 pt-0.5">{ev.date}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mb-0.5">
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-navy-50 text-navy-700">{ev.type}</span>
-                    {ev.amount && <span className="text-xs font-medium text-gray-700">{ev.amount}</span>}
-                    {ev.counterparty && <span className="text-xs text-gray-400">· {ev.counterparty}</span>}
+                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-navy-50 text-navy-700">{ev.type}</span>
+                    {ev.amount && <span className="text-sm font-medium text-gray-700">{ev.amount}</span>}
+                    {ev.counterparty && <span className="text-sm text-gray-400">· {ev.counterparty}</span>}
                   </div>
-                  <p className="text-sm text-gray-700 leading-snug"><CitedText text={ev.description} /></p>
+                  <p className="text-base text-gray-700 leading-snug"><CitedText text={ev.description} /></p>
                 </div>
               </div>
             ))}
@@ -648,7 +648,7 @@ function SummaryV2Tab({ s, sources, onTabChange }: { s: SummaryV2; sources: Sour
 
       {onTabChange && (
         <div className="flex justify-end">
-          <button onClick={() => onTabChange('strategy')} className="text-xs text-navy-500 hover:text-navy-700 font-medium">전략 보기 →</button>
+          <button onClick={() => onTabChange('strategy')} className="text-sm text-navy-500 hover:text-navy-700 font-medium">전략 보기 →</button>
         </div>
       )}
 
@@ -683,7 +683,7 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
       <SectionCard title="경영 요약" dotColor="bg-navy-400">
         <div className="space-y-2">
           {lines.map((l, i) => (
-            <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+            <p key={i} className="text-base text-gray-700 leading-relaxed">{l}</p>
           ))}
         </div>
       </SectionCard>
@@ -695,7 +695,7 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
                 {strengths.map((l, i) => (
                   <div key={i} className="flex gap-2 items-start mb-2">
                     <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-[#16a34a] shrink-0" />
-                    <p className="text-sm text-gray-700 leading-relaxed">{l}</p>
+                    <p className="text-base text-gray-700 leading-relaxed">{l}</p>
                   </div>
                 ))}
               </div>
@@ -707,7 +707,7 @@ function SummaryTab({ data }: { data: AnalysisDetail }) {
                 {risks.map((l, i) => (
                   <div key={i} className="flex gap-2 items-start mb-2">
                     <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-[#dc2626] shrink-0" />
-                    <p className="text-sm text-gray-700 leading-relaxed">{l}</p>
+                    <p className="text-base text-gray-700 leading-relaxed">{l}</p>
                   </div>
                 ))}
               </div>
@@ -735,18 +735,18 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
           const isLast = i === visible.length - 1 && (!hasMore || expanded);
           return (
             <div key={i} className="flex gap-4">
-              <div className="flex flex-col items-center w-10 shrink-0">
-                <div className="w-10 h-10 rounded-full bg-navy-50 border-2 border-navy-300 flex items-center justify-center shrink-0">
-                  <span className="text-[9px] font-semibold text-navy-800 text-center leading-none px-0.5">{item.period.slice(0, 6)}</span>
+              <div className="flex flex-col items-center w-12 shrink-0">
+                <div className="w-12 h-12 rounded-full bg-navy-50 border-2 border-navy-300 flex items-center justify-center shrink-0">
+                  <span className="text-[10px] font-semibold text-navy-800 text-center leading-none px-0.5 whitespace-nowrap">{item.period.slice(0, 6)}</span>
                 </div>
                 {!isLast && <div className="w-0.5 bg-gray-100 flex-1 my-1 min-h-[2rem]" />}
               </div>
               <div className="pb-5 flex-1 min-w-0 pt-1">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                  <span className="text-sm font-semibold text-gray-800">{item.title}</span>
-                  <span className="text-[11px] text-navy-600 font-medium">{item.period}</span>
+                  <span className="text-base font-semibold text-gray-800">{item.title}</span>
+                  <span className="text-sm text-navy-600 font-medium">{item.period}</span>
                 </div>
-                <div className="space-y-1 text-xs text-gray-600 mb-2">
+                <div className="space-y-1 text-sm text-gray-600 mb-2">
                   <div className="flex gap-2 items-start">
                     <span className="shrink-0 text-gray-400 w-14">기술</span>
                     <span className="leading-relaxed">{item.technology}</span>
@@ -773,7 +773,7 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
       {hasMore && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="w-full py-2 text-xs text-navy-500 hover:text-navy-600 bg-navy-50 hover:bg-navy-100 rounded-lg"
+          className="w-full py-2 text-sm text-navy-500 hover:text-navy-600 bg-navy-50 hover:bg-navy-100 rounded-lg"
         >
           더 보기 ({h.timeline.length - LIMIT}개 더)
         </button>
@@ -783,12 +783,12 @@ const IndustryHistoryV2Tab = memo(function IndustryHistoryV2Tab({ h, sources }: 
         <BulletCallout title="지속 가능성" items={h.why_durable} boxCls="bg-navy-50 border border-navy-100" titleCls="text-navy-600" dotCls="bg-navy-400" />
         {h.chasm_points.length > 0 && (
           <div className="bg-navy-50 border border-navy-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-600 mb-2">캐즘 포인트</div>
+            <div className="text-sm font-semibold uppercase tracking-widest text-navy-600 mb-2">캐즘 포인트</div>
             <div className="space-y-1.5">
               {h.chasm_points.map((c, i) => (
                 <div key={i} className="flex items-start gap-2">
                   <span className="mt-[4px] w-1.5 h-1.5 rounded-full bg-navy-400 shrink-0" />
-                  <p className="text-xs text-gray-700 leading-relaxed">{c}</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">{c}</p>
                 </div>
               ))}
             </div>
@@ -812,16 +812,16 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {t.current_stage?.label && (
           <div className="bg-navy-50 border border-navy-100 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-600 mb-2">현재 단계</div>
-            <div className="text-sm font-semibold text-gray-800 mb-1">{t.current_stage.label}</div>
-            {t.current_stage.detail && <p className="text-xs text-gray-600 leading-relaxed">{t.current_stage.detail}</p>}
+            <div className="text-sm font-semibold uppercase tracking-widest text-navy-600 mb-2">현재 단계</div>
+            <div className="text-base font-semibold text-gray-800 mb-1">{t.current_stage.label}</div>
+            {t.current_stage.detail && <p className="text-sm text-gray-600 leading-relaxed">{t.current_stage.detail}</p>}
           </div>
         )}
         {t.next_inflection?.label && (
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-600 mb-2">다음 변곡점</div>
-            <div className="text-sm font-semibold text-gray-800 mb-1">{t.next_inflection.label}</div>
-            {t.next_inflection.detail && <p className="text-xs text-gray-600 leading-relaxed">{t.next_inflection.detail}</p>}
+            <div className="text-sm font-semibold uppercase tracking-widest text-gray-600 mb-2">다음 변곡점</div>
+            <div className="text-base font-semibold text-gray-800 mb-1">{t.next_inflection.label}</div>
+            {t.next_inflection.detail && <p className="text-sm text-gray-600 leading-relaxed">{t.next_inflection.detail}</p>}
           </div>
         )}
       </div>
@@ -836,23 +836,23 @@ const TechEvolutionV2Tab = memo(function TechEvolutionV2Tab({ t, sources }: { t:
                 <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <div className="w-6 h-6 rounded-full bg-navy-50 border-2 border-navy-400 flex items-center justify-center shrink-0">
-                      <span className="text-[11px] font-semibold text-navy-800">{s.stage}</span>
+                      <span className="text-sm font-semibold text-navy-800">{s.stage}</span>
                     </div>
-                    <span className="text-sm font-semibold text-gray-800">{s.title}</span>
-                    <span className="text-[11px] text-navy-600 font-medium">{s.period}</span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${hype.cls}`}>{hype.label}</span>
+                    <span className="text-base font-semibold text-gray-800">{s.title}</span>
+                    <span className="text-sm text-navy-600 font-medium">{s.period}</span>
+                    <span className={`text-sm px-2 py-0.5 rounded-full font-medium ${hype.cls}`}>{hype.label}</span>
                   </div>
-                  <p className="text-sm text-gray-600 leading-relaxed mb-2">{s.description}</p>
+                  <p className="text-base text-gray-600 leading-relaxed mb-2">{s.description}</p>
                   <div className="space-y-1.5">
                     {s.key_enablers.length > 0 && (
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[10px] text-gray-400 shrink-0">Enablers</span>
+                        <span className="text-xs text-gray-400 shrink-0">Enablers</span>
                         {s.key_enablers.map((e, j) => <Tag key={j} label={e} color="navy" />)}
                       </div>
                     )}
                     {s.key_players.length > 0 && (
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[10px] text-gray-400 shrink-0">Players</span>
+                        <span className="text-xs text-gray-400 shrink-0">Players</span>
                         {s.key_players.map((p, j) => <Tag key={j} label={p} color="gray" />)}
                       </div>
                     )}
@@ -893,27 +893,27 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
                   {/* 헤더 행 */}
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${layer.is_subject ? 'text-navy-700' : layer.buyer ? 'text-gray-800' : 'text-gray-800'}`}>
+                      <span className={`text-base font-semibold ${layer.is_subject ? 'text-navy-700' : layer.buyer ? 'text-gray-800' : 'text-gray-800'}`}>
                         {layer.name}
                       </span>
                       {layer.is_subject && (
-                        <span className="text-[10px] bg-navy-600 text-white rounded-full px-2 py-0.5 font-medium">분석 대상</span>
+                        <span className="text-xs bg-navy-600 text-white rounded-full px-2 py-0.5 font-medium">분석 대상</span>
                       )}
                       {layer.bottleneck && (
-                        <span className="text-[10px] bg-risk-bg text-risk border border-risk-border rounded-full px-2 py-0.5 font-medium">Bottleneck</span>
+                        <span className="text-xs bg-risk-bg text-risk border border-risk-border rounded-full px-2 py-0.5 font-medium">Bottleneck</span>
                       )}
                     </div>
                     {layer.buyer
-                      ? <span className="text-[10px] bg-navy-100 text-navy-600 rounded-full px-2 py-0.5 font-medium">구매자</span>
-                      : pp && <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${pp.cls}`}>{pp.label}</span>
+                      ? <span className="text-xs bg-navy-100 text-navy-600 rounded-full px-2 py-0.5 font-medium">구매자</span>
+                      : pp && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${pp.cls}`}>{pp.label}</span>
                     }
                   </div>
                   {/* 설명 + 선도기업 */}
-                  <p className="text-xs text-gray-500 leading-relaxed mb-2">{layer.description}</p>
+                  <p className="text-sm text-gray-500 leading-relaxed mb-2">{layer.description}</p>
                   {layer.global_leaders.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {layer.global_leaders.map((leader, j) => (
-                        <span key={j} className="inline-flex items-center gap-1 text-[11px] bg-gray-100 text-gray-600 rounded-md px-2 py-0.5">
+                        <span key={j} className="inline-flex items-center gap-1 text-sm bg-gray-100 text-gray-600 rounded-md px-2 py-0.5">
                           {flagOf(leader.country)}{leader.name}
                         </span>
                       ))}
@@ -981,17 +981,17 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
     <div className="space-y-4">
       {data.value_chain_overview && (
         <SectionCard title="밸류체인 개요" dotColor="bg-navy-400">
-          <p className="text-sm text-gray-700 leading-relaxed">{data.value_chain_overview}</p>
+          <p className="text-base text-gray-700 leading-relaxed">{data.value_chain_overview}</p>
         </SectionCard>
       )}
       {players.length > 0 && (
         <SectionCard title="주요 플레이어" dotColor="bg-navy-400">
           <div className="flex items-center gap-2 mb-5 flex-wrap">
             {flowNodes.flatMap((node, i) => [
-              <div key={`node-${i}`} className={`rounded-lg px-3 py-2 text-xs text-center flex-1 min-w-[80px] ${
+              <div key={`node-${i}`} className={`rounded-lg px-3 py-2 text-sm text-center flex-1 min-w-[80px] ${
                 node.isTarget ? 'bg-navy-50 border-2 border-navy-300 text-navy-800 font-medium' : 'bg-gray-50 text-gray-700'
               }`}>{node.label}</div>,
-              i < flowNodes.length - 1 ? <span key={`arrow-${i}`} className="text-gray-300 text-sm shrink-0">→</span> : null,
+              i < flowNodes.length - 1 ? <span key={`arrow-${i}`} className="text-gray-300 text-base shrink-0">→</span> : null,
             ])}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1001,11 +1001,11 @@ function ValueChainTab({ data }: { data: AnalysisDetail }) {
               return (
                 <div key={i} className={`rounded-xl border p-4 ${isTarget ? 'border-navy-200 bg-navy-50' : 'border-gray-100 bg-white'}`}>
                   <div className="flex items-start justify-between gap-1 mb-2">
-                    <span className={`text-[11px] font-semibold uppercase tracking-widest ${isTarget ? 'text-navy-500' : 'text-gray-400'}`}>{p.role}</span>
-                    {isTarget && <span className="shrink-0 text-[10px] bg-navy-600 text-white rounded-full px-2 py-0.5 font-semibold">분석 대상</span>}
+                    <span className={`text-sm font-semibold uppercase tracking-widest ${isTarget ? 'text-navy-500' : 'text-gray-400'}`}>{p.role}</span>
+                    {isTarget && <span className="shrink-0 text-xs bg-navy-600 text-white rounded-full px-2 py-0.5 font-semibold">분석 대상</span>}
                   </div>
-                  <div className="font-semibold text-gray-900 text-sm mb-1.5">{p.player_name}</div>
-                  <p className="text-xs text-gray-500 leading-relaxed">{p.description}</p>
+                  <div className="font-semibold text-gray-900 text-base mb-1.5">{p.player_name}</div>
+                  <p className="text-sm text-gray-500 leading-relaxed">{p.description}</p>
                 </div>
               );
             })}
@@ -1047,23 +1047,23 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
             {revenueStreams.map((rs, i) => (
               <div key={i}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-medium text-gray-700">{rs.name}</span>
+                  <span className="text-sm font-medium text-gray-700">{rs.name}</span>
                   <Tag label={rs.type} color="gray" />
                 </div>
                 {(rs.operating_margin !== 0 || rs.growth_rate !== 0) && (
                   <div className="flex gap-3 mt-1">
                     {rs.operating_margin !== 0 && (
-                      <span className="text-[10px] text-gray-400">OPM {rs.operating_margin}%</span>
+                      <span className="text-xs text-gray-400">OPM {rs.operating_margin}%</span>
                     )}
                     {rs.growth_rate !== 0 && (
-                      <span className={`text-[10px] ${rs.growth_rate > 0 ? 'text-navy-600' : 'text-risk'}`}>
+                      <span className={`text-xs ${rs.growth_rate > 0 ? 'text-navy-600' : 'text-risk'}`}>
                         {rs.growth_rate > 0 ? '+' : ''}{rs.growth_rate}% YoY
                       </span>
                     )}
                   </div>
                 )}
                 {rs.description && (
-                  <p className="text-[11px] text-gray-400 mt-1 leading-snug">{rs.description}</p>
+                  <p className="text-sm text-gray-400 mt-1 leading-snug">{rs.description}</p>
                 )}
               </div>
             ))}
@@ -1075,11 +1075,11 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
       {bm.growth_motion_detail && (
         <SectionCard title="Growth Motion" dotColor="bg-navy-400">
           <div className="mb-3">
-            <span className={`inline-flex items-center text-sm font-semibold px-3 py-1.5 rounded-full ${gm.cls}`}>
+            <span className={`inline-flex items-center text-base font-semibold px-3 py-1.5 rounded-full ${gm.cls}`}>
               {gm.label}
             </span>
           </div>
-          <p className="text-sm text-gray-600 leading-relaxed">{bm.growth_motion_detail}</p>
+          <p className="text-base text-gray-600 leading-relaxed">{bm.growth_motion_detail}</p>
         </SectionCard>
       )}
 
@@ -1094,7 +1094,7 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-400">데이터 없음</p>
+              <p className="text-base text-gray-400">데이터 없음</p>
             )}
           </SectionCard>
 
@@ -1106,13 +1106,13 @@ const BusinessModelV2Tab = memo(function BusinessModelV2Tab({ bm, sources }: { b
                   return (
                     <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
                       <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-sm font-semibold text-gray-800">{m.type}</span>
-                        <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${cfg.cls}`}>{cfg.label}</span>
+                        <span className="text-base font-semibold text-gray-800">{m.type}</span>
+                        <span className={`text-sm px-2.5 py-0.5 rounded-full font-medium ${cfg.cls}`}>{cfg.label}</span>
                       </div>
                       <div className="h-1.5 bg-gray-100 rounded-full mb-2">
                         <div className={`${cfg.width} ${cfg.barColor} h-1.5 rounded-full`} />
                       </div>
-                      <p className="text-xs text-gray-600 leading-relaxed">{m.description}</p>
+                      <p className="text-sm text-gray-600 leading-relaxed">{m.description}</p>
                     </div>
                   );
                 })}
@@ -1179,7 +1179,7 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
     <div className="space-y-4">
       <SectionCard title="비즈니스 모델" dotColor="bg-navy-400">
         <div className="space-y-2">
-          {ls.map((l, i) => <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>)}
+          {ls.map((l, i) => <p key={i} className="text-base text-gray-700 leading-relaxed">{l}</p>)}
         </div>
       </SectionCard>
 
@@ -1199,11 +1199,11 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
                 {moat.types.map((t, i) => (
                   <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-sm font-semibold text-gray-800">{t.name}</span>
-                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${moatBadge[t.strength] ?? 'bg-gray-100 text-gray-600'}`}>{t.strength}</span>
+                      <span className="text-base font-semibold text-gray-800">{t.name}</span>
+                      <span className={`text-sm px-2.5 py-0.5 rounded-full font-medium ${moatBadge[t.strength] ?? 'bg-gray-100 text-gray-600'}`}>{t.strength}</span>
                     </div>
                     <MoatBar strength={t.strength} />
-                    <p className="text-xs text-gray-600 leading-relaxed mt-2">{t.basis}</p>
+                    <p className="text-sm text-gray-600 leading-relaxed mt-2">{t.basis}</p>
                   </div>
                 ))}
               </div>
@@ -1211,14 +1211,14 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {moat.sustain_conditions && (
                 <div className="bg-navy-50 border border-navy-100 rounded-lg p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-600 mb-1.5">유지 조건</div>
-                  <p className="text-xs text-gray-700 leading-relaxed">{moat.sustain_conditions}</p>
+                  <div className="text-sm font-semibold uppercase tracking-widest text-navy-600 mb-1.5">유지 조건</div>
+                  <p className="text-sm text-gray-700 leading-relaxed">{moat.sustain_conditions}</p>
                 </div>
               )}
               {moat.collapse_scenarios && (
                 <div className="bg-risk-bg border border-risk-border rounded-lg p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-widest text-risk mb-1.5">붕괴 시나리오</div>
-                  <p className="text-xs text-gray-700 leading-relaxed">{moat.collapse_scenarios}</p>
+                  <div className="text-sm font-semibold uppercase tracking-widest text-risk mb-1.5">붕괴 시나리오</div>
+                  <p className="text-sm text-gray-700 leading-relaxed">{moat.collapse_scenarios}</p>
                 </div>
               )}
             </div>
@@ -1234,10 +1234,10 @@ function BusinessModelTab({ data }: { data: AnalysisDetail }) {
               return (
                 <div key={label}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-semibold text-gray-700">{label} 리스크</span>
-                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${sev.bg} ${sev.text}`}>{g.severity}</span>
+                    <span className="text-sm font-semibold text-gray-700">{label} 리스크</span>
+                    <span className={`text-sm px-2.5 py-0.5 rounded-full font-semibold ${sev.bg} ${sev.text}`}>{g.severity}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <tbody className="divide-y divide-gray-50">
                       {g.items.map((item, i) => (
                         <tr key={i} className="hover:bg-gray-50/50">
@@ -1270,8 +1270,8 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
     <div className="space-y-4">
       <KeyBulletsBlock bullets={c.key_bullets} />
       <div className="flex items-center gap-2">
-        <span className="text-[11px] text-gray-400">경쟁 포지션</span>
-        <span className={`text-sm font-semibold px-3 py-1 rounded-full ${pos.cls}`}>{pos.label}</span>
+        <span className="text-sm text-gray-400">경쟁 포지션</span>
+        <span className={`text-base font-semibold px-3 py-1 rounded-full ${pos.cls}`}>{pos.label}</span>
       </div>
 
       {/* Above fold: top 3 direct competitors */}
@@ -1281,18 +1281,18 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
             {topDirect.map((comp, i) => (
               <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
-                  <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>
+                  <span className="font-semibold text-gray-900 text-base">{comp.name}</span>
+                  <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-sm font-medium">{flagOf(comp.country)} {comp.country}</span>
                 </div>
                 {comp.market_share && (
-                  <div className="text-navy-600 font-medium text-xs">{comp.market_share}</div>
+                  <div className="text-navy-600 font-medium text-sm">{comp.market_share}</div>
                 )}
                 {comp.strengths.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {comp.strengths.slice(0, 3).map((s, j) => (
                       <div key={j} className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-navy-400 shrink-0" />
-                        <span className="text-[11px] text-gray-600">{s}</span>
+                        <span className="text-sm text-gray-600">{s}</span>
                       </div>
                     ))}
                   </div>
@@ -1302,14 +1302,14 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                     {comp.weaknesses.slice(0, 2).map((w, j) => (
                       <div key={j} className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-risk shrink-0" />
-                        <span className="text-[11px] text-gray-600">{w}</span>
+                        <span className="text-sm text-gray-600">{w}</span>
                       </div>
                     ))}
                   </div>
                 )}
                 {comp.vs_subject && (
                   <div className="bg-navy-50 rounded-lg px-3 py-1.5">
-                    <p className="text-[11px] text-navy-700 leading-relaxed">{comp.vs_subject}</p>
+                    <p className="text-sm text-navy-700 leading-relaxed">{comp.vs_subject}</p>
                   </div>
                 )}
               </div>
@@ -1320,11 +1320,11 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
 
       {dataSource === 'edgar' && c.revenue_ranking && (
         <SectionCard title="매출 순위" dotColor="bg-navy-400">
-          <p className="text-[11px] text-gray-400 mb-2">
+          <p className="text-sm text-gray-400 mb-2">
             <CitedText text={`SIC ${c.revenue_ranking.sicCode} 동종업계, EDGAR ${c.revenue_ranking.totalCompanies}개사 중 매출 상위 ${c.revenue_ranking.top.length}개사${c.revenue_ranking.sourceIndex ? ` [${c.revenue_ranking.sourceIndex}]` : ''}`} />
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="text-gray-400 border-b border-gray-100">
                   <th className="text-left font-medium py-1.5 pr-2">순위</th>
@@ -1344,7 +1344,7 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
             </table>
           </div>
           {c.revenue_ranking.subjectRank != null && (
-            <p className="text-[11px] text-gray-500 mt-2">
+            <p className="text-sm text-gray-500 mt-2">
               조회 대상 기업 순위: {c.revenue_ranking.subjectRank}위 / 총 {c.revenue_ranking.totalCompanies}개사
             </p>
           )}
@@ -1361,13 +1361,13 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                   {restDirect.map((comp, i) => (
                     <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
-                        <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>
+                        <span className="font-semibold text-gray-900 text-base">{comp.name}</span>
+                        <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-sm font-medium">{flagOf(comp.country)} {comp.country}</span>
                       </div>
-                      {comp.market_share && <div className="text-navy-600 font-medium text-xs">{comp.market_share}</div>}
+                      {comp.market_share && <div className="text-navy-600 font-medium text-sm">{comp.market_share}</div>}
                       {comp.vs_subject && (
                         <div className="bg-navy-50 rounded-lg px-3 py-1.5">
-                          <p className="text-[11px] text-navy-700 leading-relaxed">{comp.vs_subject}</p>
+                          <p className="text-sm text-navy-700 leading-relaxed">{comp.vs_subject}</p>
                         </div>
                       )}
                     </div>
@@ -1382,8 +1382,8 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                     <div className="flex flex-wrap gap-2">
                       {c.indirect.map((comp, i) => (
                         <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
-                          <div className="text-xs font-medium text-gray-700 mb-0.5">{comp.name}</div>
-                          <div className="text-[11px] text-gray-400">{comp.threat}</div>
+                          <div className="text-sm font-medium text-gray-700 mb-0.5">{comp.name}</div>
+                          <div className="text-sm text-gray-400">{comp.threat}</div>
                         </div>
                       ))}
                     </div>
@@ -1394,8 +1394,8 @@ const CompetitorsV2Tab = memo(function CompetitorsV2Tab({ c, sources, dataSource
                     <div className="flex flex-wrap gap-2">
                       {c.substitutes.map((sub, i) => (
                         <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
-                          <div className="text-xs font-medium text-gray-700 mb-0.5">{sub.name}</div>
-                          <div className="text-[11px] text-gray-400">{sub.threat}</div>
+                          <div className="text-sm font-medium text-gray-700 mb-0.5">{sub.name}</div>
+                          <div className="text-sm text-gray-400">{sub.threat}</div>
                         </div>
                       ))}
                     </div>
@@ -1421,10 +1421,10 @@ function CompetitorCard({ comp }: { comp: DirectCompetitor }) {
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-4 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold text-gray-900 text-sm">{comp.name}</span>
-        {comp.country && <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-[11px] font-medium">{flagOf(comp.country)} {comp.country}</span>}
+        <span className="font-semibold text-gray-900 text-base">{comp.name}</span>
+        {comp.country && <span className="shrink-0 bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 text-sm font-medium">{flagOf(comp.country)} {comp.country}</span>}
       </div>
-      {comp.market_share && <div className="text-navy-600 font-medium text-sm">{comp.market_share}</div>}
+      {comp.market_share && <div className="text-navy-600 font-medium text-base">{comp.market_share}</div>}
       {(comp.strengths?.length ?? 0) > 0 && (
         <div className="flex flex-wrap gap-1">
           {comp.strengths.slice(0, 3).map((s, j) => <Tag key={j} label={s} color="navy" />)}
@@ -1432,9 +1432,9 @@ function CompetitorCard({ comp }: { comp: DirectCompetitor }) {
       )}
       {diff && (
         <>
-          <p className={`text-xs text-gray-500 leading-relaxed ${!expanded && showToggle ? 'line-clamp-2' : ''}`}>{diff}</p>
+          <p className={`text-sm text-gray-500 leading-relaxed ${!expanded && showToggle ? 'line-clamp-2' : ''}`}>{diff}</p>
           {showToggle && (
-            <button onClick={() => setExpanded(v => !v)} className="text-[11px] text-navy-500 hover:text-navy-700 self-start">
+            <button onClick={() => setExpanded(v => !v)} className="text-sm text-navy-500 hover:text-navy-700 self-start">
               {expanded ? '접기' : '더보기'}
             </button>
           )}
@@ -1449,7 +1449,7 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
   const direct = c?.direct ?? [];
   const indirect = c?.indirect ?? [];
   if (direct.length === 0 && indirect.length === 0) {
-    return <p className="text-sm text-gray-500 py-4 text-center">경쟁사 데이터가 없습니다.</p>;
+    return <p className="text-base text-gray-500 py-4 text-center">경쟁사 데이터가 없습니다.</p>;
   }
   return (
     <div className="space-y-4">
@@ -1464,7 +1464,7 @@ function CompetitorsTab({ data }: { data: AnalysisDetail }) {
         <SectionCard title="간접 경쟁사 / 대체재" dotColor="bg-navy-400">
           <div className="flex flex-wrap gap-2">
             {indirect.map((comp, i) => (
-              <span key={i} className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-xs">
+              <span key={i} className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-sm">
                 {comp.name}{comp.type ? ` · ${comp.type}` : ''}
               </span>
             ))}
@@ -1486,12 +1486,12 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
       <KeyBulletsBlock bullets={n.key_bullets} />
 
       <SectionCard title="업종 공통 Pain" dotColor="bg-amber-400">
-        <div className="text-sm font-semibold text-gray-800 mb-1.5">{n.industry_pain.title}</div>
+        <div className="text-base font-semibold text-gray-800 mb-1.5">{n.industry_pain.title}</div>
         <div className="mb-2">
-          <BulletList items={n.industry_pain.description} textCls="text-sm text-gray-600" dotCls="bg-amber-400" />
+          <BulletList items={n.industry_pain.description} textCls="text-base text-gray-600" dotCls="bg-amber-400" />
         </div>
         {n.industry_pain.financial_impact_question && (
-          <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-800 leading-relaxed">
+          <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-sm text-amber-800 leading-relaxed">
             {n.industry_pain.financial_impact_question}
           </div>
         )}
@@ -1504,8 +1504,8 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
         <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 border border-gray-100 rounded-lg">
           <ArrowDown size={14} className="text-navy-400 mt-0.5 flex-shrink-0" />
           <div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">연결고리</div>
-            <p className="text-sm text-gray-700 leading-relaxed italic">{n.connection_insight}</p>
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">연결고리</div>
+            <p className="text-base text-gray-700 leading-relaxed italic">{n.connection_insight}</p>
           </div>
         </div>
       )}
@@ -1513,9 +1513,9 @@ const CrossIndustryNudgeV1Tab = memo(function CrossIndustryNudgeV1Tab(
       <SectionCard title="타산업 해결 사례" dotColor="bg-navy-400">
         <div className="flex items-center gap-2 mb-1.5">
           <Tag label={n.cross_industry_example.source_industry} color="navy" />
-          <span className="text-sm font-semibold text-gray-800">{n.cross_industry_example.case_name}</span>
+          <span className="text-base font-semibold text-gray-800">{n.cross_industry_example.case_name}</span>
         </div>
-        <CitedText text={n.cross_industry_example.solution_description} className="text-sm text-gray-600 leading-relaxed block" />
+        <CitedText text={n.cross_industry_example.solution_description} className="text-base text-gray-600 leading-relaxed block" />
       </SectionCard>
 
       <SourcesList sources={sources} />
@@ -1570,20 +1570,20 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
         {sections.map((sec, i) => (
           <div key={sec.label} className="flex flex-col items-center">
             <div className="w-full bg-white border border-gray-100 rounded-xl p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
+              <div className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
                 <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${sec.dotColor}`} />
                 {sec.label}
                 <span className="text-gray-300 font-normal normal-case tracking-normal">({sec.sub})</span>
               </div>
               {sec.direction && (
-                <p className="text-sm font-semibold text-gray-800 leading-snug mb-3 pl-3.5">{sec.direction}</p>
+                <p className="text-base font-semibold text-gray-800 leading-snug mb-3 pl-3.5">{sec.direction}</p>
               )}
               {sec.bullets.length > 0 && (
                 <div className="space-y-1.5 pl-3.5">
                   {sec.bullets.map((b, j) => (
                     <div key={j} className="flex items-start gap-2">
                       <span className="mt-[5px] w-1 h-1 rounded-full bg-gray-300 shrink-0" />
-                      <p className="text-xs text-gray-600 leading-relaxed">{b}</p>
+                      <p className="text-sm text-gray-600 leading-relaxed">{b}</p>
                     </div>
                   ))}
                 </div>
@@ -1606,11 +1606,11 @@ const StrategyV2Tab = memo(function StrategyV2Tab({ s, sources }: { s: StrategyV
           <div className="space-y-3 pb-1">
             {s.strategy_coherence && (
               <div className="bg-white border-2 border-navy-200 rounded-xl p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-navy-500 mb-2">전략 수렴</div>
+                <div className="text-sm font-semibold uppercase tracking-widest text-navy-500 mb-2">전략 수렴</div>
                 {/* 백엔드가 strategy_coherence를 2~3개 문단(빈 줄로 구분, "\n\n")으로 나눠 보내므로
                     whitespace-pre-line으로 줄바꿈을 실제로 살린다 — 기본 white-space:normal이면
                     \n이 공백으로 뭉개져서 여전히 한 덩어리 문단처럼 보인다. */}
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{s.strategy_coherence}</p>
+                <p className="text-base text-gray-700 leading-relaxed whitespace-pre-line">{s.strategy_coherence}</p>
               </div>
             )}
             <BulletCallout title="10년 지속 가능성" items={s.ten_year_durability} boxCls="bg-navy-50 border border-navy-100" titleCls="text-navy-600" dotCls="bg-navy-400" />
@@ -1633,7 +1633,7 @@ function HighlightNumbers({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         /\d/.test(p)
-          ? <span key={i} className="bg-navy-50 text-navy-700 px-1.5 py-0.5 rounded text-[11px] font-medium mx-0.5">{p}</span>
+          ? <span key={i} className="bg-navy-50 text-navy-700 px-1.5 py-0.5 rounded text-sm font-medium mx-0.5">{p}</span>
           : <span key={i}>{p}</span>
       )}
     </>
@@ -1643,7 +1643,7 @@ function HighlightNumbers({ text }: { text: string }) {
 function StrategyTab({ data }: { data: AnalysisDetail }) {
   const s = data.strategy as StrategyAnalysis | null;
   if (!s || (!s.corporate && !s.business && !s.financial)) {
-    return <p className="text-sm text-gray-500 py-4 text-center">전략 데이터가 없습니다.</p>;
+    return <p className="text-base text-gray-500 py-4 text-center">전략 데이터가 없습니다.</p>;
   }
 
   const sections = [
@@ -1689,12 +1689,12 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
         return (
           <div key={sec.label}>
             <div className="bg-white border border-gray-100 rounded-xl p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
+              <div className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
                 <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${sec.dotColor}`} />
                 {sec.label}
               </div>
               {headlineTrunc && (
-                <p className="text-sm font-medium text-gray-800 leading-snug mb-3 pl-3.5">
+                <p className="text-base font-medium text-gray-800 leading-snug mb-3 pl-3.5">
                   <HighlightNumbers text={headlineTrunc} />
                 </p>
               )}
@@ -1702,8 +1702,8 @@ function StrategyTab({ data }: { data: AnalysisDetail }) {
                 <div>
                   {filledItems.map((item, i) => (
                     <div key={i} className={`flex gap-3 items-start py-2.5 ${i < filledItems.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                      <span className="shrink-0 w-24 text-[11px] text-gray-400 pt-0.5 leading-tight">{item.label}</span>
-                      <p className="text-sm text-gray-700 leading-relaxed flex-1">
+                      <span className="shrink-0 w-24 text-sm text-gray-400 pt-0.5 leading-tight">{item.label}</span>
+                      <p className="text-base text-gray-700 leading-relaxed flex-1">
                         <HighlightNumbers text={item.value!} />
                       </p>
                     </div>
@@ -1793,11 +1793,11 @@ function SecBenchmarkBar({ label, value, unit, colorClass, maxAbs }: { label: st
   const widthPct = maxAbs > 0 ? Math.min(100, (Math.abs(value) / maxAbs) * 100) : 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-gray-400 w-24 shrink-0 truncate">{label}</span>
+      <span className="text-xs text-gray-400 w-36 shrink-0 truncate">{label}</span>
       <div className="flex-1 h-3.5 bg-gray-100 rounded-full overflow-hidden">
         <div className={`h-full ${colorClass} rounded-full transition-all`} style={{ width: `${widthPct}%` }} />
       </div>
-      <span className="text-xs font-semibold text-gray-700 w-16 text-right shrink-0">{value.toFixed(decimals)}{unit}</span>
+      <span className="text-sm font-semibold text-gray-700 w-16 text-right shrink-0">{value.toFixed(decimals)}{unit}</span>
     </div>
   );
 }
@@ -1808,7 +1808,7 @@ function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkC
   if (comparison.status === 'insufficient_sample') {
     return (
       <SectionCard title="동종업계 비교 (SEC)" dotColor="bg-navy-400">
-        <p className="text-xs text-gray-500 leading-relaxed">
+        <p className="text-sm text-gray-500 leading-relaxed">
           이 업종(SIC {comparison.sicCode})은 공개 동종업계 비교 표본이 적어(최대 {comparison.maxN ?? 0}개사) 벤치마크 비교가 제한적이에요. 재무 상황은 직접 확인하는 게 더 정확할 수 있어요.
         </p>
       </SectionCard>
@@ -1822,13 +1822,13 @@ function SecBenchmarkComparisonBlock({ comparison }: { comparison: SecBenchmarkC
           const maxAbs = Math.max(Math.abs(item.companyValue), Math.abs(item.median)) || 1;
           return (
             <div key={i} className={i > 0 ? 'pt-4 border-t border-gray-100' : ''}>
-              <div className="text-xs font-semibold text-gray-700 mb-2">{item.label}</div>
+              <div className="text-sm font-semibold text-gray-700 mb-2">{item.label}</div>
               <div className="space-y-1.5">
                 <SecBenchmarkBar label={chartT.thisCompany} value={item.companyValue} unit={item.unit} colorClass="bg-navy-500" maxAbs={maxAbs} />
                 <SecBenchmarkBar label={`${chartT.industryMedian}(n=${item.n})`} value={item.median} unit={item.unit} colorClass="bg-gray-300" maxAbs={maxAbs} />
               </div>
               {item.interpretation && (
-                <p className="text-xs text-gray-500 leading-relaxed mt-2">{item.interpretation}</p>
+                <p className="text-sm text-gray-500 leading-relaxed mt-2">{item.interpretation}</p>
               )}
             </div>
           );
@@ -1881,29 +1881,29 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
     <div className="space-y-4">
       <KeyBulletsBlock bullets={f.key_bullets} />
       {(estimatedCount > 0 || unknownCount > 0) && (
-        <p className="text-xs text-source-reference bg-source-reference-bg border border-source-reference-border rounded-lg px-3 py-2">
+        <p className="text-sm text-source-reference bg-source-reference-bg border border-source-reference-border rounded-lg px-3 py-2">
           ⚠️ 이 리포트에는 추정값 {estimatedCount}건, 확인 필요 데이터 {unknownCount}건이 포함되어 있습니다
         </p>
       )}
       {/* 데이터 출처 뱃지 + Refresh 버튼 */}
       <div className="flex items-center justify-between">
         {dataSource === 'edgar' ? (
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
+          <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 SEC EDGAR 공식
           </span>
         ) : dataSource === 'dart' ? (
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
+          <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 DART 공식
           </span>
         ) : (
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L3.cls}`}>
+          <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L3.cls}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L3}`} />⚪ 웹 검색 추정치
           </span>
         )}
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-800 bg-navy-50 hover:bg-navy-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 text-sm text-navy-600 hover:text-navy-800 bg-navy-50 hover:bg-navy-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
           {isRefreshing ? '새로고침 중...' : '데이터 새로고침'}
@@ -1915,7 +1915,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
         <SectionCard title="업종 벤치마크" dotColor="bg-navy-400">
           <div className="space-y-1.5">
             {f.industry_benchmark.metrics.map((m) => (
-              <p key={m.key} className="text-sm text-gray-700 leading-relaxed">
+              <p key={m.key} className="text-base text-gray-700 leading-relaxed">
                 <CitedText text={m.sentence} />
               </p>
             ))}
@@ -1939,26 +1939,26 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
             maxVisible={10}
             header={
               <>
-                <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
+                <span className="py-2 pr-3 text-sm font-semibold uppercase tracking-widest text-gray-400">항목</span>
                 {isYearCols.map(col => (
-                  <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === isHighlightCol ? 'text-gray-600' : 'text-gray-400'}`}>
+                  <span key={col} className={`py-2 px-2 text-right text-sm font-semibold uppercase tracking-widest whitespace-nowrap ${col === isHighlightCol ? 'text-gray-600' : 'text-gray-400'}`}>
                     {col.replace('fy', 'FY')}
                   </span>
                 ))}
-                <span className="py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">YoY</span>
+                <span className="py-2 px-2 text-right text-sm font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">YoY</span>
               </>
             }
             renderRow={(row: FinancialsV2Row) => {
               const isBold = IS_BOLD_ITEMS.some(b => row.item.includes(b));
               return (
                 <>
-                  <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
+                  <span className={`py-2.5 pr-3 text-sm truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
                   {isYearCols.map(col => (
-                    <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === isHighlightCol ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
+                    <span key={col} className={`py-2.5 px-2 text-right font-mono text-sm whitespace-nowrap ${isBold && col === isHighlightCol ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
                       <FinancialValue text={row[col] ?? '—'} dataSource={dataSource} />
                     </span>
                   ))}
-                  <span className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={normalizeYoy(row.yoy)} /></span>
+                  <span className={`py-2.5 px-2 text-right font-mono text-sm whitespace-nowrap ${yoyCls(row.yoy)}`}><DataValue text={normalizeYoy(row.yoy)} /></span>
                 </>
               );
             }}
@@ -1975,14 +1975,14 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
             {f.revenue_lines.map((rl, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-gray-700">{rl.label}</span>
-                  <span className="text-xs font-medium text-gray-800">{rl.value} ({rl.sharePct}%)</span>
+                  <span className="text-sm font-medium text-gray-700">{rl.label}</span>
+                  <span className="text-sm font-medium text-gray-800">{rl.value} ({rl.sharePct}%)</span>
                 </div>
                 <ProgressBar value={rl.sharePct} color={BAR_COLORS[i % BAR_COLORS.length]} />
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-gray-400 mt-3">10-K 손익계산서에 실제로 공시된 라인만 표시 — 비중(%)은 서버가 단순 계산, 추정치 아님</p>
+          <p className="text-sm text-gray-400 mt-3">10-K 손익계산서에 실제로 공시된 라인만 표시 — 비중(%)은 서버가 단순 계산, 추정치 아님</p>
         </SectionCard>
       )}
 
@@ -1998,9 +1998,9 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                 maxVisible={10}
                 header={
                   <>
-                    <span className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">항목</span>
+                    <span className="py-2 pr-3 text-sm font-semibold uppercase tracking-widest text-gray-400">항목</span>
                     {bsYearCols.map(col => (
-                      <span key={col} className={`py-2 px-2 text-right text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${col === bsHighlightCol ? 'text-gray-600' : 'text-gray-400'}`}>
+                      <span key={col} className={`py-2 px-2 text-right text-sm font-semibold uppercase tracking-widest whitespace-nowrap ${col === bsHighlightCol ? 'text-gray-600' : 'text-gray-400'}`}>
                         {col.replace('fy', 'FY')}
                       </span>
                     ))}
@@ -2010,9 +2010,9 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                   const isBold = ['총자산', '총부채', '자본총계', 'Total Assets', 'Total Liabilities', 'Total Equity'].includes(row.item);
                   return (
                     <>
-                      <span className={`py-2.5 pr-3 text-xs truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
+                      <span className={`py-2.5 pr-3 text-sm truncate ${isBold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{row.item}</span>
                       {bsYearCols.map(col => (
-                        <span key={col} className={`py-2.5 px-2 text-right font-mono text-xs whitespace-nowrap ${isBold && col === bsHighlightCol ? 'font-semibold text-gray-800' : isBold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                        <span key={col} className={`py-2.5 px-2 text-right font-mono text-sm whitespace-nowrap ${isBold && col === bsHighlightCol ? 'font-semibold text-gray-800' : isBold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
                           <FinancialValue text={row[col] ?? '—'} dataSource={dataSource} />
                         </span>
                       ))}
@@ -2036,7 +2036,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                 ))}
               </div>
               {f.cash_flow.notes && (
-                <p className="mt-3 text-xs text-gray-500 leading-relaxed border-t border-gray-50 pt-3">{f.cash_flow.notes}</p>
+                <p className="mt-3 text-sm text-gray-500 leading-relaxed border-t border-gray-50 pt-3">{f.cash_flow.notes}</p>
               )}
             </SectionCard>
           )}
@@ -2047,7 +2047,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
                 {f.key_risks.map((r, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-risk shrink-0" />
-                    <p className="text-sm text-gray-700 leading-relaxed">{r}</p>
+                    <p className="text-base text-gray-700 leading-relaxed">{r}</p>
                   </div>
                 ))}
               </div>
@@ -2093,7 +2093,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
         <SectionCard title="재무 서사" dotColor="bg-navy-400">
           <div className="space-y-1.5">
             {splitLines(data.financials).map((l, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+              <p key={i} className="text-base text-gray-700 leading-relaxed">{l}</p>
             ))}
           </div>
         </SectionCard>
@@ -2104,14 +2104,14 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
           {(fs!.income_statement?.length ?? 0) > 0 && (
             <SectionCard title="손익계산서 (I/S)" dotColor="bg-navy-400">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-base">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[110px]">항목</th>
+                      <th className="text-left py-2 pr-4 text-sm font-semibold uppercase tracking-widest text-gray-400 min-w-[110px]">항목</th>
                       {IS_COLS.map(y => (
-                        <th key={y} className={`text-right py-2 px-3 text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${y === 'FY2024' ? 'text-gray-600' : 'text-gray-400'}`}>{y}</th>
+                        <th key={y} className={`text-right py-2 px-3 text-sm font-semibold uppercase tracking-widest whitespace-nowrap ${y === 'FY2024' ? 'text-gray-600' : 'text-gray-400'}`}>{y}</th>
                       ))}
-                      <th className="text-right py-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">YoY</th>
+                      <th className="text-right py-2 px-3 text-sm font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">YoY</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -2119,11 +2119,11 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
                       const isMedium = IS_MEDIUM_ITEMS.some(b => row.item.includes(b));
                       return (
                         <tr key={i} className="hover:bg-gray-50/50">
-                          <td className={`py-2.5 pr-4 text-xs ${isMedium ? 'font-medium text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
-                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${isMedium ? 'font-medium text-gray-800' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
-                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${yoyCls(row.yoy)}`}>{normalizeYoy(row.yoy)}</td>
+                          <td className={`py-2.5 pr-4 text-sm ${isMedium ? 'font-medium text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-sm text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono text-sm whitespace-nowrap ${isMedium ? 'font-medium text-gray-800' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-sm text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono text-sm whitespace-nowrap ${yoyCls(row.yoy)}`}>{normalizeYoy(row.yoy)}</td>
                         </tr>
                       );
                     })}
@@ -2135,12 +2135,12 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
           {(fs!.balance_sheet?.length ?? 0) > 0 && (
             <SectionCard title="재무상태표 (B/S)" dotColor="bg-navy-400">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-base">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400 min-w-[130px]">항목</th>
+                      <th className="text-left py-2 pr-4 text-sm font-semibold uppercase tracking-widest text-gray-400 min-w-[130px]">항목</th>
                       {IS_COLS.map(y => (
-                        <th key={y} className={`text-right py-2 px-3 text-[11px] font-semibold uppercase tracking-widest whitespace-nowrap ${y === 'FY2024' ? 'text-gray-600' : 'text-gray-400'}`}>{y}</th>
+                        <th key={y} className={`text-right py-2 px-3 text-sm font-semibold uppercase tracking-widest whitespace-nowrap ${y === 'FY2024' ? 'text-gray-600' : 'text-gray-400'}`}>{y}</th>
                       ))}
                     </tr>
                   </thead>
@@ -2149,10 +2149,10 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
                       const isBold = BS_SECTION_HEADERS.includes(row.item);
                       return (
                         <tr key={i} className={`hover:bg-gray-50/50 ${isBold ? 'bg-gray-50' : ''}`}>
-                          <td className={`py-2.5 pr-4 text-xs ${isBold ? 'font-medium text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
-                          <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${isBold ? 'font-medium text-gray-800' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
+                          <td className={`py-2.5 pr-4 text-sm ${isBold ? 'font-medium text-gray-900' : 'text-gray-600'}`}>{row.item}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-sm text-gray-500 whitespace-nowrap">{row.fy2023 ?? '—'}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono text-sm whitespace-nowrap ${isBold ? 'font-medium text-gray-800' : 'text-gray-700'}`}>{row.fy2024 ?? '—'}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-sm text-gray-500 whitespace-nowrap">{row.fy2025 ?? '—'}</td>
                         </tr>
                       );
                     })}
@@ -2174,7 +2174,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
                 ))}
               </div>
               {fs!.cash_flow.notes && (
-                <p className="mt-3 text-xs text-gray-500 leading-relaxed border-t border-gray-50 pt-3">{fs!.cash_flow.notes}</p>
+                <p className="mt-3 text-sm text-gray-500 leading-relaxed border-t border-gray-50 pt-3">{fs!.cash_flow.notes}</p>
               )}
             </SectionCard>
           )}
@@ -2183,7 +2183,7 @@ function FinancialsTab({ data }: { data: AnalysisDetail }) {
         <SectionCard title="재무 현황" dotColor="bg-navy-400">
           <div className="space-y-2">
             {rawLines.map((l, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed">{l}</p>
+              <p key={i} className="text-base text-gray-700 leading-relaxed">{l}</p>
             ))}
           </div>
         </SectionCard>
@@ -2221,19 +2221,19 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
             {f.founders.map((fd, i) => (
               <div key={i} className="bg-gray-50 rounded-lg p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900">{fd.name}</span>
+                  <span className="text-base font-semibold text-gray-900">{fd.name}</span>
                   {fd.title && fd.title !== '-' && (
-                    <span className="text-[11px] bg-navy-100 text-navy-700 rounded-full px-2 py-0.5 font-medium">{fd.title}</span>
+                    <span className="text-sm bg-navy-100 text-navy-700 rounded-full px-2 py-0.5 font-medium">{fd.title}</span>
                   )}
                 </div>
                 {fd.education && fd.education !== '-' && (
-                  <div className="flex gap-2 text-xs text-gray-600">
+                  <div className="flex gap-2 text-sm text-gray-600">
                     <span className="text-gray-400 shrink-0 w-10">학교</span>
                     <span>{fd.education}</span>
                   </div>
                 )}
                 {fd.major && fd.major !== '-' && (
-                  <div className="flex gap-2 text-xs text-gray-600">
+                  <div className="flex gap-2 text-sm text-gray-600">
                     <span className="text-gray-400 shrink-0 w-10">전공</span>
                     <span>{fd.major}</span>
                   </div>
@@ -2257,15 +2257,15 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
               const isLast = i === arr.length - 1;
               return (
                 <div key={i} className="flex gap-4">
-                  <div className="flex flex-col items-center w-10 shrink-0">
-                    <div className="w-10 h-10 rounded-full bg-navy-50 border-2 border-navy-300 flex items-center justify-center shrink-0">
-                      <span className="text-[9px] font-semibold text-navy-800 text-center leading-none px-0.5">{item.period.slice(0, 6)}</span>
+                  <div className="flex flex-col items-center w-12 shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-navy-50 border-2 border-navy-300 flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-semibold text-navy-800 text-center leading-none px-0.5 whitespace-nowrap">{item.period.slice(0, 6)}</span>
                     </div>
                     {!isLast && <div className="w-0.5 bg-gray-100 flex-1 my-1 min-h-[2rem]" />}
                   </div>
                   <div className="pb-4 flex-1 min-w-0 pt-1">
-                    <div className="text-sm font-semibold text-gray-800">{item.company}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{item.role}</div>
+                    <div className="text-base font-semibold text-gray-800">{item.company}</div>
+                    <div className="text-sm text-gray-500 mt-0.5">{item.role}</div>
                   </div>
                 </div>
               );
@@ -2279,7 +2279,7 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
         <>
           <SectionCard title="창업 이력" dotColor="bg-navy-400">
             <div className="flex items-center gap-2 mb-3">
-              <span className={`text-sm font-semibold px-3 py-1 rounded-full ${isSerial ? 'bg-navy-100 text-navy-700' : 'bg-gray-100 text-gray-600'}`}>
+              <span className={`text-base font-semibold px-3 py-1 rounded-full ${isSerial ? 'bg-navy-100 text-navy-700' : 'bg-gray-100 text-gray-600'}`}>
                 {isSerial ? 'Serial Founder' : '1st Time Founder'}
               </span>
             </div>
@@ -2290,17 +2290,17 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
                   const exitType = v.exit_type ? EXIT_TYPE_CFG[v.exit_type] : null;
                   return (
                     <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                      <span className="text-xs font-medium text-gray-800 flex-1">{v.name}</span>
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${res.cls}`}>{res.label}</span>
+                      <span className="text-sm font-medium text-gray-800 flex-1">{v.name}</span>
+                      <span className={`text-sm px-2 py-0.5 rounded-full font-medium ${res.cls}`}>{res.label}</span>
                       {exitType && (
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${exitType.cls}`}>{exitType.label}</span>
+                        <span className={`text-sm px-2 py-0.5 rounded-full font-medium ${exitType.cls}`}>{exitType.label}</span>
                       )}
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <p className="text-xs text-gray-400">이전 창업 이력 없음</p>
+              <p className="text-sm text-gray-400">이전 창업 이력 없음</p>
             )}
           </SectionCard>
 
@@ -2309,20 +2309,20 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
               <div className="space-y-2">
                 {f.reputation.sns_style !== '-' && (
                   <div className="flex gap-3 items-start py-2 border-b border-gray-50">
-                    <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">SNS 스타일</span>
-                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.sns_style}</p>
+                    <span className="shrink-0 w-20 text-sm text-gray-400 pt-0.5">SNS 스타일</span>
+                    <p className="text-base text-gray-700 leading-relaxed flex-1">{f.reputation.sns_style}</p>
                   </div>
                 )}
                 {f.reputation.media_exposure !== '-' && (
                   <div className="flex gap-3 items-start py-2 border-b border-gray-50">
-                    <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">미디어 노출</span>
-                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.media_exposure}</p>
+                    <span className="shrink-0 w-20 text-sm text-gray-400 pt-0.5">미디어 노출</span>
+                    <p className="text-base text-gray-700 leading-relaxed flex-1">{f.reputation.media_exposure}</p>
                   </div>
                 )}
                 {f.reputation.blind_glassdoor !== '-' && (
                   <div className="flex gap-3 items-start py-2">
-                    <span className="shrink-0 w-20 text-[11px] text-gray-400 pt-0.5">Blind / GD</span>
-                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{f.reputation.blind_glassdoor}</p>
+                    <span className="shrink-0 w-20 text-sm text-gray-400 pt-0.5">Blind / GD</span>
+                    <p className="text-base text-gray-700 leading-relaxed flex-1">{f.reputation.blind_glassdoor}</p>
                   </div>
                 )}
               </div>
@@ -2334,7 +2334,7 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
               <div className="space-y-3">
                 {f.network.cofounders.length > 0 && (
                   <div>
-                    <div className="text-[11px] text-gray-400 mb-1.5">공동창업팀</div>
+                    <div className="text-sm text-gray-400 mb-1.5">공동창업팀</div>
                     <div className="flex flex-wrap gap-1.5">
                       {f.network.cofounders.map((c, i) => <Tag key={i} label={c} color="navy" />)}
                     </div>
@@ -2342,7 +2342,7 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
                 )}
                 {f.network.investors.length > 0 && (
                   <div>
-                    <div className="text-[11px] text-gray-400 mb-1.5">투자자</div>
+                    <div className="text-sm text-gray-400 mb-1.5">투자자</div>
                     <div className="flex flex-wrap gap-1.5">
                       {f.network.investors.map((inv, i) => <Tag key={i} label={inv} color="navy" />)}
                     </div>
@@ -2350,7 +2350,7 @@ const FounderV2Tab = memo(function FounderV2Tab({ f }: { f: FounderV2 }) {
                 )}
                 {f.network.advisors_board.length > 0 && (
                   <div>
-                    <div className="text-[11px] text-gray-400 mb-1.5">어드바이저 / 보드</div>
+                    <div className="text-sm text-gray-400 mb-1.5">어드바이저 / 보드</div>
                     <div className="flex flex-wrap gap-1.5">
                       {f.network.advisors_board.map((a, i) => <Tag key={i} label={a} color="gray" />)}
                     </div>
@@ -2374,7 +2374,7 @@ function ShowMore({ children, label = '더 보기' }: { children: React.ReactNod
       {open && children}
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full py-2 text-xs text-navy-500 hover:text-navy-600 bg-navy-50 hover:bg-navy-100 rounded-lg flex items-center justify-center gap-1.5 mt-1"
+        className="w-full py-2 text-sm text-navy-500 hover:text-navy-600 bg-navy-50 hover:bg-navy-100 rounded-lg flex items-center justify-center gap-1.5 mt-1"
       >
         {open ? '접기 ↑' : `${label} ↓`}
       </button>
@@ -2390,11 +2390,11 @@ function ShowMore({ children, label = '더 보기' }: { children: React.ReactNod
 function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: string; onReanalyze?: () => void; reanalyzeLabel?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-      <p className="text-sm text-gray-500 max-w-xs leading-relaxed">{message}</p>
+      <p className="text-base text-gray-500 max-w-xs leading-relaxed">{message}</p>
       {onReanalyze && (
         <button
           onClick={onReanalyze}
-          className="px-4 py-2 text-sm font-medium text-white bg-navy-600 hover:bg-navy-700 rounded-xl transition-colors"
+          className="px-4 py-2 text-base font-medium text-white bg-navy-600 hover:bg-navy-700 rounded-xl transition-colors"
         >
           {reanalyzeLabel}
         </button>
@@ -2439,7 +2439,7 @@ function ReportSection({ id, title, icon: Icon, emphasis, children, getMarkdown,
       <div className="flex items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
           <Icon size={15} className={emphasis ? 'text-amber-500' : 'text-gray-400'} />
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button
@@ -2496,13 +2496,13 @@ function AllSourcesSummary({ data, uiT }: { data: AnalysisDetail; uiT: ReturnTyp
   const groups = buildSourceGroups(data, uiT);
 
   if (groups.length === 0) {
-    return <p className="text-sm text-gray-500 py-4 text-center">아직 표시할 출처가 없습니다.</p>;
+    return <p className="text-base text-gray-500 py-4 text-center">아직 표시할 출처가 없습니다.</p>;
   }
   return (
     <div className="flex flex-col gap-4">
       {groups.map(g => (
         <div key={g.label}>
-          <p className="text-xs font-semibold text-gray-500 mb-1">{g.label}</p>
+          <p className="text-sm font-semibold text-gray-500 mb-1">{g.label}</p>
           <SourcesList sources={g.sources} />
         </div>
       ))}
@@ -2523,7 +2523,7 @@ function SectionGenerating({ label, suffix }: { label: string; suffix: string })
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
       <RefreshCw size={20} className="animate-spin" />
-      <span className="text-sm">{label}{suffix}</span>
+      <span className="text-base">{label}{suffix}</span>
     </div>
   );
 }
@@ -2563,30 +2563,30 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
       {/* 핵심 요약 블록 — 신뢰도 배지 + 해석 문장 */}
       <div className="bg-black text-white rounded-xl p-4 space-y-2">
         <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isHigh ? 'bg-source-official/20 text-source-official' : 'bg-source-reference/20 text-source-reference'}`}>
+          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${isHigh ? 'bg-source-official/20 text-source-official' : 'bg-source-reference/20 text-source-reference'}`}>
             {isHigh ? '🟢 공식' : '🟡 참고'}
           </span>
-          <span className="text-[11px] text-gray-400">{sampleLabel} 기반</span>
+          <span className="text-sm text-gray-400">{sampleLabel} 기반</span>
         </div>
-        <p className="text-sm leading-relaxed">
+        <p className="text-base leading-relaxed">
           {g.narrative ?? '몬테카를로 시뮬레이션(1만회) 기반 매출 성장 시나리오입니다.'}
         </p>
       </div>
 
       {!isHigh && (
-        <p className="text-xs text-source-reference bg-source-reference-bg border border-source-reference-border rounded-lg px-3 py-2">
+        <p className="text-sm text-source-reference bg-source-reference-bg border border-source-reference-border rounded-lg px-3 py-2">
           이 기업의 공식 재무 데이터가 부족해 동종업계 벤치마크 기반 추정치를 사용했어요. 실제 편차는 더 클 수 있습니다.
         </p>
       )}
 
       {/* 라인 + 신뢰구간 밴드 차트 */}
       <div>
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">연도별 매출 시나리오</h4>
+        <h4 className="text-base font-semibold text-gray-700 mb-3">연도별 매출 시나리오</h4>
         <div className="grid grid-cols-3 gap-2 mb-3">
           {(['p10', 'p50', 'p90'] as const).map(k => (
             <div key={k} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-center">
-              <p className="text-[10px] text-gray-400 mb-0.5">{SCENARIO_LABEL[k].replace(' 시나리오', '')} CAGR</p>
-              <p className="text-sm font-semibold text-gray-900">{fmtCagr(cagr[k])}</p>
+              <p className="text-xs text-gray-400 mb-0.5">{SCENARIO_LABEL[k].replace(' 시나리오', '')} CAGR</p>
+              <p className="text-base font-semibold text-gray-900">{fmtCagr(cagr[k])}</p>
             </div>
           ))}
         </div>
@@ -2610,16 +2610,16 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        <div className="flex items-center gap-4 mt-2 text-[11px] text-gray-400">
+        <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-navy-600 inline-block" />{SCENARIO_LABEL.p50}</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-navy-200 inline-block" />{SCENARIO_LABEL.p10} ~ {SCENARIO_LABEL.p90} 범위</span>
         </div>
       </div>
 
       <div>
-        <table className="w-full text-sm">
+        <table className="w-full text-base">
           <thead>
-            <tr className="text-gray-400 text-xs border-b border-gray-200">
+            <tr className="text-gray-400 text-sm border-b border-gray-200">
               <th className="text-left py-2">연차</th>
               <th className="text-right py-2">{SCENARIO_LABEL.p10}</th>
               <th className="text-right py-2">{SCENARIO_LABEL.p50}</th>
@@ -2640,7 +2640,7 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">최종 연도 매출 분포</h4>
+        <h4 className="text-base font-semibold text-gray-700 mb-3">최종 연도 매출 분포</h4>
         <div className="h-24">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={histData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
@@ -2650,7 +2650,7 @@ function GrowthScenarioV2Tab({ g }: { g: GrowthScenarioV2 }) {
         </div>
       </div>
 
-      <p className="text-[11px] text-gray-400">
+      <p className="text-sm text-gray-400">
         {isHigh ? '🟢 공식' : '🟡 참고'} — {sampleLabel} 기반 통계적 시뮬레이션이며, 실제 미래 실적을 보장하지 않습니다.
       </p>
     </div>
@@ -2661,10 +2661,10 @@ function GrowthScenarioLocked() {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
       <Lock size={28} className="text-gray-300" />
-      <p className="text-sm text-gray-500">성장 시나리오는 프리미엄 전용 기능이에요</p>
+      <p className="text-base text-gray-500">성장 시나리오는 프리미엄 전용 기능이에요</p>
       <button
         type="button"
-        className="px-4 py-2 rounded-xl bg-navy-600 text-white text-xs font-medium hover:bg-navy-700 transition-colors"
+        className="px-4 py-2 rounded-xl bg-navy-600 text-white text-sm font-medium hover:bg-navy-700 transition-colors"
       >
         프리미엄으로 업그레이드
       </button>
@@ -2894,7 +2894,7 @@ function CopyButton({ getMarkdown, label = '복사', shortLabel, copiedLabel = '
     <button
       type="button"
       onClick={handleCopy}
-      className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0 whitespace-nowrap"
+      className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0 whitespace-nowrap"
     >
       {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
       {shortLabel ? (
@@ -3049,7 +3049,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
     <div className="text-right mb-2">
       <button
         onClick={() => onReanalyze(t)}
-        className="text-[11px] text-gray-400 hover:text-navy-500 hover:underline transition-colors"
+        className="text-sm text-gray-400 hover:text-navy-500 hover:underline transition-colors"
       >
         {uiT.actions.reanalyzeSection}
       </button>
@@ -3142,26 +3142,26 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
               <Building2 size={18} className="text-gray-400" />
               <h2 className="text-2xl font-semibold text-gray-900 leading-none">{data.companyName}</h2>
             </div>
-            <p className="text-xs text-gray-400 ml-6">
+            <p className="text-sm text-gray-400 ml-6">
               {new Date(data.createdAt).toLocaleString(reportLanguage === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
             {/* 분석 목적 배지 — PDF 표지엔 이미 있었으나 웹엔 없던 것을 신규 추가
                 (2026-08-17, 사전 확인 다이얼로그 통합 작업 계기). purposeDetailFormatted가
                 있으면 그걸, 없으면(옛 캐시 등) 원문으로 폴백 — PDF와 동일 우선순위. */}
             {data.purposeCategory && (
-              <div className="flex items-center gap-1.5 ml-6 mt-1.5">
-                <span className="inline-flex items-center whitespace-nowrap text-[11px] font-medium text-navy-700 bg-navy-50 border border-navy-100 rounded-full px-2.5 py-0.5">
+              <div className="flex items-start flex-wrap gap-1.5 ml-6 mt-1.5">
+                <span className="inline-flex items-center whitespace-nowrap shrink-0 text-sm font-medium text-navy-700 bg-navy-50 border border-navy-100 rounded-full px-2.5 py-0.5">
                   {uiT.home.purposeSectionTitle}: {purposeCategoryLabel(data.purposeCategory, uiT)}
                 </span>
                 {(data.purposeDetailFormatted ?? data.purposeDetail) && (
-                  <span className="text-[11px] text-gray-400 truncate max-w-[280px]">
+                  <span className="text-sm text-gray-400 leading-snug max-w-md pt-0.5">
                     {data.purposeDetailFormatted ?? data.purposeDetail}
                   </span>
                 )}
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap justify-end max-w-full">
             {!isShareView && (
               <button
                 type="button"
@@ -3229,7 +3229,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                     }`}
                   >
                     {card.done ? (
-                      <span className="text-success text-xs font-bold leading-none">✓</span>
+                      <span className="text-success text-sm font-bold leading-none">✓</span>
                     ) : isInProgress ? (
                       <span className="w-2.5 h-2.5 border border-current text-navy-600 border-t-transparent rounded-full animate-spin" />
                     ) : (
@@ -3237,7 +3237,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                         {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-gray-300" />)}
                       </span>
                     )}
-                    <span className={`text-[10px] font-medium leading-tight ${card.done ? 'text-success' : 'text-gray-500'}`}>
+                    <span className={`text-xs font-medium leading-tight ${card.done ? 'text-success' : 'text-gray-500'}`}>
                       {card.label}
                     </span>
                   </button>
@@ -3294,7 +3294,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
                 ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('nudge')}<p className="text-sm text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>}
+            : <>{reanalyzeBtn('nudge')}<p className="text-base text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>}
         </ReportSection>
 
         <ReportSection id="financials" title={uiT.tabs.financials.label} icon={BarChart2} uiT={uiT} getMarkdown={() => financialsV2Local ? financialsToMd(financialsV2Local, financialsV2Local.sources ?? data.sources?.financials) : ''}>
@@ -3333,7 +3333,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             ? (hasTabData('founder', data, financialsV2Local)
                 ? <FounderV2Tab f={data.founder_v2} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('founder') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('founder')}<p className="text-sm text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>}
+            : <>{reanalyzeBtn('founder')}<p className="text-base text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>}
         </ReportSection>
 
         {/* Pain Diagnosis(industry_history+tech_evolution 통합, 2026-08-16부터 배치5) —
@@ -3351,22 +3351,22 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
         >
           <div className="space-y-6">
             <div>
-              <h4 className="text-xs font-semibold text-gray-500 mb-2">{uiT.tabs.industry_history.label}</h4>
+              <h4 className="text-sm font-semibold text-gray-500 mb-2">{uiT.tabs.industry_history.label}</h4>
               {(isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
               data.industry_history_v2
                 ? (hasTabData('industry_history', data, financialsV2Local)
                     ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
                     : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('industry') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-                : <p className="text-sm text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
+                : <p className="text-base text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
             </div>
             <div className="pt-6 border-t border-amber-100">
-              <h4 className="text-xs font-semibold text-gray-500 mb-2">{uiT.tabs.tech_evolution.label}</h4>
+              <h4 className="text-sm font-semibold text-gray-500 mb-2">{uiT.tabs.tech_evolution.label}</h4>
               {(isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
               data.tech_evolution_v2
                 ? (hasTabData('tech_evolution', data, financialsV2Local)
                     ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
                     : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('tech') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-                : <p className="text-sm text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
+                : <p className="text-base text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
             </div>
           </div>
         </ReportSection>
@@ -3378,7 +3378,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           !batchDone(TAB_BATCH.growth_scenario) ? <SectionGenerating label={uiT.tabs.growth_scenario.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.growth_scenario_v2
             ? <GrowthScenarioV2Tab g={data.growth_scenario_v2} />
-            : <p className="text-sm text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>}
+            : <p className="text-base text-gray-500 py-4 text-center">최소 3개년 공식 재무 시계열이 확보된 기업만 지원돼요.</p>}
         </ReportSection>
 
         {/* 출처(신규, 2026-08-17) — 각 섹션 하단에 이미 개별 표시되는 출처와 별개로,
