@@ -9,72 +9,82 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-16
-**커밋**: `f164f5c`, `ad1e861`, `032e477`, `4f982b5`, `97d9e01`, `1af34c9`,
-`7208ccd`, `62cbcf3`
+**날짜**: 2026-08-17
+**커밋**: `f3aa3bc`
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI/대시보드 접근 수단이 없음
-(client/server 웹서비스가 `render.yaml`에 없고 대시보드에서 직접 관리되는 구조,
-반복 확인된 제약). 사용자가 배포 후 PDF 스타일이 예전 그대로였다고 제보했으나
-`AnalysisPdf.tsx`가 `data`에서 스타일을 읽지 않는 순수 코드 하드코딩 구조임을
-확인해 코드 문제는 아님으로 결론 — 실제 배포 반영 여부는 사용자가 직접 확인 필요.
+(반복 확인된 제약, 변동 없음). `f3aa3bc`(founder_v2 로깅+max_tokens 수정)는 푸시
+완료됐으나 실제 배포 반영 여부는 확인 불가 — 사용자가 직접 확인 필요.
 
 ### 완료
-- 성장 시나리오 마크다운/전체 복사 매출 숫자 포맷 깨짐 버그 수정 —
-  `growthScenarioToMd()` 표가 `fmtGrowthRevenue()`를 안 거치고 raw JS number를
-  그대로 문자열화하던 것 확인, 웹/PDF와 동일한 공용 포맷터로 통일(전체 복사·탭별
-  복사·섹션 카드 복사 3개 진입점 전부 이 함수 하나를 공유해 한 곳만 고치면 됨).
-  실 DB 데이터로 함수 직접 호출해 "9150억원"/"2.0조원" 정상 출력 확인.
-- Haiku 4.5 vs Sonnet 5 모델 티어링 실측 비교 — Haiku 미채택 확정(재무 수치
-  자릿수 오류 발견), Sonnet 5 유지. 상세는 Architecture 섹션 참고
-- PDF 개편 3종 — 진행률 프리징 버그(CSS indeterminate 애니메이션 전환)/콘텐츠
-  누락 4건(크로스인더스트리 넛지 섹션 추가/현금흐름 빈 상태 문구/재무상태표
-  FY2021 복원)/웹 3색 팔레트+Noto Serif KR+섹션순서 동기화
-- PDF 목차 "출처 목록" 누락 버그 수정 — `hasSourcesContent()` 단일 판정 함수로
-  목차·본문 통합
-- 출처를 웹·PDF 공통 진짜 최종 섹션(성장시나리오 뒤)으로 재배치 — 웹은 SSR
-  렌더 DOM 순서(`renderTestWebSections.tsx` 신규)로 실측 검증
-- PDF 생성 소요시간(2~3분) 원인 조사 — NotoSerifKR 폰트 추가가 지배적 회귀
-  원인으로 확정(전후 커밋 실측 비교), 예상 소요시간 안내 문구 추가
-- PDF 성장 시나리오 섹션에 CAGR 배지+SVG 라인차트+최종연도 강조 추가 — 신규
-  `growthScenario.ts` 공용 유틸로 웹/PDF 계산 로직 통합, 실 DB 데이터로 검산
-- 8월 비용 실측 조사(DB 직접 조회만) — 실제 분석 30건, $3.37/분석 단가 확인
-- Ben 채팅 실패 근본 원인 진단 — Anthropic API 계정 사용량 한도(2026-09-01
-  재개 예정)로 확정, 코드 문제 아님. 에러 이벤트에 `reason` 필드 추가
-- 아바타 톱니바퀴 드롭다운 + Ben 우측 슬라이드 패널 버그 수정 —
-  `backdrop-filter`의 containing-block 부작용이 원인, Portal로 해결
-- 사용법(`/guide`) 페이지 신규 + 최상단 네비게이션 재구성
-- "Ben" 채팅 어시스턴트 신규 구현 — SSE 스트리밍, 서버사이드 컨텍스트 조립,
-  일 40메시지 레이트리밋, 신규 마이그레이션(`ben_conversations`/`ben_message_usage`)
-- CORS 화이트리스트 누락 핫픽스 — 커스텀 도메인(ceostaffben.com) 추가 시 누락됐던
-  `ALLOWED_ORIGINS` 갱신
-- ICP Insights(discovery questions 큐레이션) 완전 제거 — 서버/클라이언트 관련
-  코드·라우트 삭제, `icp_insights` 테이블은 데이터 보존을 위해 유지
-- (의도적으로 미커밋) `server/scripts/testDartQuickCheck.ts` 등 7개 파일 —
+- 섹션 생성 간헐적 실패 관찰 기록 조사(비즈니스모델/경쟁사 재시도로 복구된 사례) —
+  프로덕션 로그 접근 수단이 없어 로컬 `server/debug-logs/parse-failures/`의 실제
+  파싱 실패 원문 4건(business_model_v2/financials_v2/value_chain_v2/founder_v2)을
+  직접 분석. 원인은 API 타임아웃/에러/rate limit이 아니라 모델이 만드는 JSON 구조
+  자체의 간헐적 오류(여분의 `}`로 조기 종료, 객체 2개로 분리, truncation) — Ford/
+  NVIDIA/J&J 때 이미 문서화된 것과 동일 계열. 조사 중 `callFounderSection()`의
+  성공 로그가 파싱 실패(null 반환)해도 항상 OK로 찍히던 버그 발견 — `callSection()`
+  때(2026-08-15) 고친 것과 동일 패턴인데 이 함수만 빠져있었음, 수정.
+- founder_v2 `max_tokens` 6000→8000 통일 — git blame으로 의도된 설계가 아님을
+  확정(2026-06-24 생성 당시엔 오히려 callSection()의 4000보다 높은 6000으로 시작,
+  2026-08-15 Sonnet 5 전환+토크나이저 인플레이션 대응으로 callSection()만 4000→
+  6000→8000 상향되고 별도 호출부(`runWithWebSearch()` 경유)인 founder만 누락된
+  실수). 커밋 `f3aa3bc`, 푸시 완료.
+- PDF 생성 "데이터 수집" 단계 정지 버그 원인 확정+수정 — CSP `connect-src`에
+  `data:` 스킴이 없어 yoga-layout(react-pdf 내부 flexbox WASM 엔진)이 자기 WASM
+  바이너리를 읽으려는 `fetch(data:application/octet-stream;base64,...)`가 차단되던
+  것 확인. Playwright + 실제 프로덕션 빌드(`next build && next start`)로 재현 —
+  수정 전 CSP에서 사용자가 제보한 콘솔 에러와 토씨 하나 다르지 않게 재현, 수정
+  후(`connect-src`에 `data:` 추가) 0건 확인. **단서**: 격리 테스트(간단한 1페이지
+  문서)에서는 이 CSP 위반이 있어도 yoga 자체 fallback(atob 기반 동기 디코드)으로
+  PDF 생성이 끝까지 완료됐음(무한 정지 아님) — "완전 멈춤" 증상의 전체 원인이라고
+  단정하지 않음, 실제 21+페이지 리포트에서는 이 폴백 경로가 더 느려 메인 스레드
+  점유(2026-08-16 기존 조사)와 겹쳐 체감상 멈춘 것처럼 보였을 가능성으로 남김 —
+  상세는 `next.config.ts` CSP 주석 참고. (미커밋)
+- PDF 로딩 UI 개편 — 경과 초(N초) 숫자 표시 제거(무한 CSS 애니메이션만 유지,
+  "고장난 것처럼 보인다"는 피드백 반영), 로딩 메시지 9종을 장난스러운 톤(이모지·
+  인턴 드립)에서 신뢰감 있는 톤으로 전면 교체(실존 인용/EDGAR·DART 등 데이터소스
+  언급 금지 원칙 적용), `purpose_category` 기반 동적 메시지 1종 추가. (미커밋)
+- PDF 표지에 분석 목적(purpose) 표시 신규 — 착수 전 확인 결과 `purpose_category`/
+  `purpose_detail`이 생성 프롬프트 컨텍스트로만 쓰이고 `GET /api/analyses/:id`·SSE
+  `done` 이벤트 어디에도 클라이언트로 반환되지 않던 배관 공백을 발견, 서버(`analyses.
+  ts`/`analyze.ts`의 `buildDonePayload()`)와 클라이언트(`AnalysisDetail` 타입) 양쪽에
+  연결 후 표지에 네이비 배지+회색 상세텍스트로 렌더링. (미커밋)
+- (의도적으로 미커밋) `server/scripts/testDartQuickCheck.ts` 등 기존 7개 파일 —
   이번 세션 작업과 무관, `git status`로 계속 확인 가능
 
 ### 남음
-- 백그라운드 폰트 프리페치 적용 여부 결정 — 브라우저 자동화 도구 없어 UI 버벅임
-  위험 검증 불가, 사용자 요청 시 별도 세션
-- 2026-08-17 세션 작업(색상 팔레트/내비게이션 1단 구조/즐겨찾기 등) 실제 브라우저
-  검증 — 다음 세션
-- PDF/웹 개편 전체(진행률바/폰트·색상/목차·출처순서/CAGR+차트) 실제 브라우저
-  재현 테스트 — 다음 세션
+- PDF CSP/로딩 UI/목적표시 변경 6개 파일(`client/next.config.ts`,
+  `AnalysisPdf.tsx`, `ExportPdfButton.tsx`, `types/index.ts`, `server/routes/
+  analyses.ts`, `analyze.ts`) 커밋+푸시 — 사용자 명시적 지시 대기 중, 다음 세션 시작 시 확인
+- 실 admin 로그인 + 실 배포 환경에서 PDF "다운로드 버튼 끝까지 완료" 재현 검증 —
+  이 세션엔 실 구글 로그인 수단이 없어 격리 Playwright 테스트(로그인 불필요한 자체
+  제작 테스트 라우트, 검증 후 삭제)로 갈음, 배포 후 사용자 직접 확인 필요
+- PDF/웹 개편 전체 실제 브라우저 재현 테스트 — 이번 세션에 PDF 생성 메커니즘
+  자체(성공/CSP 에러 여부)는 검증했으나 시각 요소(로딩 문구·표지 배지·진행률바·
+  폰트·색상·목차·출처순서·CAGR+차트)는 미검증, 다음 세션
+- 2026-08-17 이전 세션 작업(색상 팔레트/내비게이션 1단 구조/즐겨찾기 등) 실제
+  브라우저 검증 — 다음 세션
 - Ben 채팅 실제 브라우저 검증(스트리밍/자동복원/폭토글/모바일FAB 등) —
   Anthropic 한도 해제(2026-09-01) 이후
+- 백그라운드 폰트 프리페치 적용 여부 결정 — 브라우저 자동화 도구로도 UI 버벅임
+  위험까지는 검증 어려움, 사용자 요청 시 별도 세션
 
 ### 발견 (미처리)
+- PDF "완전 정지" 증상의 전체 원인 미확정 — CSP `data:` 위반은 확정 수정했으나
+  격리 테스트상 yoga 자체 fallback으로 무한 정지가 재현되지 않음, 실제 대용량
+  한글 리포트에서도 재현되는지는 배포 후 확인 필요(`next.config.ts` CSP 주석 참고)
+- ⚠️ KR/EN 미확인 — `ExportPdfButton.tsx` 전체가 하드코딩 한국어 고정(기존부터
+  그랬음, 이번 세션 추가한 로딩 메시지 9종도 동일 패턴 유지) — 언어 토글 적용 시
+  이 컴포넌트 전체 재작업 필요
 - DART 현금흐름표 데이터 파이프라인 구조적 공백 — `fnlttSinglAcnt.json`이
   현금흐름표 미포함, PDF+웹 재무 탭 공통 영향, 신규 엔드포인트 연동 필요(별도 백로그)
 - Anthropic API 계정 사용량 한도 — 2026-09-01 00:00 UTC 재개 예정, 그 전까지
   Ben 채팅 라이브 검증 불가
 - 비용/토큰 실측 인프라 부재 — Render 로그 접근 수단/Anthropic Admin API 키 둘 다 없음
-- ⚠️ KR/EN 미확인 — `ExportPdfButton.tsx` 전체가 하드코딩 한국어 고정(기존부터
-  그랬음, 이번 세션 추가한 소요시간 안내 문구도 동일 패턴 유지) — 언어 토글 적용
-  시 이 컴포넌트 전체 재작업 필요
 
 ### 다음 세션 우선순위
-1. Render 배포 확인 → PDF(진행률바/색상·폰트/목차·출처순서/CAGR+차트)와
-   Ben 채팅 실제 브라우저 재현 테스트
+1. PDF CSP/UX/목적표시 변경사항 커밋+푸시 → 배포 후 실 로그인으로 PDF 다운로드가
+   끝까지 완료되는지 재현 검증
 
 ## Vision & Mission
 
