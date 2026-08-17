@@ -10,58 +10,42 @@
 > git log/커밋 메시지를 참고할 것.
 
 **날짜**: 2026-08-17
-**커밋**: `f3aa3bc`
+**커밋**: `f3aa3bc`, `915a2b5`, `4f43e90`, `029652a`, `42cbe69`, `45dcd1b`
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI/대시보드 접근 수단이 없음
-(반복 확인된 제약, 변동 없음). `f3aa3bc`(founder_v2 로깅+max_tokens 수정)는 푸시
-완료됐으나 실제 배포 반영 여부는 확인 불가 — 사용자가 직접 확인 필요.
+(반복 확인된 제약, 변동 없음). 위 커밋 전부 푸시 완료 — 실제 배포 반영 여부는
+사용자가 직접 확인 필요.
 
 ### 완료
-- 섹션 생성 간헐적 실패 관찰 기록 조사(비즈니스모델/경쟁사 재시도로 복구된 사례) —
-  프로덕션 로그 접근 수단이 없어 로컬 `server/debug-logs/parse-failures/`의 실제
-  파싱 실패 원문 4건(business_model_v2/financials_v2/value_chain_v2/founder_v2)을
-  직접 분석. 원인은 API 타임아웃/에러/rate limit이 아니라 모델이 만드는 JSON 구조
-  자체의 간헐적 오류(여분의 `}`로 조기 종료, 객체 2개로 분리, truncation) — Ford/
-  NVIDIA/J&J 때 이미 문서화된 것과 동일 계열. 조사 중 `callFounderSection()`의
-  성공 로그가 파싱 실패(null 반환)해도 항상 OK로 찍히던 버그 발견 — `callSection()`
-  때(2026-08-15) 고친 것과 동일 패턴인데 이 함수만 빠져있었음, 수정.
-- founder_v2 `max_tokens` 6000→8000 통일 — git blame으로 의도된 설계가 아님을
-  확정(2026-06-24 생성 당시엔 오히려 callSection()의 4000보다 높은 6000으로 시작,
-  2026-08-15 Sonnet 5 전환+토크나이저 인플레이션 대응으로 callSection()만 4000→
-  6000→8000 상향되고 별도 호출부(`runWithWebSearch()` 경유)인 founder만 누락된
-  실수). 커밋 `f3aa3bc`, 푸시 완료.
+- 섹션 생성 간헐적 실패 관찰 기록 조사 + founder_v2 로깅 결함/max_tokens 통일
+  (6000→8000, git blame으로 의도치 않은 실수 확정) — `f3aa3bc`
 - PDF 생성 "데이터 수집" 단계 정지 버그 원인 확정+수정 — CSP `connect-src`에
-  `data:` 스킴이 없어 yoga-layout(react-pdf 내부 flexbox WASM 엔진)이 자기 WASM
-  바이너리를 읽으려는 `fetch(data:application/octet-stream;base64,...)`가 차단되던
-  것 확인. Playwright + 실제 프로덕션 빌드(`next build && next start`)로 재현 —
-  수정 전 CSP에서 사용자가 제보한 콘솔 에러와 토씨 하나 다르지 않게 재현, 수정
-  후(`connect-src`에 `data:` 추가) 0건 확인. **단서**: 격리 테스트(간단한 1페이지
-  문서)에서는 이 CSP 위반이 있어도 yoga 자체 fallback(atob 기반 동기 디코드)으로
-  PDF 생성이 끝까지 완료됐음(무한 정지 아님) — "완전 멈춤" 증상의 전체 원인이라고
-  단정하지 않음, 실제 21+페이지 리포트에서는 이 폴백 경로가 더 느려 메인 스레드
-  점유(2026-08-16 기존 조사)와 겹쳐 체감상 멈춘 것처럼 보였을 가능성으로 남김 —
-  상세는 `next.config.ts` CSP 주석 참고. (미커밋)
-- PDF 로딩 UI 개편 — 경과 초(N초) 숫자 표시 제거(무한 CSS 애니메이션만 유지,
-  "고장난 것처럼 보인다"는 피드백 반영), 로딩 메시지 9종을 장난스러운 톤(이모지·
-  인턴 드립)에서 신뢰감 있는 톤으로 전면 교체(실존 인용/EDGAR·DART 등 데이터소스
-  언급 금지 원칙 적용), `purpose_category` 기반 동적 메시지 1종 추가. (미커밋)
-- PDF 표지에 분석 목적(purpose) 표시 신규 — 착수 전 확인 결과 `purpose_category`/
-  `purpose_detail`이 생성 프롬프트 컨텍스트로만 쓰이고 `GET /api/analyses/:id`·SSE
-  `done` 이벤트 어디에도 클라이언트로 반환되지 않던 배관 공백을 발견, 서버(`analyses.
-  ts`/`analyze.ts`의 `buildDonePayload()`)와 클라이언트(`AnalysisDetail` 타입) 양쪽에
-  연결 후 표지에 네이비 배지+회색 상세텍스트로 렌더링. (미커밋)
-- (의도적으로 미커밋) `server/scripts/testDartQuickCheck.ts` 등 기존 7개 파일 —
-  이번 세션 작업과 무관, `git status`로 계속 확인 가능
+  `data:` 스킴이 없어 yoga-layout(react-pdf 내부 flexbox WASM 엔진)의
+  `fetch(data:application/octet-stream;base64,...)`가 차단되던 것 확인.
+  Playwright + 실제 프로덕션 빌드로 재현 — 수정 전 CSP에서 사용자 제보 콘솔
+  에러와 토씨 하나 다르지 않게 재현, 수정 후 0건. **단서**: 격리 테스트에서는
+  yoga 자체 fallback으로 PDF 생성이 끝까지 완료됐음(무한 정지 아님) — "완전
+  멈춤" 증상의 전체 원인이라 단정하지 않음, 상세는 `next.config.ts` CSP 주석
+  참고. 같이 처리: 경과 초 숫자 표시 제거(무한 애니메이션만 유지), 로딩 메시지
+  9종을 신뢰감 있는 톤으로 교체(실존 인용/데이터소스 언급 금지), PDF 표지에
+  분석 목적(purpose) 배지 신규(그 과정에서 `purpose_category`가 `GET /api/
+  analyses/:id`·SSE `done` 어디에도 반환 안 되던 배관 공백 발견해 연결) — `915a2b5`
+- 크로스인더스트리 넛지 섹션에 `connection_insight`(연결 인사이트) 신규 필드
+  추가 — 업종 pain과 타산업 사례 사이 명시적 연결 문장이 없어 "사례가 뜬금없이
+  튀어나온다"는 관찰 계기. 스키마/Quality Gate/웹탭/PDF/마크다운 복사 전 경로
+  반영, `callSection()` 직접 호출로 실측 검증 2건(리베라웨어: 드론 배터리
+  트레이드오프→NIO 배터리 스왑, TSMC: 수율 램프업→보잉 787 학습곡선) — 둘 다
+  구체적 공유 메커니즘을 짚는 문장 생성 확인, 산업문제→연결문장→사례 순서로
+  자연스럽게 읽힘 — `4f43e90`
+- 기존 미커밋 파일 정리(사용자 지시) — Haiku vs Sonnet 비교 리포트 산출물 4개
+  (`029652a`), DART 재무 신뢰성 검증 스크립트 2개(`42cbe69`), CEO Staff Ben
+  가이드 초안 HTML(`45dcd1b`)
 
 ### 남음
-- PDF CSP/로딩 UI/목적표시 변경 6개 파일(`client/next.config.ts`,
-  `AnalysisPdf.tsx`, `ExportPdfButton.tsx`, `types/index.ts`, `server/routes/
-  analyses.ts`, `analyze.ts`) 커밋+푸시 — 사용자 명시적 지시 대기 중, 다음 세션 시작 시 확인
-- 실 admin 로그인 + 실 배포 환경에서 PDF "다운로드 버튼 끝까지 완료" 재현 검증 —
-  이 세션엔 실 구글 로그인 수단이 없어 격리 Playwright 테스트(로그인 불필요한 자체
-  제작 테스트 라우트, 검증 후 삭제)로 갈음, 배포 후 사용자 직접 확인 필요
-- PDF/웹 개편 전체 실제 브라우저 재현 테스트 — 이번 세션에 PDF 생성 메커니즘
-  자체(성공/CSP 에러 여부)는 검증했으나 시각 요소(로딩 문구·표지 배지·진행률바·
-  폰트·색상·목차·출처순서·CAGR+차트)는 미검증, 다음 세션
+- 실 admin 로그인 + 실 배포 환경에서 PDF 다운로드 끝까지 완료 재현 검증 — 이
+  세션엔 실 구글 로그인 수단이 없어 격리 Playwright 테스트로 갈음, 배포 후
+  사용자 직접 확인 필요
+- PDF/웹 개편 전체 실제 브라우저 재현 테스트(로딩 문구·표지 목적배지·
+  연결인사이트 렌더링·진행률바·폰트·색상·목차·출처순서·CAGR+차트) — 다음 세션
 - 2026-08-17 이전 세션 작업(색상 팔레트/내비게이션 1단 구조/즐겨찾기 등) 실제
   브라우저 검증 — 다음 세션
 - Ben 채팅 실제 브라우저 검증(스트리밍/자동복원/폭토글/모바일FAB 등) —
@@ -74,8 +58,10 @@
   격리 테스트상 yoga 자체 fallback으로 무한 정지가 재현되지 않음, 실제 대용량
   한글 리포트에서도 재현되는지는 배포 후 확인 필요(`next.config.ts` CSP 주석 참고)
 - ⚠️ KR/EN 미확인 — `ExportPdfButton.tsx` 전체가 하드코딩 한국어 고정(기존부터
-  그랬음, 이번 세션 추가한 로딩 메시지 9종도 동일 패턴 유지) — 언어 토글 적용 시
-  이 컴포넌트 전체 재작업 필요
+  그랬음, 변동 없음). `CrossIndustryNudgeV1Tab`의 "업종 공통 Pain"/"타산업 해결
+  사례"/신규 "연결고리" 카드 제목도 동일하게 하드코딩 한국어(기존 컴포넌트
+  패턴 그대로 따름, 신규 회귀 아님) — 언어 토글 적용 시 이 두 컴포넌트 전체
+  재작업 필요. `AnalysisPdf.tsx` 쪽은 `t()`로 이미 정상 이중언어 지원.
 - DART 현금흐름표 데이터 파이프라인 구조적 공백 — `fnlttSinglAcnt.json`이
   현금흐름표 미포함, PDF+웹 재무 탭 공통 영향, 신규 엔드포인트 연동 필요(별도 백로그)
 - Anthropic API 계정 사용량 한도 — 2026-09-01 00:00 UTC 재개 예정, 그 전까지
@@ -83,8 +69,8 @@
 - 비용/토큰 실측 인프라 부재 — Render 로그 접근 수단/Anthropic Admin API 키 둘 다 없음
 
 ### 다음 세션 우선순위
-1. PDF CSP/UX/목적표시 변경사항 커밋+푸시 → 배포 후 실 로그인으로 PDF 다운로드가
-   끝까지 완료되는지 재현 검증
+1. 배포 후 실 로그인으로 PDF(CSP fix/로딩UX/표지 목적표시)와 크로스인더스트리
+   넛지(connection_insight) 실제 렌더링 재현 검증
 
 ## Vision & Mission
 
