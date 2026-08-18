@@ -309,7 +309,7 @@ const ko: UiStringDict = {
     purposeOther: '기타',
     purposeDetailPlaceholder: '예: OO가 인수할 수 있는 OO 분야 회사를 찾아, fit과 재무 건전성을 파악하기 위함',
     progressCardSources: '출처',
-    progressCardPainDiagnosis: 'Pain Diagnosis',
+    progressCardPainDiagnosis: '산업 역사·기술 진화',
     scanMessages: [
       'SEC 공시 문서 분석 중...',
       '10-K 497페이지 정독 중...',
@@ -533,7 +533,7 @@ const en: UiStringDict = {
     purposeOther: 'Other',
     purposeDetailPlaceholder: 'e.g. Finding acquisition targets in the OO space for OO, to assess fit and financial health',
     progressCardSources: 'Sources',
-    progressCardPainDiagnosis: 'Pain Diagnosis',
+    progressCardPainDiagnosis: 'Industry History · Tech Evolution',
     scanMessages: [
       'Analyzing SEC filings...',
       'Reading through the 10-K...',

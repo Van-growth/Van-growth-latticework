@@ -101,7 +101,7 @@ export default function GuidePage() {
               <div className={`${styles.card} ${styles.wide}`} style={{ borderColor: 'var(--navy-deep)' }}>
                 <div className={styles.cardIcon}>💡</div>
                 <h4>
-                  Pain Diagnosis <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— CEO Staff Ben만의 기능</span>
+                  산업 역사·기술 진화 <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— CEO Staff Ben만의 기능</span>
                 </h4>
                 <p>이 산업이 지금 어떤 국면에 있고, 어떤 기술 변화가 이 회사를 흔들고 있는지 — 겉으로 드러난 숫자 너머의 맥락을 짚어드립니다.</p>
               </div>

@@ -842,7 +842,7 @@ function getTocItems(t: TFn): Array<{ num: number; id: string; title: string; pr
     { num: 6,  id: 'sec-6',  title: t('재무 분석', 'Financial Analysis'),             present: d => !!d.financials_v2 },
     { num: 7,  id: 'sec-7',  title: t('전략 분석', 'Strategy Analysis'),              present: d => !!d.strategy_v2 },
     { num: 8,  id: 'sec-8',  title: t('창업자 분석', 'Founder Analysis'),             present: d => !!d.founder_v2 },
-    { num: 9,  id: 'sec-9',  title: t('Pain Diagnosis (산업 역사 · 기술 진화)', 'Pain Diagnosis (Industry History · Tech Evolution)'), present: d => !!(d.industry_history_v2 || d.tech_evolution_v2) },
+    { num: 9,  id: 'sec-9',  title: t('산업 역사 · 기술 진화', 'Industry History · Tech Evolution'), present: d => !!(d.industry_history_v2 || d.tech_evolution_v2) },
     { num: 10, id: 'sec-10', title: t('성장 시나리오', 'Growth Scenario'),            present: d => !!d.growth_scenario_v2 },
     { num: 11, id: 'sec-11', title: t('출처 목록', 'Sources'),                        present: d => hasSourcesContent(d.sources, d.founder_v2?.sources, d.cross_industry_nudge_v1?.sources) },
   ];
@@ -1112,7 +1112,7 @@ function PainDiagnosisSection({ industryHistory, techEvolution, t }: {
   if (!industryHistory && !techEvolution) return null;
   return (
     <View style={s.section}>
-      <SectionHeader num={9} title={t('Pain Diagnosis (산업 역사 · 기술 진화)', 'Pain Diagnosis (Industry History · Tech Evolution)')} id="sec-9" />
+      <SectionHeader num={9} title={t('산업 역사 · 기술 진화', 'Industry History · Tech Evolution')} id="sec-9" />
       <View style={s.painBox}>
         {industryHistory && <IndustryHistoryContent v={industryHistory} t={t} />}
         {industryHistory && techEvolution && <View style={s.painDivider} />}
