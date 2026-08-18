@@ -1899,7 +1899,24 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
     grep만으로 끝내지 말고 Render Cron Jobs 대시보드(특히 `render.yaml`에 없는, 대시보드에서
     직접 만들어진 서비스가 있는지)도 같이 확인할 것** — 애플리케이션 코드 밖에서 그
     엔드포인트를 호출하는 인프라는 grep으로 안 잡힌다.
-18. (2026-08-18) 커스텀 도메인 `ceostaffben.com`/`www.ceostaffben.com`을 Render Custom
+    - **(2026-08-18 정정+결론)** 위 "Blueprint 밖에서 대시보드로 직접 만들어진 인프라"라는
+      서술은 절반만 맞았음 — git 이력(`render.yaml` 대상)을 직접 대조한 결과
+      `latticework-daily-cron`은 **2026-05-02 최초 커밋(`2e9279f`)에 Blueprint로 생성됐다가,
+      2026-06-29(`e4013e9`, "render.yaml — cron jobs only") 커밋에서 `latticework-server`/
+      `latticework-client`와 함께 render.yaml에서 제거됨** — 즉 처음부터 대시보드 전용으로
+      만들어진 게 아니라, 한 번 Blueprint 관리에서 이탈한 뒤 Render 쪽 서비스만 계속 살아남은
+      케이스. 대시보드에 "Blueprint managed"로 표시되는 이유가 여기서 설명됨(원래 Blueprint
+      출신이라 그 태그가 남아있음). 원래 하던 작업도 재확인 — `POST /api/cron/daily`는
+      `selectDailyCompany()`로 회사 1개를 무작위 선정해 `analyzeCompany()`를 실행하고,
+      **`generateLinkedInDrafts()`로 LinkedIn 초안 3개까지 생성·저장하는 기능**이었는데
+      (`server/src/lib/claude.ts` 해당 함수), 이 LinkedIn 초안 기능 자체가 그보다 먼저
+      별도 커밋(`4f67f24` "feat: remove LinkedIn draft feature entirely")으로 제품에서
+      완전히 삭제됨 — 라우트를 복구해도 결과물을 아무도 쓰지 않는 죽은 기능이라는 뜻.
+      **결론(2026-08-18): 스케줄 조정/라우트 복구 대신 Render 대시보드에서
+      `latticework-daily-cron` 서비스 자체를 완전히 삭제 — 사용자가 Render 대시보드에서
+      직접 삭제 완료.** 코드/render.yaml 양쪽 다 이미 이 서비스에 대해 아무것도 참조하지
+      않고 있었어서 저장소 쪽 추가 변경사항 없음(이 CLAUDE.md 기록만 갱신).
+19. (2026-08-18) 커스텀 도메인 `ceostaffben.com`/`www.ceostaffben.com`을 Render Custom
     Domains에 신규 연결했는데, `server/src/index.ts`의 CORS `ALLOWED_ORIGINS` 화이트리스트
     갱신이 누락돼 배포 후 로그인 이후 거의 전 기능(히스토리/산업별 보기/기업분석 검색·
     자동완성 등 `/api/analyze/usage`·`/api/companies/typeahead`·`/api/industries`·
@@ -1945,7 +1962,7 @@ Supabase는 신규 테이블 생성 시 RLS가 기본적으로 꺼져 있다.
   `https://www.` 두 형태 모두)을 추가하고 재배포까지 완료할 것** — 누락 시 프론트는
   정상 배포되지만 로그인 이후 전 API 요청이 브라우저 CORS 차단으로 막혀 "로그인은 되는데
   아무 데이터도 안 뜬다"는 증상으로 나타난다(2026-08-18 `ceostaffben.com` 연결 시 실제
-  발생, 실전 발견 이력 18번 참고). prod는 `ALLOWED_ORIGINS` 환경변수가 아예 선언돼 있지
+  발생, 실전 발견 이력 19번 참고). prod는 `ALLOWED_ORIGINS` 환경변수가 아예 선언돼 있지
   않아 하드코딩 목록만 유효 — Render 대시보드 환경변수 추가로는 해결되지 않는다.
 
 ## Data Aggregation Principles (SSOT)
