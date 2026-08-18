@@ -21,6 +21,10 @@ const LanguageContext = createContext<LanguageContextType>({
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>('en');
+  // 감지 완료 전까지 children을 아예 렌더링하지 않기 위한 플래그 — SSR/최초 하이드레이션
+  // 시점엔 항상 false라 EN 기본값이 화면에 그려질 일이 없고(FOUC 방지), 감지 후 한 번만
+  // true로 바뀌어 그 뒤로는 재렌더링되지 않는다.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -30,6 +34,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       const detected = window.navigator.language?.toLowerCase().startsWith('ko') ? 'ko' : 'en';
       setLanguageState(detected);
     }
+    setReady(true);
   }, []);
 
   function setLanguage(lang: Language) {
@@ -39,7 +44,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage }}>
-      {children}
+      {ready ? children : null}
     </LanguageContext.Provider>
   );
 }
