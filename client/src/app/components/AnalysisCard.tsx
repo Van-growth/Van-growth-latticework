@@ -910,9 +910,9 @@ const ValueChainV2Tab = memo(function ValueChainV2Tab({ vc, sources }: { vc: Val
                   </div>
                   {/* 설명 + 선도기업 */}
                   <p className="text-sm text-gray-500 leading-relaxed mb-2">{layer.description}</p>
-                  {layer.global_leaders.length > 0 && (
+                  {(layer.global_leaders ?? []).length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {layer.global_leaders.map((leader, j) => (
+                      {(layer.global_leaders ?? []).map((leader, j) => (
                         <span key={j} className="inline-flex items-center gap-1 text-sm bg-gray-100 text-gray-600 rounded-md px-2 py-0.5">
                           {flagOf(leader.country)}{leader.name}
                         </span>
