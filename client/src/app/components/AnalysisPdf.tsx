@@ -375,25 +375,18 @@ const s = StyleSheet.create({
     lineHeight: 1.8,
   },
 
-  // ── Pain Diagnosis (산업역사+기술변화 통합 강조 박스, 웹의 <ReportSection emphasis>와
-  //     동등한 시각 언어 — amber 강조는 CLAUDE.md UI/UX 원칙의 명시적 4번째 예외, source-
-  //     reference와 같은 amber 토큰을 그대로 재사용) ──
-  painBox: {
-    backgroundColor:   C.orangeBg,
-    border:            `1.5 solid ${C.orangeBorder}`,
-    borderRadius:      6,
-    padding:           16,
-  },
+  // ── Pain Diagnosis (산업역사+기술변화 통합 섹션, 웹의 <ReportSection>과 동일하게
+  //     다른 8개 섹션과 동일한 스타일로 렌더 — 2026-08-19 amber 강조 제거) ──
   painSubTitle: {
     fontFamily: 'NotoSerifKR',
     fontSize:   10.5,
     fontWeight: 700,
-    color:      C.orange,
+    color:      C.dark,
     marginBottom: 8,
   },
   painDivider: {
     height:          1,
-    backgroundColor: C.orangeBorder,
+    backgroundColor: C.border,
     marginVertical:  14,
   },
 
@@ -829,20 +822,20 @@ function hasSourcesContent(
 }
 
 // 순서/번호는 웹의 sticky 그리드+스크롤 레이아웃(AnalysisCard.tsx)과 동일하게 맞춤
-// (2026-08-16, 출처=진짜 최종 섹션으로 재조정) — 요약→밸류체인→비즈니스모델→
-// 경쟁사→넛지→재무→전략→창업자→Pain Diagnosis→성장시나리오(프리미엄 전용,
-// 있으면 여기)→출처(항상 스택 최후미).
+// (2026-08-19, Pain Diagnosis를 요약 바로 뒤로·넛지를 창업자 뒤로 재배치) — 요약→
+// Pain Diagnosis→밸류체인→비즈니스모델→경쟁사→재무→전략→창업자→넛지→
+// 성장시나리오(프리미엄 전용, 있으면 여기)→출처(항상 스택 최후미).
 function getTocItems(t: TFn): Array<{ num: number; id: string; title: string; present: (d: AnalysisDetail) => boolean }> {
   return [
     { num: 1,  id: 'sec-1',  title: t('기업 개요', 'Company Overview'),               present: d => !!d.summary_v2 },
-    { num: 2,  id: 'sec-2',  title: t('밸류체인', 'Value Chain'),                     present: d => !!d.value_chain_v2 },
-    { num: 3,  id: 'sec-3',  title: t('비즈니스 모델', 'Business Model'),             present: d => !!d.business_model_v2 },
-    { num: 4,  id: 'sec-4',  title: t('경쟁사 분석', 'Competitor Analysis'),          present: d => !!d.competitors_v2 },
-    { num: 5,  id: 'sec-5',  title: t('크로스인더스트리 넛지', 'Cross-Industry Nudge'), present: d => !!d.cross_industry_nudge_v1 },
+    { num: 2,  id: 'sec-2',  title: t('산업 역사 · 기술 진화', 'Industry History · Tech Evolution'), present: d => !!(d.industry_history_v2 || d.tech_evolution_v2) },
+    { num: 3,  id: 'sec-3',  title: t('밸류체인', 'Value Chain'),                     present: d => !!d.value_chain_v2 },
+    { num: 4,  id: 'sec-4',  title: t('비즈니스 모델', 'Business Model'),             present: d => !!d.business_model_v2 },
+    { num: 5,  id: 'sec-5',  title: t('경쟁사 분석', 'Competitor Analysis'),          present: d => !!d.competitors_v2 },
     { num: 6,  id: 'sec-6',  title: t('재무 분석', 'Financial Analysis'),             present: d => !!d.financials_v2 },
     { num: 7,  id: 'sec-7',  title: t('전략 분석', 'Strategy Analysis'),              present: d => !!d.strategy_v2 },
     { num: 8,  id: 'sec-8',  title: t('창업자 분석', 'Founder Analysis'),             present: d => !!d.founder_v2 },
-    { num: 9,  id: 'sec-9',  title: t('산업 역사 · 기술 진화', 'Industry History · Tech Evolution'), present: d => !!(d.industry_history_v2 || d.tech_evolution_v2) },
+    { num: 9,  id: 'sec-9',  title: t('크로스인더스트리 넛지', 'Cross-Industry Nudge'), present: d => !!d.cross_industry_nudge_v1 },
     { num: 10, id: 'sec-10', title: t('성장 시나리오', 'Growth Scenario'),            present: d => !!d.growth_scenario_v2 },
     { num: 11, id: 'sec-11', title: t('출처 목록', 'Sources'),                        present: d => hasSourcesContent(d.sources, d.founder_v2?.sources, d.cross_industry_nudge_v1?.sources) },
   ];
@@ -1112,12 +1105,10 @@ function PainDiagnosisSection({ industryHistory, techEvolution, t }: {
   if (!industryHistory && !techEvolution) return null;
   return (
     <View style={s.section}>
-      <SectionHeader num={9} title={t('산업 역사 · 기술 진화', 'Industry History · Tech Evolution')} id="sec-9" />
-      <View style={s.painBox}>
-        {industryHistory && <IndustryHistoryContent v={industryHistory} t={t} />}
-        {industryHistory && techEvolution && <View style={s.painDivider} />}
-        {techEvolution && <TechEvolutionContent v={techEvolution} t={t} />}
-      </View>
+      <SectionHeader num={2} title={t('산업 역사 · 기술 진화', 'Industry History · Tech Evolution')} id="sec-2" />
+      {industryHistory && <IndustryHistoryContent v={industryHistory} t={t} />}
+      {industryHistory && techEvolution && <View style={s.painDivider} />}
+      {techEvolution && <TechEvolutionContent v={techEvolution} t={t} />}
     </View>
   );
 }
@@ -1129,7 +1120,7 @@ const POWER_COLOR = { high: C.green, medium: C.mid, low: C.red };
 function ValueChainSection({ v, t }: { v: ValueChainV2; t: TFn }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={2} title={`${t('밸류체인', 'Value Chain')} — ${v.industry}`} id="sec-2" />
+      <SectionHeader num={3} title={`${t('밸류체인', 'Value Chain')} — ${v.industry}`} id="sec-3" />
       <KeyBulletsPdf bullets={v.key_bullets} />
       {Array.isArray(v.value_flow) && v.value_flow.length > 0 && (
         <View style={{ marginBottom: 4 }}>
@@ -1191,7 +1182,7 @@ function ValueChainSection({ v, t }: { v: ValueChainV2; t: TFn }) {
 function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={3} title={t('비즈니스 모델', 'Business Model')} id="sec-3" />
+      <SectionHeader num={4} title={t('비즈니스 모델', 'Business Model')} id="sec-4" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       <FieldRow label={t('성장 모션', 'Growth Motion')} value={v.growth_motion} />
@@ -1265,7 +1256,7 @@ function BusinessModelSection({ v, t }: { v: BusinessModelV2; t: TFn }) {
 function CompetitorsSection({ v, t }: { v: CompetitorsV2; t: TFn }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={4} title={t('경쟁사 분석', 'Competitor Analysis')} id="sec-4" />
+      <SectionHeader num={5} title={t('경쟁사 분석', 'Competitor Analysis')} id="sec-5" />
       <KeyBulletsPdf bullets={v.key_bullets} />
       <FieldRow label={t('경쟁 포지션', 'Competitive Position')} value={v.competitive_position} />
 
@@ -1347,7 +1338,7 @@ function CompetitorsSection({ v, t }: { v: CompetitorsV2; t: TFn }) {
 function CrossIndustryNudgeSection({ v, t }: { v: CrossIndustryNudgeV1; t: TFn }) {
   return (
     <View style={s.section}>
-      <SectionHeader num={5} title={t('크로스인더스트리 넛지', 'Cross-Industry Nudge')} id="sec-5" />
+      <SectionHeader num={9} title={t('크로스인더스트리 넛지', 'Cross-Industry Nudge')} id="sec-9" />
       <KeyBulletsPdf bullets={v.key_bullets} />
 
       {v.industry_pain && (
@@ -2079,16 +2070,16 @@ export default function AnalysisPdf({ data: rawData, shareUrl }: { data: Analysi
         )}
 
         {data.summary_v2 && <SummarySection v={data.summary_v2} t={t} />}
-        {data.value_chain_v2 && <ValueChainSection v={data.value_chain_v2} t={t} />}
-        {data.business_model_v2 && <BusinessModelSection v={data.business_model_v2} t={t} />}
-        {data.competitors_v2 && <CompetitorsSection v={data.competitors_v2} t={t} />}
-        {data.cross_industry_nudge_v1 && <CrossIndustryNudgeSection v={data.cross_industry_nudge_v1} t={t} />}
-        {data.financials_v2 && <FinancialsSection v={data.financials_v2} t={t} dataSource={data.dataSource} />}
-        {data.strategy_v2 && <StrategySection v={data.strategy_v2} t={t} />}
-        {data.founder_v2 && <FounderSection v={data.founder_v2} t={t} />}
         {(data.industry_history_v2 || data.tech_evolution_v2) && (
           <PainDiagnosisSection industryHistory={data.industry_history_v2} techEvolution={data.tech_evolution_v2} t={t} />
         )}
+        {data.value_chain_v2 && <ValueChainSection v={data.value_chain_v2} t={t} />}
+        {data.business_model_v2 && <BusinessModelSection v={data.business_model_v2} t={t} />}
+        {data.competitors_v2 && <CompetitorsSection v={data.competitors_v2} t={t} />}
+        {data.financials_v2 && <FinancialsSection v={data.financials_v2} t={t} dataSource={data.dataSource} />}
+        {data.strategy_v2 && <StrategySection v={data.strategy_v2} t={t} />}
+        {data.founder_v2 && <FounderSection v={data.founder_v2} t={t} />}
+        {data.cross_industry_nudge_v1 && <CrossIndustryNudgeSection v={data.cross_industry_nudge_v1} t={t} />}
 
         <PageFooter company={data.companyName} t={t} />
       </Page>

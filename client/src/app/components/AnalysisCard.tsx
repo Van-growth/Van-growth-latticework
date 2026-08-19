@@ -2405,12 +2405,11 @@ function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: 
 
 // 스크롤-스택 문서(2026-08-17)의 섹션 하나 — 구 탭 콘텐츠 패널을 대체. id는 상단 sticky
 // 그리드의 jumpToSection()이 scrollIntoView로 찾는 앵커. scroll-mt로 sticky 그리드에
-// 가려지지 않게 오프셋을 준다. emphasis는 Pain Diagnosis 전용 앰버 강조.
-function ReportSection({ id, title, icon: Icon, emphasis, children, getMarkdown, uiT }: {
+// 가려지지 않게 오프셋을 준다.
+function ReportSection({ id, title, icon: Icon, children, getMarkdown, uiT }: {
   id: string;
   title: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  emphasis?: boolean;
   children: React.ReactNode;
   // 이 카드 자체의 데이터만 참조하는 마크다운 생성 함수 — 헤더의 "이 탭 복사"
   // (getActiveTabMarkdown, tab state 기반)와 별개로 각 카드가 자기 콘텐츠만 안다.
@@ -2434,11 +2433,11 @@ function ReportSection({ id, title, icon: Icon, emphasis, children, getMarkdown,
   return (
     <div
       id={`section-${id}`}
-      className={`scroll-mt-20 rounded-xl border p-5 ${emphasis ? 'border-amber-200 ring-1 ring-amber-200 bg-amber-50/30' : 'border-gray-100 bg-white'}`}
+      className="scroll-mt-20 rounded-xl border p-5 border-gray-100 bg-white"
     >
       <div className="flex items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
-          <Icon size={15} className={emphasis ? 'text-amber-500' : 'text-gray-400'} />
+          <Icon size={15} className="text-gray-400" />
           <h3 className="text-base font-semibold text-gray-900">{title}</h3>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -3190,19 +3189,19 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
       {(() => {
         const isStreaming = completedBatches.has(-1);
         const batch1Done = completedBatches.has(1);
-        const navCards: Array<{ key: TabKey | 'pain_diagnosis'; label: string; done: boolean; isPain?: boolean }> = [
+        const navCards: Array<{ key: TabKey | 'pain_diagnosis'; label: string; done: boolean }> = [
           { key: 'summary',              label: uiT.tabs.summary.label,              done: hasTabData('summary', data, financialsV2Local) },
+          {
+            key: 'pain_diagnosis', label: uiT.home.progressCardPainDiagnosis,
+            done: hasTabData('industry_history', data, financialsV2Local) && hasTabData('tech_evolution', data, financialsV2Local),
+          },
           { key: 'value_chain',          label: uiT.tabs.value_chain.label,          done: hasTabData('value_chain', data, financialsV2Local) },
           { key: 'business_model',       label: uiT.tabs.business_model.label,       done: hasTabData('business_model', data, financialsV2Local) },
           { key: 'competitors',          label: uiT.tabs.competitors.label,          done: hasTabData('competitors', data, financialsV2Local) },
-          { key: 'cross_industry_nudge', label: uiT.tabs.cross_industry_nudge.label, done: hasTabData('cross_industry_nudge', data, financialsV2Local) },
           { key: 'financials',           label: uiT.tabs.financials.label,           done: hasTabData('financials', data, financialsV2Local) },
           { key: 'strategy',             label: uiT.tabs.strategy.label,             done: hasTabData('strategy', data, financialsV2Local) },
           { key: 'founder',              label: uiT.tabs.founder.label,              done: hasTabData('founder', data, financialsV2Local) },
-          {
-            key: 'pain_diagnosis', label: uiT.home.progressCardPainDiagnosis, isPain: true,
-            done: hasTabData('industry_history', data, financialsV2Local) && hasTabData('tech_evolution', data, financialsV2Local),
-          },
+          { key: 'cross_industry_nudge', label: uiT.tabs.cross_industry_nudge.label, done: hasTabData('cross_industry_nudge', data, financialsV2Local) },
           // 출처는 실제 스크롤 순서상 스택 최후미(성장시나리오 뒤)라 내비 그리드에서도
           // 마지막에 배치 — 그리드 클릭 순서와 실제 스크롤 순서가 어긋나면 안 됨
           // (2026-08-16, PDF 목차 누락 버그와 동일 계열의 "표시 순서 ≠ 실제 순서" 재발 방지).
@@ -3223,9 +3222,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                       jumpToSection(card.key);
                     }}
                     className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center transition-colors ${
-                      card.isPain
-                        ? `ring-1 ${card.done ? 'ring-amber-300 bg-amber-50 border-amber-200' : 'ring-amber-200 bg-amber-50/40 border-amber-100'}`
-                        : card.done ? 'bg-success-bg border-success-border hover:bg-success-bg' : 'bg-white border-gray-100 hover:border-gray-200'
+                      card.done ? 'bg-success-bg border-success-border hover:bg-success-bg' : 'bg-white border-gray-100 hover:border-gray-200'
                     }`}
                   >
                     {card.done ? (
@@ -3261,6 +3258,40 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <SummaryTab data={data} />}
         </ReportSection>
 
+        {/* Pain Diagnosis(industry_history+tech_evolution 통합, 2026-08-16부터 배치5) —
+            다른 섹션과 동일한 스타일로 렌더(2026-08-19, 앰버 강조 제거). */}
+        <ReportSection
+          id="pain_diagnosis"
+          title={uiT.home.progressCardPainDiagnosis}
+          icon={Lightbulb}
+          uiT={uiT}
+          getMarkdown={() => mdJoin([
+            data.industry_history_v2 ? industryHistoryToMd(data.industry_history_v2, data.industry_history_v2.sources ?? data.sources?.industry_history) : '',
+            data.tech_evolution_v2 ? techEvolutionToMd(data.tech_evolution_v2, data.tech_evolution_v2.sources ?? data.sources?.tech_evolution) : '',
+          ])}
+        >
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-500 mb-2">{uiT.tabs.industry_history.label}</h4>
+              {(isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+              data.industry_history_v2
+                ? (hasTabData('industry_history', data, financialsV2Local)
+                    ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
+                    : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('industry') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+                : <p className="text-base text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
+            </div>
+            <div className="pt-6 border-t border-gray-100">
+              <h4 className="text-sm font-semibold text-gray-500 mb-2">{uiT.tabs.tech_evolution.label}</h4>
+              {(isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+              data.tech_evolution_v2
+                ? (hasTabData('tech_evolution', data, financialsV2Local)
+                    ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
+                    : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('tech') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+                : <p className="text-base text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
+            </div>
+          </div>
+        </ReportSection>
+
         <ReportSection id="value_chain" title={uiT.tabs.value_chain.label} icon={GitBranch} uiT={uiT} getMarkdown={() => data.value_chain_v2 ? valueChainToMd(data.value_chain_v2, data.value_chain_v2.sources ?? data.sources?.value_chain) : ''}>
           {(isReanalyzing('value_chain') || !batchDone(TAB_BATCH.value_chain)) ? <SectionGenerating label={uiT.tabs.value_chain.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
           data.value_chain_v2
@@ -3286,15 +3317,6 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} dataSource={data.dataSource} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('competitors') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>}
-        </ReportSection>
-
-        <ReportSection id="cross_industry_nudge" title={uiT.tabs.cross_industry_nudge.label} icon={Lightbulb} uiT={uiT} getMarkdown={() => data.cross_industry_nudge_v1 ? crossIndustryNudgeToMd(data.cross_industry_nudge_v1) : ''}>
-          {(isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <SectionGenerating label={uiT.tabs.cross_industry_nudge.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
-          data.cross_industry_nudge_v1
-            ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
-                ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
-                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-            : <>{reanalyzeBtn('nudge')}<p className="text-base text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>}
         </ReportSection>
 
         <ReportSection id="financials" title={uiT.tabs.financials.label} icon={BarChart2} uiT={uiT} getMarkdown={() => financialsV2Local ? financialsToMd(financialsV2Local, financialsV2Local.sources ?? data.sources?.financials) : ''}>
@@ -3336,39 +3358,13 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             : <>{reanalyzeBtn('founder')}<p className="text-base text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>}
         </ReportSection>
 
-        {/* Pain Diagnosis(industry_history+tech_evolution 통합, 2026-08-16부터 배치5) —
-            앰버 강조로 차별화 기능임을 표시. */}
-        <ReportSection
-          id="pain_diagnosis"
-          title={uiT.home.progressCardPainDiagnosis}
-          icon={Lightbulb}
-          emphasis
-          uiT={uiT}
-          getMarkdown={() => mdJoin([
-            data.industry_history_v2 ? industryHistoryToMd(data.industry_history_v2, data.industry_history_v2.sources ?? data.sources?.industry_history) : '',
-            data.tech_evolution_v2 ? techEvolutionToMd(data.tech_evolution_v2, data.tech_evolution_v2.sources ?? data.sources?.tech_evolution) : '',
-          ])}
-        >
-          <div className="space-y-6">
-            <div>
-              <h4 className="text-sm font-semibold text-gray-500 mb-2">{uiT.tabs.industry_history.label}</h4>
-              {(isReanalyzing('industry') || !batchDone(TAB_BATCH.industry_history)) ? <SectionGenerating label={uiT.tabs.industry_history.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
-              data.industry_history_v2
-                ? (hasTabData('industry_history', data, financialsV2Local)
-                    ? <IndustryHistoryV2Tab h={data.industry_history_v2} sources={data.industry_history_v2.sources ?? data.sources?.industry_history} />
-                    : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('industry') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-                : <p className="text-base text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
-            </div>
-            <div className="pt-6 border-t border-amber-100">
-              <h4 className="text-sm font-semibold text-gray-500 mb-2">{uiT.tabs.tech_evolution.label}</h4>
-              {(isReanalyzing('tech') || !batchDone(TAB_BATCH.tech_evolution)) ? <SectionGenerating label={uiT.tabs.tech_evolution.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
-              data.tech_evolution_v2
-                ? (hasTabData('tech_evolution', data, financialsV2Local)
-                    ? <TechEvolutionV2Tab t={data.tech_evolution_v2} sources={data.tech_evolution_v2.sources ?? data.sources?.tech_evolution} />
-                    : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('tech') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
-                : <p className="text-base text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
-            </div>
-          </div>
+        <ReportSection id="cross_industry_nudge" title={uiT.tabs.cross_industry_nudge.label} icon={Lightbulb} uiT={uiT} getMarkdown={() => data.cross_industry_nudge_v1 ? crossIndustryNudgeToMd(data.cross_industry_nudge_v1) : ''}>
+          {(isReanalyzing('nudge') || !batchDone(TAB_BATCH.cross_industry_nudge)) ? <SectionGenerating label={uiT.tabs.cross_industry_nudge.label} suffix={uiT.actions.sectionGeneratingSuffixShort} /> :
+          data.cross_industry_nudge_v1
+            ? (hasTabData('cross_industry_nudge', data, financialsV2Local)
+                ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
+                : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
+            : <>{reanalyzeBtn('nudge')}<p className="text-base text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>}
         </ReportSection>
 
         {/* growth_scenario: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 출처 바로

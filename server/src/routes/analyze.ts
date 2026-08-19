@@ -24,6 +24,30 @@ const router = Router();
 // 분석 요청 시 입력받는 목적 카테고리 — analyses.purpose_category CHECK 제약과 동일한 값 셋.
 const PURPOSE_CATEGORIES = ['ma', 'investment', 'partnership', 'customer', 'other'];
 
+// purpose_detail_formatted 서버 폴백(2026-08-19) — 원래 설계는 클라이언트가 "분석하기"
+// 클릭 시 뜨는 사전 확인 다이얼로그(POST /reformat-purpose)를 거쳐 이미 정리된 문구를
+// 실어 보내는 것이었지만, "재분석하기"(forceRefresh) 버튼은 그 다이얼로그를 처음부터 한
+// 번도 거치지 않고 startAnalysis를 직접 호출해왔다 — purposeDetail은 있는데
+// purposeDetailFormatted는 항상 비어서 저장되고, 화면은 다듬어지지 않은 원문(구어체/오탈자
+// 포함)으로 폴백해온 것이 회귀가 아니라 설계 시점부터 있던 커버리지 공백이었음(CLAUDE.md
+// Handoff 참고). 클라이언트의 여러 진입점을 일일이 다이얼로그로 우회시키는 대신, DB에
+// 저장하는 지점(batch1 insert/캐시 업데이트) 자체에서 비어있으면 한 번 채워 넣어 앞으로
+// 생길 다른 진입 경로까지 동일하게 커버한다. 이미 다이얼로그를 거쳐 formatted가 채워져
+// 왔으면 재호출하지 않는다 — 기존 저장된 레코드(formatted가 null인 것들)는 소급 처리
+// 대상이 아니고, 그 회사가 다음에 재분석될 때 이 폴백을 통해 자연스럽게 채워진다.
+async function resolvePurposeDetailFormatted(
+  purposeCategory: string | null | undefined,
+  purposeDetail: string | undefined,
+  purposeDetailFormatted: string | undefined,
+  language: Language,
+): Promise<string | null> {
+  const trimmedFormatted = purposeDetailFormatted?.trim();
+  if (trimmedFormatted) return trimmedFormatted;
+  const trimmedDetail = purposeDetail?.trim();
+  if (!trimmedDetail) return null;
+  return generateReformattedPurpose(purposeCategory ?? null, trimmedDetail, language);
+}
+
 // company_id로 상장 정보 조회 — 다중상장 회사(EDGAR+DART 둘 다 있음)면
 // fetchFinancialContext가 이름 휴리스틱 대신 이 identifier로 직접 조회한다.
 async function fetchCompanyListings(companyId: string | undefined): Promise<CompanyListingRef[] | undefined> {
@@ -826,12 +850,16 @@ router.post('/stream', async (req: Request, res: Response) => {
 
         // 이번 요청에 목적이 실려왔으면 기존 캐시 행에 반영(라이브로 재생성되는 섹션에만
         // 적용됨 — 이미 캐시된 섹션 콘텐츠를 소급 변경하진 않음, "주입 배관만" 스코프).
+        // purposeDetailFormatted가 비어있으면(사전 확인 다이얼로그를 안 거친 진입 경로,
+        // 예: 재분석하기) 여기서 서버가 한 번 채워 넣는다.
+        let resolvedPurposeDetailFormatted = purposeDetailFormatted;
         if (purposeCategory) {
+          resolvedPurposeDetailFormatted = (await resolvePurposeDetailFormatted(purposeCategory, purposeDetail, purposeDetailFormatted, language)) ?? undefined;
           await supabase.from('analyses')
             .update({
               purpose_category: purposeCategory,
               purpose_detail: purposeDetail?.trim() || null,
-              purpose_detail_formatted: purposeDetailFormatted?.trim() || null,
+              purpose_detail_formatted: resolvedPurposeDetailFormatted ?? null,
             })
             .eq('id', cached.id);
         }
@@ -907,7 +935,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           language,
           purposeCategory,
           purposeDetail,
-          purposeDetailFormatted,
+          purposeDetailFormatted: resolvedPurposeDetailFormatted,
         }));
         return res.end();
       }
@@ -940,6 +968,11 @@ router.post('/stream', async (req: Request, res: Response) => {
     let savedAt: string | null = null;
     let batchCount = 0;
 
+    // purposeDetailFormatted가 비어있으면(사전 확인 다이얼로그를 안 거친 진입 경로, 예:
+    // 재분석하기) 여기서 서버가 한 번 채워 넣는다 — batch1 insert/최종 done 페이로드 양쪽에
+    // 동일하게 사용해 이번 응답부터 바로 다듬어진 문구가 보이도록 한다.
+    const resolvedPurposeDetailFormatted = await resolvePurposeDetailFormatted(purposeCategory, purposeDetail, purposeDetailFormatted, language);
+
     const analysis = await analyzeCompany(
       name,
       contextText || undefined,
@@ -967,7 +1000,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               data_source: dataSource,
               purpose_category: purposeCategory ?? null,
               purpose_detail:   purposeDetail?.trim() || null,
-              purpose_detail_formatted: purposeDetailFormatted?.trim() || null,
+              purpose_detail_formatted: resolvedPurposeDetailFormatted,
               summary_v2:          data.summary_v2 ?? null,
               industry_history_v2: null,
               tech_evolution_v2:   null,
@@ -1027,7 +1060,7 @@ router.post('/stream', async (req: Request, res: Response) => {
       language,
       purposeCategory,
       purposeDetail,
-      purposeDetailFormatted,
+      purposeDetailFormatted: resolvedPurposeDetailFormatted ?? undefined,
     }));
     res.end();
 

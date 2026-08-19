@@ -1522,6 +1522,52 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   창업자 바로 다음에서 Pain Diagnosis 뒤·스택 최후미로 이동. (4) `calcCagr()`(배열 길이
   기반 일반화) 헬퍼로 성장 시나리오 P10/P50/P90 라인별 CAGR 배지 3개 추가, 복사 마크다운에도
   반영. 서버+클라이언트 `tsc --noEmit` 클린, eslint 신규 에러 0.
+- [x] Pain Diagnosis 노란색 강조 제거 + 섹션 순서 재배치 + purpose_detail_formatted 서버
+  폴백 (2026-08-19) — 3건 동시 작업, 상세는 UI/UX 원칙(색상 팔레트)/Architecture 섹션 참고.
+  (1) **노란색 강조 제거**: 웹 sticky 그리드 배지(`AnalysisCard.tsx`의 `card.isPain` 분기
+  삭제), 웹 리포트 본문 섹션 헤더(`ReportSection`의 `emphasis` prop 전체 삭제 — signature/
+  className/호출부/구분선 `border-amber-100`→`border-gray-100`), PDF `painBox`(배경/보더
+  삭제, `painSubTitle` 색상 `C.orange`→`C.dark`, `painDivider` `C.orangeBorder`→`C.border`)
+  3곳 전부 나머지 8개 섹션과 동일한 스타일로 통일 — `업종 공통 Pain` 콜아웃(크로스인더스트리
+  넛지 내부, `CrossIndustryNudgeV1Tab`)의 amber는 요청 범위 밖이라 그대로 유지(UI/UX 원칙의
+  4번째 예외로 이미 문서화됨). (2) **섹션 순서 변경**: 요약→밸류체인→...→산업역사·기술진화→
+  넛지→출처였던 순서를 요약→산업역사·기술진화→밸류체인→비즈니스모델→경쟁사→재무→전략→
+  창업자→넛지→출처로 재배치 — 웹 sticky 그리드/웹 본문 스크롤 스택/PDF 목차/PDF 실제
+  페이지 4곳 전부 동일하게 적용, PDF는 `SectionHeader`의 `num`/`id="sec-N"`도 새 순서에
+  맞춰 전체 재넘버링(1/3/4/5/9번만 변경, 6/7/8/10/11번은 위치가 안 바뀌어 그대로).
+  growth_scenario/출처는 원래도 "10개 순서 밖, 스택 맨 끝에 유지"라 이번 재배치 대상이
+  아님. Playwright로 실제 dev 서버(prod-connected)의 기존 분석 건(에이피알)을 렌더링해
+  스크린샷 검증 + PyMuPDF로 실물 PDF를 이미지 변환해 TOC/페이지 순서/색상까지 전부 육안
+  확인(스크린샷 4장은 대화 중 전달됨). (3) **`purpose_detail_formatted` 서버 폴백**: 원인은
+  8/18 "말줄임 제거" 커밋(`f29bbc6`)의 회귀가 아니라 — `data.purposeDetailFormatted ??
+  data.purposeDetail` 필드 참조 자체는 8/17 최초 도입(`a85d952`) 이후 한 번도 안 바뀌었음
+  (`git log -S` 확인) — **"재분석하기"(`handleForceRefresh`, forceRefresh=true) 버튼이
+  처음 구현된 시점부터 사전 확인 다이얼로그(`PreAnalysisConfirmModal`→`POST
+  /api/analyze/reformat-purpose`)를 한 번도 거치지 않고 `startAnalysis`를 직접 호출해온
+  설계 시점 커버리지 공백**이었음 — `confirmedPurposeDetailFormatted`가 항상 비어있는 채로
+  서버에 전달되어 DB엔 `purpose_detail_formatted=null`로 저장되고, 화면은 다듬어지지 않은
+  원문(구어체/오탈자 포함)으로 폴백. 실제 프로덕션 레코드(에이피알, `purposeDetail`은
+  채워져 있고 `purposeDetailFormatted`는 null)로 재현 확정. 클라이언트의 여러 진입점을
+  일일이 다이얼로그로 우회시키는 대신 **서버 저장 지점(`server/src/routes/analyze.ts`)
+  자체에서 폴백** — 신규 `resolvePurposeDetailFormatted()` 헬퍼(파일 상단)가
+  `purposeDetailFormatted`가 비어있고 `purposeDetail`은 있으면 `generateReformattedPurpose()`
+  를 한 번 호출해 채우고, 이미 채워져 왔으면 재호출 없이 그대로 통과시킨다 — batch1 insert
+  (신규 분석, "재분석하기" 포함)와 partial-cache 업데이트 지점 2곳에 적용, 결과값을 즉시
+  해당 응답의 `done` 페이로드에도 반영해 재분석 완료 즉시 다듬어진 문구가 보이도록 함(새로고침
+  불필요). 풀캐시 히트 경로는 DB에 아무것도 안 쓰는 순수 표시 전용이라(기존 설계) 이번 폴백
+  대상에서 제외 — 다음 실제 재생성(재분석하기 등) 시 자연히 채워짐. **기존에 이미 저장된
+  레코드(formatted가 null인 것들)는 의도적으로 백필하지 않음** — 표시 전용 필드라 데이터
+  정확성 이슈가 아니고, 이 프로젝트의 기존 스키마 진화 패턴(V1→V2, depreciation/grossProfit
+  등)과 동일하게 다음 재분석 때 자연 해소되도록 둠(사용자 명시적 결정). 검증: prod와
+  연결된 로컬 서버에서 `generateReformattedPurpose()`를 실제 프로덕션 레코드의 원문
+  그대로 호출해 캐주얼한 구어체 문장("...알고싶어. ...좋을까?")이 정중한 문어체로 정확히
+  정리됨을 확인 + `resolvePurposeDetailFormatted()`의 3개 분기(포맷완료 시 그대로 통과·
+  API 미호출/포맷필요 시 실제 API 호출·둘 다 없으면 null·API 미호출) 전부 단위 테스트로
+  통과 — **"재분석하기" 버튼의 실제 브라우저 클릭 E2E는 이 세션에 브라우저 자동화 도구가
+  없고, 로컬 서버가 prod DB에 연결돼 있어 실제 Claude 재분석(비용 발생·신규 row 영구 저장)을
+  함부로 트리거하지 않기로 판단해 미실행** — 위 단위 검증이 정확히 동일한 로직을 검증하므로
+  실질적 커버리지는 충분하다고 판단(기존 세션들의 "브라우저 자동화 도구 없음" 한계와
+  동일 계열, 코드 리뷰+단위 검증으로 갈음). 서버+클라이언트 `tsc --noEmit` 클린.
 
 ## Security Principles (SSOT)
 
@@ -2735,4 +2781,12 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
   고정→브라우저 언어 자동 반영으로 정책 전환됐으나 이 저장소 밖 별도 프로젝트라 코드 변경
   없음(Framer 자체 설정 필요, 미착수). `analyses.language` 컬럼 등 나머지 언어 인프라는
   변경 없음. 상세는 "언어 정책" 섹션 참고. |
+| v2.15.0 | 2026-08-19 — Pain Diagnosis(산업역사·기술진화) 노란색 강조를 웹 sticky
+  그리드/본문 섹션 헤더/PDF 헤더 박스 3곳 전부 제거해 나머지 8개 섹션과 동일한 스타일로
+  통일 + 섹션 순서를 요약→산업역사·기술진화→밸류체인→비즈니스모델→경쟁사→재무→전략→
+  창업자→넛지→출처로 재배치(웹 그리드/본문/PDF 목차/PDF 페이지 4곳 동일 적용) +
+  `purpose_detail_formatted`가 "재분석하기" 경로에서 설계 시점부터 채워지지 않던 커버리지
+  공백을 서버(`resolvePurposeDetailFormatted()`, batch1 insert/캐시 업데이트 지점)에서
+  폴백 생성하도록 수정(기존 레코드 백필은 하지 않음, 다음 재분석 시 자연 해소). 상세는
+  "✅ 완료" 최신 항목 참고. |
 | v3.0.0 | 유료 플랜 출시 (Stripe) |
