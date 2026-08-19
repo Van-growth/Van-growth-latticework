@@ -3144,21 +3144,6 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             <p className="text-sm text-gray-400 ml-6">
               {new Date(data.createdAt).toLocaleString(reportLanguage === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
-            {/* 분석 목적 배지 — PDF 표지엔 이미 있었으나 웹엔 없던 것을 신규 추가
-                (2026-08-17, 사전 확인 다이얼로그 통합 작업 계기). purposeDetailFormatted가
-                있으면 그걸, 없으면(옛 캐시 등) 원문으로 폴백 — PDF와 동일 우선순위. */}
-            {data.purposeCategory && (
-              <div className="flex items-start flex-wrap gap-1.5 ml-6 mt-1.5">
-                <span className="inline-flex items-center whitespace-nowrap shrink-0 text-sm font-medium text-navy-700 bg-navy-50 border border-navy-100 rounded-full px-2.5 py-0.5">
-                  {uiT.home.purposeSectionTitle}: {purposeCategoryLabel(data.purposeCategory, uiT)}
-                </span>
-                {(data.purposeDetailFormatted ?? data.purposeDetail) && (
-                  <span className="text-sm text-gray-400 leading-snug max-w-md pt-0.5">
-                    {data.purposeDetailFormatted ?? data.purposeDetail}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end max-w-full">
             {!isShareView && (
@@ -3168,9 +3153,10 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 disabled={!data.id}
                 aria-label={isFavorited ? uiT.home.favoriteRemove : uiT.home.favoriteAdd}
                 title={isFavorited ? uiT.home.favoriteRemove : uiT.home.favoriteAdd}
-                className="p-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Star size={16} className={isFavorited ? 'fill-source-reference text-source-reference' : 'text-gray-300'} />
+                <Star size={12} className={isFavorited ? 'fill-source-reference text-source-reference' : 'text-gray-300'} />
+                {uiT.home.favoriteLabel}
               </button>
             )}
             <CopyButton getMarkdown={() => analysisToMd(data)} label={uiT.actions.copyAll} copiedLabel={uiT.actions.copied} />
@@ -3179,6 +3165,26 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             <DataSourceBadge source={data.dataSource ?? 'web_search'} />
           </div>
         </div>
+        {/* 분석 목적 배지 — PDF 표지엔 이미 있었으나 웹엔 없던 것을 신규 추가(2026-08-17,
+            사전 확인 다이얼로그 통합 작업 계기). purposeDetailFormatted가 있으면 그걸,
+            없으면(옛 캐시 등) 원문으로 폴백 — PDF와 동일 우선순위. 2026-08-19: 위 flex row
+            (회사명 ⟷ 액션 버튼) 밖으로 분리 — 이 배지가 그 row 안에 있으면 목적 텍스트가
+            길어질 때(특히 truncate 제거 이후, f29bbc6) 회사명 블록의 너비가 늘어나
+            justify-between+flex-wrap 계산에서 버튼 그룹이 통째로 다음 줄로 밀려나는
+            회귀가 있었음(실측: 데스크톱 1280px 폭에서도 재현) — 버튼 줄은 항상 회사명과
+            같은 줄에 유지하고, 목적 배지는 그 아래 독립된 줄로 렌더링. */}
+        {data.purposeCategory && (
+          <div className="flex items-start flex-wrap gap-1.5 mt-2">
+            <span className="inline-flex items-center whitespace-nowrap shrink-0 text-sm font-medium text-navy-700 bg-navy-50 border border-navy-100 rounded-full px-2.5 py-0.5">
+              {uiT.home.purposeSectionTitle}: {purposeCategoryLabel(data.purposeCategory, uiT)}
+            </span>
+            {(data.purposeDetailFormatted ?? data.purposeDetail) && (
+              <span className="text-sm text-gray-400 leading-snug max-w-md pt-0.5">
+                {data.purposeDetailFormatted ?? data.purposeDetail}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 상단 sticky 상태 그리드(2026-08-17) — 구 좌우 스크롤 탭바를 완전히 대체하는

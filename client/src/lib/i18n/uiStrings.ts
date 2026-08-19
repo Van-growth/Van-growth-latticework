@@ -91,6 +91,7 @@ interface UiStringDict {
     reanalyzeNew: string;
     favoriteAdd: string;
     favoriteRemove: string;
+    favoriteLabel: string;
     purposeSectionTitle: string;
     purposeMa: string;
     purposeInvestment: string;
@@ -301,6 +302,7 @@ const ko: UiStringDict = {
     reanalyzeNew: '새로 분석하기',
     favoriteAdd: '즐겨찾기에 추가',
     favoriteRemove: '즐겨찾기 해제',
+    favoriteLabel: '즐겨찾기',
     purposeSectionTitle: '분석 목적',
     purposeMa: '인수합병',
     purposeInvestment: '투자',
@@ -525,6 +527,7 @@ const en: UiStringDict = {
     reanalyzeNew: 'Start new analysis',
     favoriteAdd: 'Add to favorites',
     favoriteRemove: 'Remove from favorites',
+    favoriteLabel: 'Favorite',
     purposeSectionTitle: 'Purpose of this analysis',
     purposeMa: 'M&A',
     purposeInvestment: 'Investment',
