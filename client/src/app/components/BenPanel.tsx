@@ -211,7 +211,7 @@ export default function BenPanel({ analysisData, widthPreset, setWidthPreset }: 
               <button
                 onClick={() => handleSend(uiT.mungerPrompt)}
                 disabled={isStreaming}
-                className="text-left text-xs text-navy-700 hover:text-navy-900 hover:bg-navy-100 border border-navy-200 bg-navy-50 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-0.5"
+                className="text-left text-xs text-navy-700 hover:text-navy-800 hover:bg-navy-100 border border-navy-200 bg-navy-50 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-0.5"
               >
                 {uiT.mungerPromptLabel}
               </button>

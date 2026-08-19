@@ -1568,6 +1568,24 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   함부로 트리거하지 않기로 판단해 미실행** — 위 단위 검증이 정확히 동일한 로직을 검증하므로
   실질적 커버리지는 충분하다고 판단(기존 세션들의 "브라우저 자동화 도구 없음" 한계와
   동일 계열, 코드 리뷰+단위 검증으로 갈음). 서버+클라이언트 `tsc --noEmit` 클린.
+- [x] `text-navy-900` 존재하지 않는 shade 참조로 다크모드 OS에서 텍스트 안 보이던 버그
+  수정 (2026-08-19) — 이 프로젝트 navy 팔레트(`globals.css`의 `@theme inline`)는
+  `navy-50`~`navy-800`까지만 정의돼 있는데(2026-08-16 `fc222e2` 3색 체계 도입 때부터),
+  `PreAnalysisConfirmModal.tsx`(2026-08-17 `a85d952`에서 파일 생성 시점부터, Tailwind
+  관용적 50~900 스케일을 가정한 실수로 추정)와 `BenPanel.tsx`가 정의되지 않은
+  `text-navy-900`/`hover:text-navy-900`를 참조 — 컴파일된 CSS(`.next/static/css/app/
+  layout.css`)에 `.text-navy-900` 규칙이 0건임을 실측 확인, 색 유틸리티가 아예 생성되지
+  않아 텍스트가 `body`의 `color: var(--foreground)`로 계속 상속됨. 이 앱은 "라이트 테마
+  고정" 정책이지만 원래 Next.js 템플릿에서 남은 `@media (prefers-color-scheme: dark)`
+  블록이 `--foreground`를 `#ededed`(거의 흰색)로 바꿔놔서, OS/브라우저가 다크모드인
+  사용자에게만 흰 배경 위 흰 글자로 안 보이는 증상이 재현됐음(회귀 아님, 파일 생성 때부터
+  있던 버그 — 다크모드 환경에서만 드러나 지금까지 안 걸림). `PreAnalysisConfirmModal.tsx:91`/
+  `BenPanel.tsx:214` 둘 다 `navy-900`→`navy-800`(`#0f1c2c`, 실제 정의된 가장 어두운
+  shade)로 교체, 전수 grep으로 client 전체에 `navy-900` 잔여 참조 0건·나머지 모든
+  `navy-N` 사용처가 정의된 50~800 범위 안임을 확인. 검증: `PreAnalysisConfirmModal`을
+  임시 격리 라우트에 마운트해 Playwright `colorScheme: 'dark'` 에뮬레이션으로 스크린샷 —
+  수정 후 텍스트가 짙은 네이비로 정상 표시됨을 확인, 서버+클라이언트 `tsc --noEmit`/
+  eslint 클린.
 
 ## Security Principles (SSOT)
 

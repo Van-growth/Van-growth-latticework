@@ -88,7 +88,7 @@ export default function PreAnalysisConfirmModal({
             <div>
               <p className="text-xs text-gray-400 mb-1">{t.purposeConfirmedLabel}</p>
               <div className="bg-navy-50 border border-navy-100 rounded-lg px-3.5 py-3">
-                <p className="text-sm text-navy-900 leading-relaxed">&ldquo;{purposeReformat.text}&rdquo;</p>
+                <p className="text-sm text-navy-800 leading-relaxed">&ldquo;{purposeReformat.text}&rdquo;</p>
               </div>
             </div>
           ) : (
