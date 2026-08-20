@@ -199,6 +199,22 @@ export async function processCompany(
   const invCFData = pickConcept(g, 'NetCashProvidedByUsedInInvestingActivities');
   const finCFData = pickConcept(g, 'NetCashProvidedByUsedInFinancingActivities');
 
+  // 은행 재무제표 템플릿(2026-08-20, server/src/lib/edgar.ts와 동일 후보 — 이 스크립트도 별도
+  // 실행 컨텍스트라 로직이 복제돼 있음, 위 GrossProfit/Cash 발견 때와 동일한 함정 재발 방지
+  // 차원에서 처음부터 같이 추가) — interestIncome은 InterestAndFeeIncomeLoansAndLeases(대출
+  // 이자만, 더 좁은 개념)를 의도적으로 제외한 이유는 edgar.ts 주석 참고.
+  const bankIntIncData    = pickConcept(g, 'InterestIncomeOperating', 'InterestAndDividendIncomeOperating');
+  const bankIntExpData    = pickConcept(g, 'InterestExpense', 'InterestExpenseOperating');
+  const bankNetIntData    = pickConcept(g, 'InterestIncomeExpenseNet');
+  const bankProvData      = pickConcept(g, 'ProvisionForLoanLeaseAndOtherLosses', 'ProvisionForLoanLossesExpensed', 'ProvisionForCreditLossExpenseReversal', 'ProvisionForDoubtfulAccounts');
+  const bankNonIntIncData = pickConcept(g, 'NoninterestIncome');
+  const bankNonIntExpData = pickConcept(g, 'NoninterestExpense');
+  const bankLoansGrossData = pickConcept(g, 'FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss', 'NotesReceivableGross', 'LoansAndLeasesReceivableGrossCarryingAmount', 'LoansAndLeasesReceivableNetReportedAmount');
+  const bankAllowanceData  = pickConcept(g, 'FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest', 'FinancingReceivableAllowanceForCreditLosses', 'LoansAndLeasesReceivableAllowance');
+  const bankLoansNetData   = pickConcept(g, 'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss', 'NotesReceivableNet', 'LoansAndLeasesReceivableNetOfDeferredIncome');
+  const bankDepositsData   = pickConcept(g, 'Deposits');
+  const bankBorrowingsData = pickConcept(g, 'LongTermDebt', 'ShortTermBorrowings', 'DebtLongtermAndShorttermCombinedAmount');
+
   // 회계연도 기준: 매출 우선, 없으면 순이익
   const fiscalYears = revData.length > 0
     ? revData.map(d => d.year)
@@ -226,6 +242,17 @@ export async function processCompany(
   const operatingCF     = align(opCFData);
   const investingCF     = align(invCFData);
   const financingCF     = align(finCFData);
+  const bankInterestIncome = align(bankIntIncData);
+  const bankInterestExpense = align(bankIntExpData);
+  const bankNetInterestIncome = align(bankNetIntData);
+  const bankProvisionCreditLosses = align(bankProvData);
+  const bankNoninterestIncome = align(bankNonIntIncData);
+  const bankNoninterestExpense = align(bankNonIntExpData);
+  const bankLoansGross = align(bankLoansGrossData);
+  const bankAllowanceForCreditLosses = align(bankAllowanceData);
+  const bankLoansNet = align(bankLoansNetData);
+  const bankDeposits = align(bankDepositsData);
+  const bankBorrowings = align(bankBorrowingsData);
 
   const rawEdgar = {
     ticker,
@@ -242,6 +269,17 @@ export async function processCompany(
     operatingCF,
     investingCF,
     financingCF,
+    bankInterestIncome,
+    bankInterestExpense,
+    bankNetInterestIncome,
+    bankProvisionCreditLosses,
+    bankNoninterestIncome,
+    bankNoninterestExpense,
+    bankLoansGross,
+    bankAllowanceForCreditLosses,
+    bankLoansNet,
+    bankDeposits,
+    bankBorrowings,
     fiscalYears,
     filedAt: new Date().toISOString(),
     source: 'EDGAR',

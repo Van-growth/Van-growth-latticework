@@ -1861,6 +1861,7 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
 
   // 데이터 신뢰도 요약 — 이 탭에 표시되는 필드들 중 (추정) 배지 / 확인 필요(플레이스홀더) 값 카운트
   const { estimatedCount, unknownCount } = useMemo(() => countFinancialsReliability(f), [f]);
+  const { language } = useLanguage();
 
   // 회사마다 실제로 보유한 회계연도만 컬럼으로 렌더링 — 고정 fy2021~fy2025/fy2023~fy2025
   // 리터럴을 가정하지 않는다(신규 상장사는 짧은 이력만, 오래된 기업은 최대 5개년).
@@ -1887,19 +1888,30 @@ const FinancialsV2Tab = memo(function FinancialsV2Tab({ f, sources, onRefresh, i
       )}
       {/* 데이터 출처 뱃지 + Refresh 버튼 */}
       <div className="flex items-center justify-between">
-        {dataSource === 'edgar' ? (
-          <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 SEC EDGAR 공식
-          </span>
-        ) : dataSource === 'dart' ? (
-          <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 DART 공식
-          </span>
-        ) : (
-          <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L3.cls}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L3}`} />⚪ 웹 검색 추정치
-          </span>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {dataSource === 'edgar' ? (
+            <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 SEC EDGAR 공식
+            </span>
+          ) : dataSource === 'dart' ? (
+            <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />🟢 DART 공식
+            </span>
+          ) : (
+            <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L3.cls}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L3}`} />⚪ 웹 검색 추정치
+            </span>
+          )}
+          {/* 은행 재무제표 템플릿(2026-08-20) — 서버가 isGenuineBankData() 게이트를 통과했을
+              때만(f.industry_category==='bank') 노출되는 읽기 전용 정적 뱃지. 클릭 불가능
+              (버튼 아님) — 유저가 업종을 바꿀 수 있는 컨트롤처럼 보이면 안 된다는 요건. */}
+          {f.industry_category === 'bank' && (
+            <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full ${LEVEL_BADGE.L1.cls}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${LEVEL_DOT.L1}`} />
+              {language === 'ko' ? '🏦 은행업 기준 재무제표' : '🏦 Bank-industry template'}
+            </span>
+          )}
+        </div>
         <button
           onClick={onRefresh}
           disabled={isRefreshing}

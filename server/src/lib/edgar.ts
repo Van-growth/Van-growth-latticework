@@ -205,6 +205,20 @@ export interface EdgarRawSeries {
   // 회사가 실제로 라인 구분해 공시한 경우만 채워짐(2개 미만이면 "라인 구분 없음"과 동일 취급해
   // undefined) — Total Revenue 한 줄뿐인 회사(NVIDIA 등)는 이 필드 자체가 없다.
   revenueLines?: RevenueLineItem[];
+  // 은행 재무제표 템플릿(2026-08-20, financialsTableBuilder.ts) 전용 필드 — 모든 회사에 대해
+  // 무조건 조회한다(이미 가져온 gaap 객체 재사용이라 API 호출 추가 없음). 은행이 아닌 회사는
+  // 그냥 빈 배열로 남고, 실제 템플릿 적용 여부는 isGenuineBankData() 게이트가 별도로 판단한다.
+  bankInterestIncome?: (number | null)[];
+  bankInterestExpense?: (number | null)[];
+  bankNetInterestIncome?: (number | null)[];
+  bankProvisionCreditLosses?: (number | null)[];
+  bankNoninterestIncome?: (number | null)[];
+  bankNoninterestExpense?: (number | null)[];
+  bankLoansGross?: (number | null)[];
+  bankAllowanceForCreditLosses?: (number | null)[];
+  bankLoansNet?: (number | null)[];
+  bankDeposits?: (number | null)[];
+  bankBorrowings?: (number | null)[];
   source: 'EDGAR';
 }
 
@@ -574,8 +588,27 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
     const finCFData = pickConceptSeries(gaap, 'NetCashProvidedByUsedInFinancingActivities');
     const epsData  = pickConceptSeries(gaap, 'EarningsPerShareBasic');
 
+    // 은행 재무제표 템플릿 전용 태그 — 표준 3항목(Revenues/GrossProfit/OperatingIncomeLoss)이
+    // 없는 은행/저축기관에서 그 자리를 대신할 계정과목(2026-08-20, Synchrony/JPMorgan 실제
+    // companyfacts 대조로 검증). interestIncome은 InterestAndFeeIncomeLoansAndLeases(대출
+    // 이자만, 더 좁은 개념)를 의도적으로 후보에서 제외 — JPM에서 이 태그가 데이터 연수가 더
+    // 많아(16년 vs 14년) pickConceptSeries의 "최신+데이터개수" 선택 로직이 이걸 잘못 고르는
+    // 사고가 실측 확인됨(총이자수익이 대출이자만 잡는 좁은 수치로 축소됨).
+    const bankIntIncData   = pickConceptSeries(gaap, 'InterestIncomeOperating', 'InterestAndDividendIncomeOperating');
+    const bankIntExpData   = pickConceptSeries(gaap, 'InterestExpense', 'InterestExpenseOperating');
+    const bankNetIntData   = pickConceptSeries(gaap, 'InterestIncomeExpenseNet');
+    const bankProvData     = pickConceptSeries(gaap, 'ProvisionForLoanLeaseAndOtherLosses', 'ProvisionForLoanLossesExpensed', 'ProvisionForCreditLossExpenseReversal', 'ProvisionForDoubtfulAccounts');
+    const bankNonIntIncData = pickConceptSeries(gaap, 'NoninterestIncome');
+    const bankNonIntExpData = pickConceptSeries(gaap, 'NoninterestExpense');
+    const bankLoansGrossData = pickConceptSeries(gaap, 'FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss', 'NotesReceivableGross', 'LoansAndLeasesReceivableGrossCarryingAmount', 'LoansAndLeasesReceivableNetReportedAmount');
+    const bankAllowanceData  = pickConceptSeries(gaap, 'FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest', 'FinancingReceivableAllowanceForCreditLosses', 'LoansAndLeasesReceivableAllowance');
+    const bankLoansNetData   = pickConceptSeries(gaap, 'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss', 'NotesReceivableNet', 'LoansAndLeasesReceivableNetOfDeferredIncome');
+    const bankDepositsData    = pickConceptSeries(gaap, 'Deposits');
+    const bankBorrowingsData  = pickConceptSeries(gaap, 'LongTermDebt', 'ShortTermBorrowings', 'DebtLongtermAndShorttermCombinedAmount');
+
     // 후보를 전부 시도해도 못 찾은 필드만 concept_miss_log에 기록(fire-and-forget) — 나중에
-    // 사람이 이 로그를 보고 새 concept 후보를 추가할지 판단하는 용도.
+    // 사람이 이 로그를 보고 새 concept 후보를 추가할지 판단하는 용도. 은행 전용 필드는 비은행
+    // 기업 대부분에서 정상적으로 비어있을 것이라 여기 포함하지 않음(로그 노이즈 방지).
     void logConceptMissIfEmpty(cik, entityName, 'revenue', revData, ['Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet']);
     void logConceptMissIfEmpty(cik, entityName, 'grossProfit', gpData, ['GrossProfit']);
     void logConceptMissIfEmpty(cik, entityName, 'operatingIncome', oiData, ['OperatingIncomeLoss']);
@@ -636,6 +669,17 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
         operatingCF: align(opCFData),
         investingCF: align(invCFData),
         financingCF: align(finCFData),
+        bankInterestIncome: align(bankIntIncData),
+        bankInterestExpense: align(bankIntExpData),
+        bankNetInterestIncome: align(bankNetIntData),
+        bankProvisionCreditLosses: align(bankProvData),
+        bankNoninterestIncome: align(bankNonIntIncData),
+        bankNoninterestExpense: align(bankNonIntExpData),
+        bankLoansGross: align(bankLoansGrossData),
+        bankAllowanceForCreditLosses: align(bankAllowanceData),
+        bankLoansNet: align(bankLoansNetData),
+        bankDeposits: align(bankDepositsData),
+        bankBorrowings: align(bankBorrowingsData),
         fiscalYears,
         filedAt: new Date().toISOString(),
         source: 'EDGAR',

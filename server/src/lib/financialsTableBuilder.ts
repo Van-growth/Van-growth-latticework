@@ -9,6 +9,9 @@
 // FinancialsV2Row/FinancialsV2BSRow에 그대로 대입 가능하다.
 import { EdgarRawSeries } from './edgar';
 import { DartRawSeries } from './dart';
+import { IndustryCategory } from './industryClassification';
+
+export type { IndustryCategory };
 
 // fy{year} 컬럼은 회사마다 보유 연도 수·범위가 다르다(신규 상장사는 짧고, 오래된 기업은
 // 최대 5개) — 고정된 fy2021~fy2025 리터럴 대신 인덱스 시그니처로 가변 연도를 수용한다.
@@ -114,6 +117,140 @@ function isStructurallyAbsent(vals: (number | null)[]): boolean {
   return vals.length > 0 && vals.every(v => v == null);
 }
 
+function countNonNull(arr?: (number | null)[]): number {
+  return arr ? arr.filter(v => v != null).length : 0;
+}
+
+// 은행 템플릿 활성화 게이트(2026-08-20) — SIC 6199/KSIC 64xxx는 크립토·핀테크·일반
+// 지주회사가 광범위하게 섞여있어(industryClassification.ts 참고) "계정과목 하나라도
+// 있으면 적용"으로는 부족하다 — 보유 현금성자산 이자수익 태그 하나만 우연히 잡힌 비은행
+// 회사에도 은행 템플릿/뱃지가 붙을 위험이 있다. 구조적 핵심 항목(대출채권 또는 예금)이
+// 최소 1개 있고, 그 위에 손익 항목 중 최소 3개(EDGAR는 6개 후보 중 3개, DART는 4개 후보
+// 중 3개 — DART는 기타수익/기타비용 대응 항목이 구조적으로 없어 후보 자체가 4개뿐, 의도된
+// 설계) 이상 확인돼야 통과. false negative(진짜 은행인데 이번 분기 공시 형식 차이로
+// 걸러짐)는 기존 일반 로직으로 안전하게 폴백되므로, false positive(비은행 오분류) 방지
+// 쪽을 보수적으로 우선한다. 이 함수 하나가 "행을 어느 템플릿으로 만들지"와 "뱃지를
+// 붙일지" 판정을 동시에 담당해 둘이 어긋날 여지를 없앤다(claude.ts의
+// overrideFinancialsTable 참고).
+export function isGenuineBankData(rawEdgar: EdgarRawSeries | null, rawDart: DartRawSeries | null): boolean {
+  if (rawEdgar) {
+    const hasStructural =
+      countNonNull(rawEdgar.bankLoansGross) > 0 ||
+      countNonNull(rawEdgar.bankLoansNet) > 0 ||
+      countNonNull(rawEdgar.bankDeposits) > 0;
+    if (!hasStructural) return false;
+    const incomeFields = [
+      rawEdgar.bankInterestIncome, rawEdgar.bankInterestExpense, rawEdgar.bankNetInterestIncome,
+      rawEdgar.bankProvisionCreditLosses, rawEdgar.bankNoninterestIncome, rawEdgar.bankNoninterestExpense,
+    ];
+    return incomeFields.filter(f => countNonNull(f) > 0).length >= 3;
+  }
+  const b = rawDart?.bankSeries;
+  if (b) {
+    const hasStructural = countNonNull(b.loansGross) > 0 || countNonNull(b.deposits) > 0;
+    if (!hasStructural) return false;
+    const incomeFields = [b.interestIncome, b.interestExpense, b.netInterestIncome, b.provisionCreditLosses];
+    return incomeFields.filter(f => countNonNull(f) > 0).length >= 3;
+  }
+  return false;
+}
+
+// 은행 손익계산서 — 표준 3항목(매출/매출총이익/영업이익) 대신 이자수익/이자비용/순이자수익/
+// 대손충당금/기타수익/기타비용/순이익 7행. 호출부(buildIncomeStatementRows)가 이미
+// isGenuineBankData()로 게이트했다고 신뢰하고, 여기선 순수 행 조립만 한다.
+function buildBankIncomeStatementRows(
+  rawEdgar: EdgarRawSeries | null,
+  rawDart: DartRawSeries | null,
+  language: 'ko' | 'en',
+): FinancialsRowLike[] | null {
+  const t = (ko: string, en: string) => (language === 'ko' ? ko : en);
+
+  if (rawEdgar) {
+    const fiscalYears = rawEdgar.fiscalYears;
+    if (!fiscalYears.length) return null;
+    const s: SeriesInput = {
+      fiscalYears, revenue: [], grossProfit: [], operatingIncome: [],
+      netIncome: rawEdgar.netIncome, assets: [], liabilities: [], equity: [], fmt: fmtUsd,
+    };
+    const row = (item: string, vals: (number | null)[] | undefined) =>
+      buildRow(item, fallback(vals, fiscalYears.length), s, language, MAX_IS_YEARS);
+    const yoy = (vals: (number | null)[] | undefined) => computeYoy(fallback(vals, fiscalYears.length), fiscalYears);
+    return [
+      { ...row(t('총이자수익', 'Total Interest Income'), rawEdgar.bankInterestIncome), yoy: yoy(rawEdgar.bankInterestIncome) },
+      { ...row(t('총이자비용', 'Total Interest Expense'), rawEdgar.bankInterestExpense), yoy: yoy(rawEdgar.bankInterestExpense) },
+      { ...row(t('순이자수익', 'Net Interest Income'), rawEdgar.bankNetInterestIncome), yoy: yoy(rawEdgar.bankNetInterestIncome) },
+      { ...row(t('대손충당금', 'Provision for Credit Losses'), rawEdgar.bankProvisionCreditLosses), yoy: '—' },
+      { ...row(t('기타수익', 'Noninterest Income'), rawEdgar.bankNoninterestIncome), yoy: '—' },
+      { ...row(t('기타비용', 'Noninterest Expense'), rawEdgar.bankNoninterestExpense), yoy: '—' },
+      { ...row(t('순이익', 'Net Income'), rawEdgar.netIncome), yoy: yoy(rawEdgar.netIncome) },
+    ] as FinancialsRowLike[];
+  }
+
+  const b = rawDart?.bankSeries;
+  if (b) {
+    const s: SeriesInput = {
+      fiscalYears: b.fiscalYears, revenue: [], grossProfit: [], operatingIncome: [],
+      netIncome: [], assets: [], liabilities: [], equity: [], fmt: fmtKrw,
+    };
+    const row = (item: string, vals: (number | null)[]) => buildRow(item, vals, s, language, b.fiscalYears.length);
+    const yoy = (vals: (number | null)[]) => computeYoy(vals, b.fiscalYears);
+    // 기타수익/기타비용은 DART K-IFRS 은행지주 CIS엔 단일 필드로 없음(수수료손익/보험손익/
+    // 유가증권손익 등으로 세분화) — 서버가 합산 계산하지 않는다는 원칙에 따라 생략.
+    const netIncomeSeries = fallback((rawDart!.cfs ?? rawDart!.ofs)?.netIncome, b.fiscalYears.length);
+    return [
+      { ...row(t('총이자수익', 'Total Interest Income'), b.interestIncome), yoy: yoy(b.interestIncome) },
+      { ...row(t('총이자비용', 'Total Interest Expense'), b.interestExpense), yoy: yoy(b.interestExpense) },
+      { ...row(t('순이자손익', 'Net Interest Income'), b.netInterestIncome), yoy: yoy(b.netInterestIncome) },
+      { ...row(t('대손충당금', 'Provision for Credit Losses'), b.provisionCreditLosses), yoy: '—' },
+      { ...row(t('순이익', 'Net Income'), netIncomeSeries), yoy: yoy(netIncomeSeries) },
+    ] as FinancialsRowLike[];
+  }
+  return null;
+}
+
+// 은행 재무상태표 — 대출채권(총액/순액)/예금/차입금 핵심 3~4행.
+function buildBankBalanceSheetRows(
+  rawEdgar: EdgarRawSeries | null,
+  rawDart: DartRawSeries | null,
+  language: 'ko' | 'en',
+): BalanceSheetRowLike[] | null {
+  const t = (ko: string, en: string) => (language === 'ko' ? ko : en);
+
+  if (rawEdgar) {
+    const fiscalYears = rawEdgar.fiscalYears;
+    if (!fiscalYears.length) return null;
+    const s: SeriesInput = {
+      fiscalYears, revenue: [], grossProfit: [], operatingIncome: [], netIncome: [],
+      assets: [], liabilities: [], equity: [], fmt: fmtUsd,
+    };
+    const row = (item: string, vals: (number | null)[] | undefined) =>
+      buildRow(item, fallback(vals, fiscalYears.length), s, language, MAX_BS_YEARS) as unknown as BalanceSheetRowLike;
+    return [
+      row(t('대출채권(총액)', 'Loans, Gross'), rawEdgar.bankLoansGross),
+      row(t('대손충당금', 'Allowance for Credit Losses'), rawEdgar.bankAllowanceForCreditLosses),
+      row(t('대출채권(순액)', 'Loans, Net'), rawEdgar.bankLoansNet),
+      row(t('예금', 'Deposits'), rawEdgar.bankDeposits),
+      row(t('차입금', 'Borrowings'), rawEdgar.bankBorrowings),
+    ];
+  }
+
+  const b = rawDart?.bankSeries;
+  if (b) {
+    const s: SeriesInput = {
+      fiscalYears: b.fiscalYears, revenue: [], grossProfit: [], operatingIncome: [], netIncome: [],
+      assets: [], liabilities: [], equity: [], fmt: fmtKrw,
+    };
+    const row = (item: string, vals: (number | null)[]) =>
+      buildRow(item, vals, s, language, b.fiscalYears.length) as unknown as BalanceSheetRowLike;
+    return [
+      row(t('대출채권', 'Loans'), b.loansGross),
+      row(t('예금', 'Deposits'), b.deposits),
+      row(t('차입금', 'Borrowings'), b.borrowings),
+    ];
+  }
+  return null;
+}
+
 // cols는 이제 "찾아야 할 연도 후보"가 아니라 s.fiscalYears 자체에서 앞쪽 maxYears개를 그대로
 // 쓴다 — fiscalYears는 항상 실존하는 연도만 담고 있으므로(신규 상장사는 짧게, extractAnnualSeries
 // 참고) 이전처럼 "그 연도가 없으면 undefined로 뭉갠다" 분기 자체가 필요 없어졌다. 회사가 존재했지만
@@ -152,7 +289,13 @@ export function buildIncomeStatementRows(
   rawEdgar: EdgarRawSeries | null,
   rawDart: DartRawSeries | null,
   language: 'ko' | 'en',
+  industryCategory: IndustryCategory = 'general',
 ): FinancialsRowLike[] | null {
+  if (industryCategory === 'bank' && isGenuineBankData(rawEdgar, rawDart)) {
+    const bankRows = buildBankIncomeStatementRows(rawEdgar, rawDart, language);
+    if (bankRows) return bankRows;
+  }
+
   const s = toSeriesInput(rawEdgar, rawDart);
   if (!s || s.fiscalYears.length === 0) return null;
 
@@ -201,7 +344,13 @@ export function buildBalanceSheetRows(
   rawEdgar: EdgarRawSeries | null,
   rawDart: DartRawSeries | null,
   language: 'ko' | 'en',
+  industryCategory: IndustryCategory = 'general',
 ): BalanceSheetRowLike[] | null {
+  if (industryCategory === 'bank' && isGenuineBankData(rawEdgar, rawDart)) {
+    const bankRows = buildBankBalanceSheetRows(rawEdgar, rawDart, language);
+    if (bankRows) return bankRows;
+  }
+
   const s = toSeriesInput(rawEdgar, rawDart);
   if (!s || s.fiscalYears.length === 0) return null;
 

@@ -7,7 +7,8 @@ import { fetchFinancialContext } from './financialContext';
 import type { IndustryBenchmarkResult, CompetitorRevenueRanking } from '../services/industryBenchmarkService';
 import type { EdgarRawSeries } from './edgar';
 import type { DartRawSeries } from './dart';
-import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, getRowYearCols } from './financialsTableBuilder';
+import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, getRowYearCols, isGenuineBankData } from './financialsTableBuilder';
+import { classifyIndustryCategory, IndustryCategory } from './industryClassification';
 
 dotenv.config();
 
@@ -290,6 +291,10 @@ export interface SecBenchmarkComparison {
 }
 
 export interface FinancialsV2 {
+  // 은행 재무제표 템플릿(2026-08-20) 적용 여부 — overrideFinancialsTable()이 isGenuineBankData()
+  // 게이트를 통과했을 때만 'bank'로 기록한다(SIC/KSIC 기반 넓은 "시도 힌트"와는 다름, 오분류
+  // 방지 목적). 프론트 뱃지("🏦 은행업 기준 재무제표")가 이 필드를 그대로 읽는다.
+  industry_category?: IndustryCategory;
   income_statement: FinancialsV2Row[];
   // 회사가 실제 10-K에서 라인 구분해 공시한 매출만(축 종류·개수 무관, 서버가 R.htm에서 직접
   // 파싱 — Claude는 생성하지 않음) — 라인 구분이 없는 회사(NVIDIA 등)는 undefined, 프론트가
@@ -1138,14 +1143,19 @@ function overrideFinancialsTable(
   rawEdgar: EdgarRawSeries | null | undefined,
   rawDart: DartRawSeries | null | undefined,
   language: Language,
+  industryCategory: IndustryCategory = 'general',
 ): FinancialsV2 | null | undefined {
   if (!f || (!rawEdgar && !rawDart)) return f;
-  const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language);
-  const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language);
+  const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language, industryCategory);
+  const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language, industryCategory);
   const revenueLines = buildRevenueLines(rawEdgar ?? null);
   if (isRows) f.income_statement = isRows as unknown as FinancialsV2['income_statement'];
   if (bsRows) f.balance_sheet = bsRows as unknown as FinancialsV2['balance_sheet'];
   f.revenue_lines = revenueLines ?? undefined;
+  // industry_category는 SIC/KSIC 기반 "시도 힌트"(넓게 잡음)가 아니라, 실제로 게이트를
+  // 통과해 은행 템플릿이 적용됐는지로 결정 — 뱃지가 오분류 회사에 잘못 붙는 걸 원천 차단.
+  f.industry_category = (industryCategory === 'bank' && isGenuineBankData(rawEdgar ?? null, rawDart ?? null))
+    ? 'bank' : 'general';
   return f;
 }
 
@@ -1157,6 +1167,8 @@ export async function refreshFinancials(companyName: string, language: Language 
   const { contextText, rawEdgar, rawDart } = await fetchFinancialContext(companyName);
   if (!rawEdgar && !rawDart) return emptyFinancialsV2();
 
+  const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
+
   const researchText = await gatherFinancialResearch(companyName);
   const context = [
     `Company: ${companyName}`,
@@ -1165,7 +1177,7 @@ export async function refreshFinancials(companyName: string, language: Language 
   ].filter(Boolean).join('\n');
 
   const result = await callSection<FinancialsV2>(context, 'financials_v2', language);
-  return overrideFinancialsTable(result, rawEdgar, rawDart, language) ?? DEFAULT_ANALYSIS_DATA.financials_v2;
+  return overrideFinancialsTable(result, rawEdgar, rawDart, language, industryCategory) ?? DEFAULT_ANALYSIS_DATA.financials_v2;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -1183,6 +1195,10 @@ export async function analyzeCompany(
     // 덮어쓰는 데 사용(overrideFinancialsTable) — 없으면 Claude 결과를 그대로 둔다.
     rawEdgar?: EdgarRawSeries | null;
     rawDart?: DartRawSeries | null;
+    // 은행 재무제표 템플릿(2026-08-20) 적용 여부 시도 힌트 — analyze.ts가 fetchFinancialContext()
+    // 직후 classifyIndustryCategory()로 계산해 전달. 미전달 시 overrideFinancialsTable()이
+    // 기본값 'general'로 처리(기존 호출부 회귀 없음).
+    industryCategory?: IndustryCategory;
     // 분석 요청마다 입력받는 목적(매 요청 단위, financial_cache 캐시 키에는 미포함) — 각 섹션
     // 프롬프트 컨텍스트에 해석 레이어로만 얹는다. 톤 분기 로직은 없음(주입 배관만).
     purposeCategory?: string;
@@ -1303,7 +1319,7 @@ export async function analyzeCompany(
         }
         // income_statement/balance_sheet를 EDGAR/DART 원본으로 덮어쓴다 — Rule 5(아래)보다 먼저
         // 적용해야 Rule 5가 서버가 확정한 정확한 데이터를 기준으로 판단한다(순서 중요).
-        if (f) overrideFinancialsTable(f, opts?.rawEdgar, opts?.rawDart, language);
+        if (f) overrideFinancialsTable(f, opts?.rawEdgar, opts?.rawDart, language, opts?.industryCategory);
         // Rule 5: strategy_v2 자유서술이 "N년 평균 성장률"을 주장하는데 financials_v2의 매출 행에서
         // 실제 확인 가능한 인접연도 YoY가 1개 이하면(2개년치로는 "평균"을 낼 수 없음) 표현을
         // "전년 대비 성장률"로 다운그레이드 — 2026-08-13 워트인텔리전스 실측 사고(strategy_v2가
@@ -1420,6 +1436,7 @@ export async function reanalyzeSingleSection(
   language: Language = 'en',
   rawFinancials?: { rawEdgar?: EdgarRawSeries | null; rawDart?: DartRawSeries | null },
   purpose?: { purposeCategory?: string | null; purposeDetail?: string | null },
+  industryCategory: IndustryCategory = 'general',
 ): Promise<any> {
   if (sectionKey === 'founder_v2') {
     return callFounderSection(companyName, language);
@@ -1445,7 +1462,7 @@ export async function reanalyzeSingleSection(
   ].filter(Boolean).join('\n');
   const result = await callSection(context, sectionKey, language);
   if (sectionKey === 'financials_v2' && rawFinancials) {
-    return overrideFinancialsTable(result as FinancialsV2, rawFinancials.rawEdgar, rawFinancials.rawDart, language);
+    return overrideFinancialsTable(result as FinancialsV2, rawFinancials.rawEdgar, rawFinancials.rawDart, language, industryCategory);
   }
   return result;
 }
@@ -1588,16 +1605,32 @@ Rules:
 - Output pure text only — no quotes, no markdown, no explanation of changes.`;
 }
 
+// max_tokens는 "목표 길이"가 아니라 "안전 상한" — 시스템 프롬프트(reformatPurposeSystem)는
+// 여전히 1~2문장 압축을 지시하지만, 입력이 번호 매긴 다항목(5개 등) 구조화된 텍스트일 때는
+// 그 지시를 지키며 압축해도 산출 토큰이 200을 넘는 경우가 실측으로 확인됨(재현 테스트:
+// 동일 5항목 입력을 max_tokens=200으로 3회 호출 중 2회가 정확히 200에서
+// stop_reason='max_tokens'로 잘려 "...메커니즘과"처럼 비문법적으로 종료, 대조군
+// max_tokens=1000에서는 169~237토큰에서 자연 종료). 600은 그 실측 필요량 대비 3배
+// 안전 마진(2026-08-20, truncation 버그 수정).
+const PURPOSE_REFORMAT_MAX_TOKENS = 600;
+
 export async function generateReformattedPurpose(
   purposeCategory: string | null,
   purposeDetail: string,
   language: Language = 'en',
-): Promise<string | null> {
+): Promise<{ text: string | null; truncated: boolean }> {
   const trimmed = purposeDetail.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return { text: null, truncated: false };
   const userPrompt = purposeCategory
     ? `Purpose category: ${purposeCategory}\nUser's raw note: ${trimmed}`
     : `User's raw note: ${trimmed}`;
+
+  const call = () => anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: PURPOSE_REFORMAT_MAX_TOKENS,
+    system: reformatPurposeSystem(language),
+    messages: [{ role: 'user', content: userPrompt }],
+  });
 
   try {
     // 2026-08-17 실측(testPurposeReformatHaikuVsSonnet.ts, ko 오탈자·구어체 3건 + en
@@ -1606,22 +1639,33 @@ export async function generateReformattedPurpose(
     // 자연스러움도 Sonnet 5와 동등, 응답속도는 2배 이상 빠름(~1000ms vs ~2400ms) —
     // 재무 수치를 다루지 않는 순수 표현 정리라 Haiku의 알려진 약점(수치 판단 오류)과
     // 무관해 채택.
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: reformatPurposeSystem(language),
-      messages: [{ role: 'user', content: userPrompt }],
-    });
+    let response = await call();
     logCacheUsage('purpose_reformat', response.usage);
+
+    // stop_reason='max_tokens'는 응답이 문장 중간에서 강제 종료됐다는 뜻 — 무음으로 잘린
+    // 텍스트를 그대로 쓰지 않고 1회 재시도(같은 입력, 같은 max_tokens).
+    if (response.stop_reason === 'max_tokens') {
+      console.warn(`[claude] purpose_reformat truncated (output_tokens=${response.usage.output_tokens}/${PURPOSE_REFORMAT_MAX_TOKENS}) — retrying once`);
+      response = await call();
+      logCacheUsage('purpose_reformat_retry', response.usage);
+    }
+
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
       .join('')
       .trim();
-    return text || null;
+
+    if (response.stop_reason === 'max_tokens') {
+      // 재시도까지 잘리면 그 잘린 텍스트라도 저장(원문 미포맷 폴백보다는 낫다는 판단) —
+      // truncated:true로 호출부에 신호를 보내 무음 저장을 막는다.
+      console.warn(`[claude] purpose_reformat truncated after retry (output_tokens=${response.usage.output_tokens}/${PURPOSE_REFORMAT_MAX_TOKENS}) — saving truncated text`);
+      return { text: text || null, truncated: true };
+    }
+    return { text: text || null, truncated: false };
   } catch (err) {
     console.error('[claude] purpose_reformat FAIL', err);
-    return null;
+    return { text: null, truncated: false };
   }
 }
 

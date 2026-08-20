@@ -6,7 +6,8 @@ import {
   SecBenchmarkComparison, Language,
 } from '../lib/claude';
 import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
-import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines } from '../lib/financialsTableBuilder';
+import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, isGenuineBankData } from '../lib/financialsTableBuilder';
+import { classifyIndustryCategory, IndustryCategory } from '../lib/industryClassification';
 import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
 import {
   extractRevenueTimeSeries, calculateGrowthStats, runRevenueSimulation, getSectorBenchmarkStats,
@@ -45,7 +46,11 @@ async function resolvePurposeDetailFormatted(
   if (trimmedFormatted) return trimmedFormatted;
   const trimmedDetail = purposeDetail?.trim();
   if (!trimmedDetail) return null;
-  return generateReformattedPurpose(purposeCategory ?? null, trimmedDetail, language);
+  const result = await generateReformattedPurpose(purposeCategory ?? null, trimmedDetail, language);
+  if (result.truncated) {
+    console.warn(`[analyze] resolvePurposeDetailFormatted truncated even after retry (purposeCategory=${purposeCategory ?? 'none'}, detailLength=${trimmedDetail.length})`);
+  }
+  return result.text;
 }
 
 // company_id로 상장 정보 조회 — 다중상장 회사(EDGAR+DART 둘 다 있음)면
@@ -275,7 +280,10 @@ async function attachIndustryData(
 
 // ── financial_cache → FinancialsV2 변환 (배치 프리컴퓨트 raw 데이터 → 표시용 구조체) ──
 
-function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' | 'DART', language: Language): FinancialsV2 | null {
+function buildFinancialsV2FromRaw(
+  rawEdgar: any, rawDart: any, source: 'EDGAR' | 'DART', language: Language,
+  industryCategory: IndustryCategory = 'general',
+): FinancialsV2 | null {
   // 표시 언어는 데이터 소스(DART/EDGAR)가 아니라 요청된 language를 따른다 — 미국 기업을
   // KR 모드로 볼 수도, 한국 기업을 EN 모드로 볼 수도 있으므로 소스 국적과 무관하게 분기.
   const t = (ko: string, en: string) => (language === 'ko' ? ko : en);
@@ -311,9 +319,13 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
   // EDGAR/DART 원본 태그값만 사용, EBITDA는 표시하지 않음 — 재무 파생 지표 처리 원칙 참고. Not
   // applicable/Not disclosed 구분, YoY까지 서버가 결정론적으로 계산) — batch3 최종 병합(claude.ts)
   // 시점의 override와 동일한 함수를 재사용해 fin_preview와 최종 결과가 항상 일치하도록 한다.
-  const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language);
-  const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language);
+  const isRows = buildIncomeStatementRows(rawEdgar ?? null, rawDart ?? null, language, industryCategory);
+  const bsRows = buildBalanceSheetRows(rawEdgar ?? null, rawDart ?? null, language, industryCategory);
   const revenueLines = buildRevenueLines(rawEdgar ?? null);
+  // industry_category는 overrideFinancialsTable()과 동일한 게이트로 결정 — fin_preview(이
+  // 함수)와 batch3 최종 결과가 뱃지 판정에서 어긋나지 않도록 한다.
+  const resolvedIndustryCategory: IndustryCategory =
+    (industryCategory === 'bank' && isGenuineBankData(rawEdgar ?? null, rawDart ?? null)) ? 'bank' : 'general';
 
   const isKr   = source === 'DART';
   const name   = rawDart?.corp_name ?? rawEdgar?.ticker ?? '';
@@ -332,6 +344,7 @@ function buildFinancialsV2FromRaw(rawEdgar: any, rawDart: any, source: 'EDGAR' |
   const hasCf = cf.operating !== '—' || cf.investing !== '—' || cf.financing !== '—';
 
   return {
+    industry_category: resolvedIndustryCategory,
     key_bullets: ([
       t(`${srcLbl} 공식 데이터 (${yr}년 기준)`, `${srcLbl} official data (FY${yr})`),
       series.revenue?.[0]        != null ? t(`${yr}년 매출액: ${fmt(series.revenue[0])}`, `FY${yr} Revenue: ${fmt(series.revenue[0])}`) : null,
@@ -495,7 +508,8 @@ router.post('/', async (req: Request, res: Response) => {
 
     const listings = await fetchCompanyListings(companyId ?? company.id);
     const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name, listings);
-    const analysis = await analyzeCompany(name, contextText || undefined, undefined, { rawEdgar, rawDart });
+    const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
+    const analysis = await analyzeCompany(name, contextText || undefined, undefined, { rawEdgar, rawDart, industryCategory });
     fixAllEdgarSourceUrls(analysis, rawEdgar?.cik);
     if (dataSource === 'edgar' && rawEdgar) {
       const secBenchmarkResult = await buildSecBenchmarkComparison(name, rawEdgar).catch(() => EMPTY_SEC_BENCHMARK_RESULT);
@@ -611,11 +625,14 @@ router.post('/reformat-purpose', async (req: Request, res: Response) => {
   const purposeCategory = PURPOSE_CATEGORIES.includes(rawPurposeCategory ?? '') ? rawPurposeCategory! : null;
 
   try {
-    // generateReformattedPurpose() 내부에서 이미 실패를 삼켜 null을 반환하므로,
+    // generateReformattedPurpose() 내부에서 이미 실패를 삼켜 { text: null }을 반환하므로,
     // formatted:null도 200으로 응답 — "정리 실패"는 서버 에러가 아니라 클라이언트가
     // 원문 그대로 진행하는 폴백 UX로 처리할 정상 결과.
-    const formatted = await generateReformattedPurpose(purposeCategory, purposeDetail, language);
-    res.json({ formatted });
+    const result = await generateReformattedPurpose(purposeCategory, purposeDetail, language);
+    if (result.truncated) {
+      console.warn(`[POST /api/analyze/reformat-purpose] truncated even after retry (purposeCategory=${purposeCategory ?? 'none'}, detailLength=${purposeDetail.trim().length})`);
+    }
+    res.json({ formatted: result.text });
   } catch (err) {
     console.error('[POST /api/analyze/reformat-purpose]', err);
     res.status(500).json({ error: '목적 정리 중 오류가 발생했습니다.' });
@@ -867,11 +884,12 @@ router.post('/stream', async (req: Request, res: Response) => {
         const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name, listings);
         send('meta', { isFirstLookup: !isCacheHit });
         const useCachedFin = !skipBatches.has(3) ? cachedFinancials : undefined;
+        const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
 
         // fin_preview: send financials immediately from raw cache if batch 3 hasn't loaded yet
         if (!skipBatches.has(3)) {
           const quickFin = (rawEdgar || rawDart)
-            ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR', language)
+            ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR', language, industryCategory)
             : (useCachedFin ?? null);
           if (quickFin) {
             const previewSource = rawDart ? 'dart' : (rawEdgar ? 'edgar' : dataSource);
@@ -907,7 +925,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               );
             }
           },
-          { skipBatches, initialData, cachedFinancials: useCachedFin, language, rawEdgar, rawDart, purposeCategory, purposeDetail },
+          { skipBatches, initialData, cachedFinancials: useCachedFin, language, rawEdgar, rawDart, industryCategory, purposeCategory, purposeDetail },
         );
 
         if (analysis.sources) await saveSources(cached.id, name, analysis.sources);
@@ -946,11 +964,12 @@ router.post('/stream', async (req: Request, res: Response) => {
 
     const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name, listings);
     send('meta', { isFirstLookup: !isCacheHit });
+    const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
 
     // fin_preview: show financials immediately from raw/cached data if available
     {
       const quickFin = (rawEdgar || rawDart)
-        ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR', language)
+        ? buildFinancialsV2FromRaw(rawEdgar ?? null, rawDart ?? null, rawDart ? 'DART' : 'EDGAR', language, industryCategory)
         : (cachedFinancials ?? null);
       if (quickFin) {
         const previewSource = rawDart ? 'dart' : (rawEdgar ? 'edgar' : dataSource);
@@ -1032,7 +1051,7 @@ router.post('/stream', async (req: Request, res: Response) => {
           }
         }
       },
-      { cachedFinancials, language, rawEdgar, rawDart, purposeCategory, purposeDetail },
+      { cachedFinancials, language, rawEdgar, rawDart, industryCategory, purposeCategory, purposeDetail },
     );
 
     if (savedId && analysis.sources) await saveSources(savedId, name, analysis.sources);
@@ -1136,15 +1155,17 @@ router.post('/reanalyze', async (req: Request, res: Response) => {
 
     let financialCtx: string | undefined;
     let rawFinancials: Parameters<typeof reanalyzeSingleSection>[4];
+    let industryCategory: Parameters<typeof reanalyzeSingleSection>[6];
     if (sectionKey === 'financials_v2') {
       const { contextText, rawEdgar, rawDart } = await fetchFinancialContext(name);
       financialCtx = contextText || undefined;
       rawFinancials = { rawEdgar, rawDart };
+      industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
     }
 
     const data = await reanalyzeSingleSection(name, sectionKey, financialCtx, language, rawFinancials, {
       purposeCategory: existing?.purpose_category, purposeDetail: existing?.purpose_detail,
-    });
+    }, industryCategory);
 
     if (!data) {
       res.status(422).json({ error: '재분석 결과를 얻지 못했습니다. 잠시 후 다시 시도해주세요.' });

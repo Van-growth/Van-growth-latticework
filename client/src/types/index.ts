@@ -383,6 +383,9 @@ export interface FinancialsV2BSRow {
 }
 
 export interface FinancialsV2 {
+  // 은행 재무제표 템플릿(2026-08-20) 적용 여부 — 서버가 isGenuineBankData() 게이트를
+  // 통과했을 때만 'bank'로 기록(오분류 방지, 상세는 서버 claude.ts 참고).
+  industry_category?: 'bank' | 'general';
   income_statement: FinancialsV2Row[];
   // 회사가 실제 10-K에서 라인 구분해 공시한 매출만(서버가 R.htm에서 직접 파싱, Claude 미생성) —
   // 라인 구분이 없는 회사는 undefined, EDGAR 전용(DART는 스코프 밖). 2026-08-15 신설.
