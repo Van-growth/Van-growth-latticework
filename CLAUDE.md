@@ -486,7 +486,13 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 
 ### 2. 섹션별 데이터 소스 우선순위
 ```
-재무수치:    DART > EDGAR > FMP > StockAnalysis > 웹검색
+재무수치:    (한글 기업명) DART → 실패 시 EDGAR 폴백
+            (비한글 기업명) EDGAR+FMP 동시 시도 → 둘 다 실패 시 DART 폴백
+            (한미 동시상장, company_dual_listings_manual 등록) EDGAR → DART → 웹추정
+            (상세는 5번 "다중상장 회사 재무 우선순위" 참고)
+            모든 경로 공통 최종 폴백: 웹검색 (FMP/StockAnalysis는 별도 API 계층이
+            아니라 이 웹검색 단계에서 Claude가 참고하는 후보 사이트일 뿐, 독립된
+            우선순위 단계가 아님)
 시세/밸류:   TradingView > KIS > 웹검색
 텍스트분석:  Claude 웹검색 기반 (L2/L3)
 창업자정보:  LinkedIn > Crunchbase > TheVC > 언론
