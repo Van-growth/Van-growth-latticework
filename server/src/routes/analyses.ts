@@ -125,6 +125,15 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     const row = analysisRes.data;
+    // 개인정보 보호(2026-08-21) — purpose_category/purpose_detail(Formatted)는 유저가 매
+    // 분석마다 입력하는 개인/비즈니스 의도 텍스트라, 이 컬럼이 도입되기 전(2026-07-16)에
+    // 확립된 "GET /:id는 무인증이어도 콘텐츠 자체는 공용이라 괜찮다"는 판단(Security
+    // Principles 실전 발견 이력 16번)의 전제가 이 세 필드엔 적용되지 않는다 — 소유자
+    // 본인에게만 노출한다. created_by가 NULL인 레거시 행(2026-07-16 이전 생성분)은
+    // assertShareOwner()의 "누구나 허용" 관례와 달리 여기서는 검증된 소유자가 없다는
+    // 뜻이므로 보수적으로 아무에게도 노출하지 않는다 — 실측 확인(2026-08-21): created_by
+    // NULL인 118개 행 중 purpose_category/purpose_detail이 채워진 행은 0건이라 실질 영향 없음.
+    const isOwner = !!authUser && !!row.created_by && row.created_by === authUser.id;
     res.json({
       id: row.id,
       companyName: (row.companies as unknown as CompanyRef)?.name ?? '',
@@ -147,12 +156,15 @@ router.get('/:id', async (req: Request, res: Response) => {
       financials_structured: row.financials_structured ?? null,
       sources: row.sources ?? {},
       dataSource: (row.data_source ?? 'web_search') as 'dart' | 'edgar' | 'web_search',
-      // 2026-08-17 PDF 표지 목적 표시 작업 계기로 추가 — 이 행 자체가 어떤 목적으로
-      // 생성됐는지(purpose_category가 없던 과거 분석은 둘 다 null). select('*')라 컬럼
-      // 자체는 이미 조회돼 있었고, 응답 객체에 매핑만 빠져있었다.
-      purposeCategory: row.purpose_category ?? null,
-      purposeDetail:   row.purpose_detail ?? null,
-      purposeDetailFormatted: row.purpose_detail_formatted ?? null,
+      // 2026-08-17 PDF 표지 목적 표시 작업 계기로 추가, 2026-08-21 소유자 전용으로 축소
+      // (위 isOwner 주석 참고) — 비소유자 응답엔 이 3개 키 자체가 없다(null 아님, 필드
+      // 부재). 프론트는 이미 `data.purposeCategory && (...)` 가드라 undefined에서 자동으로
+      // 안전하게 숨겨진다(AnalysisCard.tsx:3208, AnalysisPdf.tsx:778 확인).
+      ...(isOwner ? {
+        purposeCategory: row.purpose_category ?? null,
+        purposeDetail:   row.purpose_detail ?? null,
+        purposeDetailFormatted: row.purpose_detail_formatted ?? null,
+      } : {}),
       createdAt: row.created_at,
       is_shared: row.is_shared ?? false,
       share_token: row.share_token ?? null,

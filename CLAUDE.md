@@ -1735,6 +1735,17 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   기준). 실 Claude 호출로 검증(Synchrony: 라벨/값/YoY 계산 전부 정확, Apple 회귀 없음).
   프론트(`AnalysisCard.tsx`의 `MetricCard`)는 `key_metrics[].label`이 이미 완전히
   동적이라 수정 불필요.
+- [x] `GET /api/analyses/:id`의 purpose_category/purpose_detail(Formatted) 타 계정 유출
+  수정 (2026-08-21, 긴급 프라이버시 조사) — 이 엔드포인트가 무인증+소유권체크 없이
+  유저가 입력한 개인/비즈니스 의도 텍스트를 원문 그대로 반환하고 있었음(실측: 계정A가
+  "로킷헬스케어 채널 파트너십 제안" 목적을 입력한 리포트를 계정B/비로그인이 그대로
+  열람 가능). `row.created_by === authUser.id`(둘 다 존재할 때만)인 경우에만 이 3개
+  필드를 응답에 포함하도록 수정 — 비소유자 응답엔 필드 자체가 없음(null 아님). 무인증
+  자체(콘텐츠 열람)는 기존 의도된 설계라 이번 스코프에서 안 건드림 — purpose 필드만
+  좁혀서 수정. `created_by IS NULL`인 레거시 행 118개 중 purpose_category가 채워진
+  행은 0건 실측 확인(레거시 행 소유자 접근 차단 우려는 기우로 확인). 소유자/타계정/
+  비로그인 3개 시나리오 실제 DB 행으로 검증 완료, 프론트(`AnalysisCard.tsx`/
+  `AnalysisPdf.tsx`)는 이미 `data.purposeCategory && (...)` 가드라 수정 불필요.
 
 ## Security Principles (SSOT)
 
