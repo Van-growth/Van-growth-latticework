@@ -433,7 +433,7 @@ const ko: UiStringDict = {
     openAria: 'Ben 열기',
     hint: '이 분석 결과를 기반으로 질문해보세요.',
     contextLabel: (companyName: string) => `이 리포트: ${companyName}`,
-    nudgeBanner: '더 궁금한 점은 Ben에게 물어보세요',
+    nudgeBanner: '더 궁금한 점은 우측 상단 Ben에게 물어보세요',
     greeting: (companyName: string) => `${companyName}에 관해 무엇을 도와드릴까요?`,
   },
   profileForm: {
@@ -661,7 +661,7 @@ Start each item with ✅ Good / ⚠️ Caution / ❌ Weak, followed by a one-lin
     openAria: 'Open Ben',
     hint: 'Ask questions grounded in this report.',
     contextLabel: (companyName: string) => `This report: ${companyName}`,
-    nudgeBanner: 'Have more questions? Ask Ben.',
+    nudgeBanner: 'Have more questions? Ask Ben at the top right.',
     greeting: (companyName: string) => `What would you like to know about ${companyName}?`,
   },
   profileForm: {
