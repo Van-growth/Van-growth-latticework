@@ -9,35 +9,63 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-19
-**커밋**: `e5ff960`, `0336abe`, `bd995b2` (전부 푸시 완료) — PDF 버튼 조건 변경 1건은
-미커밋 상태로 세션 종료(아래 "남음" 참고)
+**날짜**: 2026-08-21
+**커밋**: `b439610`, `705c49b`, `bb227f9`, `d426e59`, `2c68a86`, `4320547`, `88d35dd`,
+`15de7a6`, `4921d23` (전부 푸시 완료) — PDF 버튼 조건 변경 1건은 여전히 미커밋
+상태(아래 "남음" 참고, 변동 없음). 이 CLAUDE.md 문서 정합성 정정 자체는 이번 커밋에
+함께 포함.
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI/대시보드 접근 수단이 없음
-(반복 확인된 제약, 변동 없음). push는 완료됐으니 GitHub 연동 자동배포가
-트리거됐을 가능성 높음 — 실제 반영 여부는 Render 대시보드에서 직접 확인 필요.
+(반복 확인된 제약, 변동 없음).
 
 ### 완료
-- Pain Diagnosis 노란색 강조 제거(웹 sticky 그리드/본문 섹션 헤더/PDF 헤더 박스
-  3곳) + 섹션 순서 재배치(요약→산업역사·기술진화→...→넛지→출처, 웹 그리드/본문/
-  PDF 목차/PDF 페이지 4곳 동일 적용, PDF 섹션 번호 재넘버링) — Playwright 스크린샷
-  + PyMuPDF PDF 렌더로 검증 (`e5ff960`)
-- `purpose_detail_formatted` 서버 폴백 — "재분석하기" 등 사전 확인 다이얼로그를
-  안 거치는 경로에서 항상 비어있던 설계 시점 커버리지 공백을
-  `resolvePurposeDetailFormatted()`(batch1 insert/캐시 업데이트 지점)로 수정,
-  기존 레코드 백필은 안 함(자연 해소 방침) (`e5ff960`)
-- `text-navy-900`(정의 안 된 shade, 컴파일된 CSS에 규칙 0건 실측 확인) 참조로
-  다크모드 OS에서 텍스트 안 보이던 버그 — `PreAnalysisConfirmModal.tsx`/
-  `BenPanel.tsx` 2곳 `navy-800`으로 교체, `colorScheme: 'dark'` 에뮬레이션
-  스크린샷으로 검증 (`0336abe`)
-- 리포트 헤더 버튼 줄(즐겨찾기/전체복사/이 탭 복사) 레이아웃 회귀 수정 — 어제
-  `f29bbc6`(목적텍스트 truncate 제거)의 부작용으로 목적 배지가 길면 버튼 줄이
-  회사명 옆이 아니라 다음 줄로 밀리던 것을, 목적 배지를 flex row 밖으로 분리해
-  해결(375~393px 모바일 wrap은 그대로 보존) + 즐겨찾기 버튼 텍스트 라벨(KR"즐겨찾기"/
-  EN"Favorite") 추가, 상태 무관 고정 라벨로 버튼 폭 흔들림 방지 (`bd995b2`)
-- 이번 세션에서 `npx playwright`(chromium)로 실제 브라우저 스크린샷 자동화가
-  가능함을 확인 — 이전 세션들의 "브라우저 자동화 도구 없음" 제약이 최소
-  Playwright 직접 구동 경로로는 더 이상 유효하지 않음(로그인 필요한 플로우는
-  여전히 실 계정 없이는 막힘, 이건 별개)
+- 은행 업종 재무제표 템플릿 1단계 — SIC/KSIC 게이트로 은행업 후보(EDGAR SIC
+  6020-6036/6099/6199/6712/6719, DART KSIC `64xxx`)를 넓게 잡고, 구조적 핵심 계정
+  (대출채권/예금) 존재 여부로 실제 적용을 좁게 재확인하는 `isGenuineBankData()` 게이트로
+  표준 3항목(매출/매출총이익/영업이익) 대신 은행 전용 계정(이자수익/이자비용/순이자수익
+  등)을 `financials_v2`에 적용 + DART 계정명 공백 정규화 버그 동시 수정 (`b439610`)
+- purpose 재구성 truncated 플래그 전체 배관 완성 — `generateReformattedPurpose()`의
+  max_tokens/stop_reason 재시도 자체는 이전 세션에 이미 구현돼 있었으나, 잘렸다는
+  사실(`truncated`)이 라우트→클라이언트→DB까지 전달되지 않던 공백을 마이그레이션
+  (`purpose_detail_formatted_truncated`, prod만 적용) + `resolvePurposeDetailFormatted()`/
+  `POST /reformat-purpose`/`PreAnalysisConfirmModal.tsx` 수정으로 해소, 잘린 경우
+  모달에 안내 문구 노출 (`705c49b`)
+- DART 재무 데이터가 새 사업보고서 발행 후에도 영영 갱신 안 되던 버그의 근본원인
+  3가지 수정 — (1) `dartBatchPrecompute.ts`의 하드코딩 `YEARS` 배열을 매년 손으로
+  안 고쳐도 되는 `getRecentFiscalYears()`(신규 `fiscalYears.ts`, `dart.ts`/배치
+  스크립트 공유)로 교체, (2) "재무 데이터 새로고침" 버튼이 실제로는 90일 캐시를
+  그대로 반환하던 것을 `force` 파라미터로 캐시 우회하도록 수정, (3) 라이브 재조회
+  결과가 `financial_cache`에 다시 기록되지 않아 매번 재조회하던 것을
+  `upsertFinancialCache()`로 해소 — Synchrony Financial/데이원컴퍼니로 재현 확인 (`bb227f9`)
+- DART/EDGAR 회사명 유사매칭이 임의 후보를 집던 버그 + API 오류를 "데이터 없음"으로
+  오인하던 버그 수정 — 근거 없는 `.limit(1)`을 상장여부/이름길이 기준 명시적
+  랭킹(`pickBestFuzzyMatch`/`pickBestCikMatch`)으로 교체, `matchTier`/`hasFetchError`
+  신호를 생성만 하던 것을 `financialContext.ts`의 실제 폴백 분기(6개 성공 조건)까지
+  연결해 API 오류 시엔 캐시에 쓰지 않고 정상 폴백하도록 수정 — 실제 DART/EDGAR
+  호출로 검증 (`d426e59`)
+- AI 비서 "Ben" 발견성 개선 3건 — 헤더 아이콘에 미확인 뱃지(localStorage 추적, 패널을
+  한 번 열면 영구히 사라짐) + 리포트 전 섹션 하단 넛지 배너 추가(`2c68a86`), 배너
+  문구에 "우측 상단" 위치 안내 추가(`4320547`), 패널이 리포트 자체 저장 언어 대신
+  전역 언어 토글을 쓰던 버그 수정 — EN 리포트(NVIDIA CORP)에서 한글 인사말이 뜨는
+  것을 실측으로 발견 후 수정, `AnalysisCard.tsx`의 기존 `reportLanguage` 패턴과
+  동일하게 통일 (`88d35dd`)
+- CLAUDE.md 재무수치 데이터 소스 우선순위 표 정정 — 한글기업명/비한글기업명/
+  다중상장 3갈래 분기를 명시하고, FMP/StockAnalysis가 독립된 우선순위 단계가
+  아니라 웹검색 폴백 내부에서 Claude가 참고하는 후보 사이트일 뿐임을 명확화 (`15de7a6`)
+- "재분석하기"(`handleForceRefresh`)가 신규 검색과 다른 경로로 동작해 목적 확인
+  모달을 건너뛰던 문제를 `PreAnalysisConfirmModal` 공용 흐름으로 통합(`pendingAnalysis`
+  상태 도입) + 이전 분석의 purpose를 프리필. 조사 중 발견한 별개 버그 — URL 직접
+  진입(`/?id=...`)/히스토리 경로로 로드한 리포트는 `isCached`가 한 번도 true가 안 돼
+  재분석 배너 자체가 안 뜨던 gap — 도 같은 세션에서 함께 수정 (`4921d23`)
+- AI 비서 "Ben" 신규 구현(`7b70a84`, 2026-08-16, 이전 Handoff 주기에 누락됐다가
+  이번에 소급 기록) — 상세는 위 "완료" 목록 "AI 비서 'Ben' 신규 구현 + 발견성
+  개선 3건" 항목 참고. 같은 커밋에서 ICP 인사이트 기능이 완전히 삭제됨(아래 참고)
+- CLAUDE.md 전체 vs 실제 코드 정합성 감사(5개 병렬 조사 + 직접 조사) — ICP 인사이트가
+  이미 삭제됐는데 문서엔 핵심기능으로 남아있던 것, AI비서가 Ben으로 재구현됐는데
+  백로그엔 "미착수"로 남아있던 것, `analyses` 캐시 TTL "24시간" 문서 vs 실제
+  무기한, 창업자정보 데이터소스 문서(LinkedIn>Crunchbase>TheVC>언론) vs 실제(자유
+  web_search 3쿼리) 등 다수 불일치 발견 → 이번 문서 정정으로 반영. 신규 기술부채
+  3건도 등록(TradingView 죽은 컴포넌트, `rate_limited` 언어 하드코딩, 트리거이벤트
+  표기 재검토) — 상세는 백로그 🟡 2순위 참고
 
 ### 남음
 - **PDF 다운로드 버튼 노출 조건 `isAdmin`→`isLoggedIn` 변경 — 코드 수정은 끝났고
@@ -63,6 +91,12 @@
 - Ben 채팅 실제 브라우저 검증 — Anthropic 한도 해제(2026-09-01) 이후(누적 이월)
 - PDF 서버사이드 이전 + 이메일 알림 — 사용자 별도 세션 명시 지정(누적 이월)
 - 백그라운드 폰트 프리페치 적용 여부 — 사용자 요청 시 별도 세션(누적 이월)
+- summary_v2(배치1) KPI 카드가 financials_v2(배치3) 은행 템플릿과 무관한 별도
+  텍스트 경로(`financialContext.ts`의 `buildEdgarContext`/`buildDartContext`)를 써서,
+  은행 기업(Synchrony Financial 실측)은 재무 탭은 정상인데 요약 탭 KPI만 "확인
+  필요"로 남는 불일치 확인(2026-08-21 조사, 수정 안 함) — 순서 문제 아니라 배선
+  누락: `industryCategory`는 배치1 시작 전 이미 resolve돼 있으나(`analyze.ts:516,980`)
+  `phase1Context`/`sharedContext` 빌더가 이 값을 안 받음. 다음 세션 후보
 
 ### 발견 (미처리)
 - PDF 생성(`pdf().toBlob()`) 헤드리스 브라우저 테스트에서 6분+ 소요, 다운로드
@@ -78,11 +112,21 @@
 - typeahead 랭킹 알파벳순 한계, corp_master 정기 갱신 미자동화, 크레딧 시스템
   카피만 존재, DART 현금흐름표 파이프라인 공백 — 전부 기존 기록, 변동 없음
 - Anthropic API 계정 사용량 한도(2026-09-01 재개), 비용/토큰 실측 인프라 부재
+- TradingView 위젯 죽은 컴포넌트 + 시가총액 카드 공백 가능성 (백로그 🟡 신규 등록,
+  UI 실측 필요)
+- `rate_limited` 메시지 언어 하드코딩 (백로그 🟡 신규 등록)
+- 은행 업종 요약 탭 KPI 미반영(위 "남음" 참고) — 실측 영향 범위는 현재 캐시 기준
+  Synchrony Financial 1개사뿐(prod DB 직접 조회, 2026-08-21), 다만 `analyses` 캐시가
+  무기한이라 향후 분석되는 모든 은행 기업에 동일하게 재발함. 보험/증권은
+  `industryClassification.ts`에 아직 코드 자체가 없음(2단계 스코프, 미착수)
 
 ### 다음 세션 우선순위
 1. PDF 다운로드 버튼 검증 마무리(실제 다운로드 완주 확인) → 임시 테스트 파일
    정리(`testpdfbutton/`, `_shot_pdfbtn*.js`) + `AuthContext.tsx` export 원복 →
    커밋/푸시
+2. summary_v2 KPI 카드에 은행 계정과목(순이자수익 등) 반영 여부 결정 + 구현
+3. TradingView 죽은 컴포넌트 처리 방향 결정(위젯 실제 연결 vs 숨김 로직 제거)
+4. `rate_limited` 메시지 언어 대응 수정
 
 ## Vision & Mission
 
@@ -495,7 +539,11 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
             우선순위 단계가 아님)
 시세/밸류:   TradingView > KIS > 웹검색
 텍스트분석:  Claude 웹검색 기반 (L2/L3)
-창업자정보:  LinkedIn > Crunchbase > TheVC > 언론
+창업자정보:  Claude 웹검색 기반, 쿼리 3개 순차 실행("founder CEO 배경" →
+            "serial entrepreneur/exit 이력" → "investor/board advisor") —
+            LinkedIn/Crunchbase는 "출처로 인용하라"는 지시문에만 등장할 뿐 개별 API
+            연동 없음, TheVC는 코드베이스 전체에 문자열 자체가 존재하지 않음
+            (`callFounderSection()`, `server/src/lib/claude.ts`)
 트리거이벤트: EDGAR 8-K > DART 유상증자공시 > 웹검색
 ```
 
@@ -882,7 +930,10 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
 - 절대 금지: 프론트엔드 토글/탭으로 "캐시 있음/없음" 두 상태를 유저가 선택하게 하는 UI
   (이건 순수 서버사이드 조건 분기이며 유저는 하나의 결과 화면만 봄 — `HomeContent.tsx`의
   `resolveResult.cached` 하나로만 분기)
-- 기존 24시간 캐시/무기한 TTL 정책 그대로 재사용, 실제 분석 로드도 기존
+- 기존 `analyses` 캐시 정책 그대로 재사용(무기한 — `forceRefresh: true`로 명시적
+  재분석해야만 갱신, 만료 쿼리 자체가 없음. `financial_cache`/`financials_v2_cache`만
+  90일 TTL이 있고 이 둘은 서로 다른 캐시임 — 상세는 "DB schema" `analyses`/
+  `financial_cache` 항목 참고), 실제 분석 로드도 기존
   `GET /api/analyses/:id` 그대로 재사용 — 새 캐시 정책 안 만듦
 - `GET /api/companies/autocomplete`(이미 분석 이력 있는 기업만 보여주던 중복 방지용
   typeahead)는 이 흐름으로 완전히 대체되어 제거됨
@@ -1015,7 +1066,8 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
 ① 기업 검색 및 분석 생성
    - 기업명 입력 → Claude + 웹검색으로 분석 생성
    - 한국/미국 기업 모두 지원 (DART + EDGAR)
-   - 24시간 캐시 히트 (동일 기업 재조회 시 즉시 로드)
+   - 캐시 히트 시 즉시 로드 (`analyses` 행 존재 시 무기한 — 만료 쿼리 없음,
+     `forceRefresh: true`로 명시적 재분석 전까지 계속 재사용됨)
    - 배치 구조로 요약 탭 먼저 표시 → 나머지 배치는 전부 동시 병렬 실행, 완료되는 대로 반영
      (번호 순서 보장 없음 — 상세는 아래 "분석 배치 구조" 참고)
 
@@ -1077,7 +1129,10 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
    - 세일즈/BD/전략 담당자별 해석 다르게 출력
 
 ⑤ AI 비서
-   - 분석 결과 기반 질문/답변 (현재 우측 패널)
+   - "Ben" — 분석 결과 화면 우측 상단 아이콘 → 슬라이드 패널, 채팅형 SSE 스트리밍
+   - 활성 상태(2026-08-16 커밋 `7b70a84`로 재구현, `BenLauncher.tsx`/`BenPanel.tsx`/
+     `server/src/routes/ben.ts`) — 분석당 대화 1개 저장, 로그인 필수, 일 40메시지
+     레이트리밋(`ben_message_usage`). 공유 링크(`/share/*`)에는 미노출.
 
 ⑥ 공유
    - 분석 결과 링크 공유
@@ -1131,7 +1186,24 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
 - [ ] EDGAR 태그 매핑 강화 + FMP 폴백
 - [ ] 한국 주식 KRX 티커 매핑
 - [ ] 산업군별 정리
-- [ ] AI 비서 재활성화 (현재 코드 주석 처리됨)
+- [ ] **TradingView 위젯 죽은 컴포넌트 + 시가총액 카드 공백 가능성** (2026-08-21
+  전수조사에서 발견) — `TradingViewWidget.tsx`는 실제 구현체가 존재하지만
+  client 전체에서 import하는 곳이 0건(죽은 컴포넌트). 그런데 `AnalysisCard.tsx`는
+  ticker 있는 기업의 시가총액 카드를 "TradingView가 그 자리를 대체한다"는 주석과
+  함께 여전히 숨기고 있어, 실제로는 그 자리가 아무것도 안 그려진 채 비어있을
+  가능성 — 코드 근거로만 확인됨, 실제 화면 렌더 여부는 미실측. 위젯을 실제로
+  붙이거나, 숨김 로직을 제거하거나 결정 필요.
+- [ ] **`rate_limited` 안내 메시지 언어 하드코딩** (2026-08-21 전수조사에서 발견) —
+  `analyze.ts`의 `rate_limited` SSE 이벤트 메시지가 `language` 파라미터와 무관하게
+  항상 한국어로 고정 — 언어 정책(EN/KR 분리) 위반. EN 리포트 생성 중 요청 제한에
+  걸리면 영어권 유저에게도 한국어 안내가 뜬다.
+- [ ] **트리거이벤트 우선순위 표기 재검토** (2026-08-21 전수조사에서 발견, 우선순위
+  미정) — "섹션별 데이터 소스 우선순위" 표의 `트리거이벤트: EDGAR 8-K > DART
+  유상증자공시 > 웹검색` 표기가 재무수치와 마찬가지로 실제로는 "우선순위 폴백"이
+  아니라 회사가 어느 소스(EDGAR/DART)에 속하는지로 완전히 분리된 두 독립
+  파이프라인 — `>` 표기가 "실패 시 다음 시도"로 오인될 소지 있음. 재무수치 표는
+  이미 이번 세션(`15de7a6`)에 이 방식으로 정정됨 — 트리거이벤트도 동일하게 정정할지
+  판단 필요, 이번엔 반영 안 함.
 - [ ] **DART 현금흐름표 데이터 수집** (2026-08-16 PDF 개편 조사에서 발견) — 현재
   `dart.ts`가 쓰는 `fnlttSinglAcnt.json`(단일회사 주요계정 요약)은 구조적으로
   현금흐름표를 포함하지 않아 전 DART 소스 기업의 현금흐름이 항상 빈 상태(웹 재무
@@ -1189,6 +1261,11 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
     데이터에 근거한 질문 후보를 직접 만들어두고 ICP 탭에서 선별만 하는 구조로 결정.
     상세는 아래 "✅ 완료"와 Architecture 섹션 참고 — 이 항목(트리거 패턴 라이브러리)은
     설계 참고용으로만 남겨두고 더 이상 진행하지 않음.
+  - **(2026-08-21) 최종 결론 — 이 항목 자체가 완전히 종결됨.** discovery_questions
+    2단계 통합(2026-08-15)이 구현→2026-08-16 삭제(`7b70a84`)까지 이미 끝났고, 그
+    자리는 "정해진 질문 세트를 미리 뽑기"가 아니라 "유저가 그때그때 물어보는 채팅형"
+    (Ben, 기능 정의 섹션 ⑤ AI 비서 참고)이 대신하기로 확정됨. 트리거 패턴 라이브러리
+    방향으로 재시도할 계획 없음 — 백로그 항목 종료.
 - [ ] **비정형 신호 수집 (Unstructured signal harvesting)** — 채용공고/신규채용 트렌드를
   트리거 이벤트 후보로 쓰는 아이디어(근거: u/weisswurstseeadler 실전 사례, 위 "시장
   검증 현황 — 레딧" 참고). Greenhouse/Lever 같은 공개 ATS API로 채용 데이터를 저비용
@@ -1231,7 +1308,8 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
 - [x] 밸류체인 세로 구조 (업스트림→다운스트림 ↓ 화살표)
 - [x] 더 보기/접기 토글 (ShowMore)
 - [x] PDF 온디맨드 생성 (pdf().toBlob()) (관리자 전용 노출, 2026-07)
-- [x] AI 비서 우측 패널 임시 제거 (단일 컬럼)
+- [x] AI 비서 우측 패널 임시 제거 (단일 컬럼) — **2026-08-16 "Ben"으로 완전
+  재구현되어 재활성화됨, 아래 신규 완료 항목 참고**
 - [x] 스켈레톤 UI (sentinel completedBatches Set([-1]))
 - [x] gatherResearch 통합 웹검색 (1 pass 공유, 중복 제거, maxRounds=4)
 - [x] SEC EDGAR fetch 차단 (속도 개선, 5s timeout)
@@ -1399,7 +1477,9 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   과정에서 평균이 소표본 극단치에 취약한 문제(SIC 6411 보험중개업 부채/자본 비율이 평균
   10,749%로 왜곡)를 발견해 중앙값 전환 + 분모 최소 기준 상향(매출 $10M/자본·자산 $5M)으로
   해결 — Quality Gate 원칙 섹션에 일반 원칙으로 기록됨.
-- [x] ICP 인사이트 탭 → discovery_questions 2단계 통합 (2026-08-15) — 5카테고리
+- [x] ~~ICP 인사이트 탭 → discovery_questions 2단계 통합~~ (2026-08-15, **2026-08-16
+  커밋 `7b70a84`로 완전히 삭제되고 "Ben" 채팅 어시스턴트로 대체됨 — 아래는 삭제 전
+  기록**) — 5카테고리
   insight+consequence 생성(2026-08-13) 대신, summary_v2/financials_v2/business_model_v2/
   competitors_v2/value_chain_v2/strategy_v2/industry_history_v2/tech_evolution_v2/founder_v2
   9개 섹션이 각자 프롬프트에서 `discovery_questions: string[]`(3-5개, 발표형 금지·질문형만,
@@ -1625,6 +1705,21 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   빈 별 아이콘만으로 on/off를 전달하는 쪽을 선택 — `aria-label`/`title`(접근성)은 기존
   `favoriteAdd`/`favoriteRemove` 상태별 문구 그대로 유지. 히스토리 페이지의 아이콘 전용
   별표 토글(리스트 행)은 스코프 밖이라 미변경. `tsc --noEmit`/eslint 클린.
+- [x] AI 비서 "Ben" 신규 구현 + 발견성 개선 3건 (2026-08-16~21) — 예전에 미완성 상태로
+  주석 처리돼 있던 우측 패널(`AiAssistantPanel.tsx`)을 되살려 재작성: 단발 POST →
+  SSE 스트리밍, 드래그 리사이즈 → 기본/넓게 2단 폭 토글, "Ben"으로 리브랜딩+다국어화.
+  신규 Express 엔드포인트(`server/src/routes/ben.ts`, `GET/POST/DELETE
+  /api/analyses/:id/ask`)로 인증(하드 401)+레이트리밋(일 40메시지, `benUsage.ts`)
+  적용 — 죽은 `/api/chat`(Next.js, 인증 없음)은 되살리지 않고 완전 삭제. 시스템
+  프롬프트는 정적 규칙+분석 데이터 2개 cache_control 브레이크포인트 분리
+  (`benContext.ts`). 같은 흐름에서 ICP 인사이트 기능은 완전히 삭제(위 "✅ 완료"의
+  ICP discovery_questions 항목/Architecture 섹션 정정 배너 참고) (`7b70a84`). 이후
+  세션(2026-08-21)에서 발견성 개선 — 헤더 아이콘 미확인 뱃지(localStorage, 열면
+  사라짐) + 전 리포트 섹션 하단 넛지 배너(`2c68a86`), 배너 문구에 "우측 상단" 위치
+  안내 추가(`4320547`), 패널이 전역 언어 토글 대신 리포트 자체 저장 언어
+  (`analysisData.language`)를 쓰도록 버그 수정 — EN 리포트에서 한글 인사말이 뜨는
+  것을 실측으로 발견 후 수정, `AnalysisCard.tsx`의 기존 `reportLanguage` 패턴과
+  동일하게 통일 (`88d35dd`).
 
 ## Security Principles (SSOT)
 
@@ -2577,6 +2672,15 @@ override가 실제로 걸렸는지)부터 먼저 확인할 것.
 
 ### ICP 인사이트 discovery_questions 2단계 통합 (2026-08-15)
 
+**⚠️ 2026-08-21 정정 — 이 기능은 완전히 삭제됨.** 커밋 `7b70a84`(2026-08-16 14:43,
+"remove ICP Insights, add Ben chat assistant")로 `discoveryQuestions.ts`/`icpInsights.ts`
+삭제, `curateDiscoveryQuestions`/`generateBenchmarkDiscoveryQuestion`과 9개 섹션 스키마의
+`discovery_questions` 필드 전부 제거, `POST /:id/icp-insight` 라우트 제거, 클라이언트
+`IcpInsightTab`/`IcpRatingWidget`/`SharedIcpQuestionsTab` 전부 제거됨 — 아래 서술은
+당시 시점(2026-08-15~17) 기록으로만 유지, 현재 코드와는 무관. `icp_insights` 테이블
+자체는 삭제 안 됨(데이터 보존, 참조만 중단). 대체 기능은 아래 "AI 비서 'Ben' 신규 구현"
+완료 항목 참고.
+
 **배경**: ICP 인사이트 탭이 5카테고리(financial/investment/technology/competitive/market)
 신호 중 실제로 신호가 있는 카테고리만 insight+consequence를 생성하다 보니, 보통 3개 안팎으로만
 채워져 빈약했음(백로그 "ICP 맞춤형 인사이트 탭" 항목 참고). 카테고리별 함의 템플릿을 미리
@@ -2655,6 +2759,10 @@ string[]`)로 두고, 후보 수집 시 `?? []`로 방어해 크래시 없이 �
 필드 스테일 이슈와 동일 원칙).
 
 ### 공유 링크/PDF ICP 노출 범위 확정 (2026-08-15)
+
+**⚠️ 2026-08-21 정정 — 이 섹션이 다루는 ICP Insights 기능 자체가 삭제됨(`7b70a84`,
+위 "ICP 인사이트 discovery_questions 2단계 통합" 섹션 상단 정정 참고). 아래는 당시
+기록으로만 유지.**
 
 **정정**: 2026-08-13에 결정됐던 "공유 링크는 원 분석자 본인의 ICP 그대로 보임" 방침을 아래로
 번복한다 — **공유 링크/PDF에는 discovery_questions 결과만 노출하고 ICP 원문(제품/타겟산업/
@@ -2779,7 +2887,9 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
 | v2.7.0 | 2026-08-15 — ICP 인사이트 탭 discovery_questions 2단계 통합: 9개 섹션이 각자
   질문 후보(discovery_questions)를 생성해두고 ICP 탭이 3-5개만 선별(ICP 없으면 결정론적
   선택, 있으면 Claude 큐레이션 + id 기반 근거 검증). 5카테고리 insight+consequence 방식을
-  대체. 상세는 위 Architecture 섹션 "ICP 인사이트 discovery_questions 2단계 통합" 참고. |
+  대체. **2026-08-16 커밋 `7b70a84`로 이 기능 자체가 삭제되고 Ben 채팅 어시스턴트로
+  대체됨(v2.10.0 이전, 문서화 누락됐다가 2026-08-21 정정) — 상세는 위 Architecture
+  섹션 "ICP 인사이트 discovery_questions 2단계 통합" 상단 정정 배너 참고.** |
 | v2.8.0 | 2026-08-15 — 재무제표 표시 원칙 5가지 확정(EBITDA 미표시/Gross Profit 원본 태그만/
   매출 라인은 F/S 그대로/10-K only/FY 라벨 그대로) + `financials_v2.revenue_lines` 신설
   (SEC R.htm 직접 파싱으로 세그먼트·제품 매출 라인 확보, EDGAR 전용) + `summary_v2.products`/
