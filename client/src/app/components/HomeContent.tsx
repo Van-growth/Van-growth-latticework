@@ -37,6 +37,9 @@ const PENDING_INDUSTRY_SELECTION_KEY = 'pending_industry_company_selection';
 // 즐겨찾기는 /history 라우트로 각각 독립.
 const PURPOSE_CATEGORIES = ['ma', 'investment', 'partnership', 'customer', 'other'] as const;
 type PurposeCategory = (typeof PURPOSE_CATEGORIES)[number];
+function isValidPurposeCategory(c: string | null | undefined): c is PurposeCategory {
+  return !!c && (PURPOSE_CATEGORIES as readonly string[]).includes(c);
+}
 
 function daysAgo(iso: string | null): number {
   if (!iso) return 0;
@@ -166,6 +169,10 @@ export default function HomeContent() {
   // 'success'(정리된 텍스트 있음), 'error'(호출 실패 — 원문 그대로 진행 폴백 UX용).
   const [preAnalysisCheck, setPreAnalysisCheck] = useState<{ hasFilingData: boolean } | null>(null);
   const [purposeReformat, setPurposeReformat] = useState<PurposeReformatState>({ status: 'skipped' });
+  // 확인 다이얼로그가 최종적으로 실행할 대상 — selectedCompany에 의존하면 재분석(경로②,
+  // ?id= URL 직접 진입 등 typeahead를 안 거친 경우)에서 항상 null이라 모달을 못 띄운다
+  // (2026-08-21 발견). handleSubmit/handleForceRefresh 둘 다 이걸 채우고 여기서만 읽는다.
+  const [pendingAnalysis, setPendingAnalysis] = useState<{ name: string; companyId?: string; forceRefresh: boolean } | null>(null);
   // 다이얼로그 확정("네, 이대로 진행") 시점에만 채워지는 최종 값 — 모달이 열려있는 동안엔
   // purposeReformat.text가 미리보기일 뿐, 실제로 서버에 보낼 값은 이 state가 결정한다.
   const [confirmedPurposeDetailFormatted, setConfirmedPurposeDetailFormatted] = useState<string | undefined>(undefined);
@@ -348,6 +355,13 @@ export default function HomeContent() {
         setResult(data);
         setAnalysisData(data);
         setCompletedBatches(new Set([1, 2, 3, 4, 5, 6, 40]));
+        // 이미 저장된 결과를 불러오는 것 자체가 "캐시된 결과 표시"이므로 true로 세팅 —
+        // 안 그러면 URL 직접 진입/히스토리 경유로 들어온 리포트는 상단 재분석 배너
+        // ({result && isCached})가 영영 안 떠서 전체 리포트 재분석 방법이 없다(2026-08-21
+        // 발견). 라이브 스트림 경로('done' 이벤트의 setIsCached(payload.cached===true))는
+        // 서버가 실제로 캐시 히트인지 판정한 값을 그대로 쓰므로 건드리지 않음 — 이쪽은
+        // "URL로 불러온 기존 결과"라는 성격 자체가 이미 캐시 표시이므로 무조건 true.
+        setIsCached(true);
         loadedIdRef.current = urlId;
       })
       .catch(() => setError(t.loadResultFailed))
@@ -620,25 +634,30 @@ export default function HomeContent() {
   // 자유 텍스트 그대로 제출 차단 — 드롭다운에서 클릭해 resolve까지 끝난 선택
   // (selectedCompany)이 없거나, 이미 캐시가 있는 회사(그땐 바로보기/재분석하기
   // 버튼으로만 진행)면 제출을 막는다.
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  // 신규 검색(handleSubmit)과 재분석(handleForceRefresh) 공용 — 확인 다이얼로그를 열고
+  // 필요 시 목적 정리 API를 호출한다(2026-08-21, "재분석하기"가 이 흐름을 아예 안 거치던
+  // 커버리지 공백 해소 — CLAUDE.md 기록 참고). 확정("네, 이대로 진행"/"그래도 진행")은
+  // handlePreAnalysisProceed가 이어받는다.
+  async function openPreAnalysisConfirm(
+    targetName: string,
+    companyId: string | undefined,
+    hasFilingData: boolean,
+    forceRefresh: boolean,
+    category: PurposeCategory | null,
+    detail: string,
+  ) {
     // preAnalysisCheck !== null이 곧 "요청 진행 중" 가드 — 아래에서 동기적으로 바로
     // 세팅되므로(reformat-purpose 호출을 기다리기 전에) 다이얼로그가 열리기도 전에
     // 중복 클릭이 막힌다.
-    if (loading || resolving || preAnalysisCheck) return;
-    if (!session) { signInWithGoogle(); return; }
-    if (!selectedCompany || selectedCompany.name !== companyName.trim() || resolveResult?.cached) return;
-
-    // 실제 리서치/생성을 시작하기 전에 (1) 공시 데이터 존재 여부, (2) 정리된 목적 문장을
-    // 먼저 확인시킨다(2026-08-17 신규, 통합 다이얼로그) — 공시 판정은 typeahead 선택
-    // 시점에 이미 받아둔 listings로 즉시(0ms), 목적 정리는 purposeDetail이 있을 때만
-    // 별도 API 호출. 확정("네, 이대로 진행"/"그래도 진행")은 handlePreAnalysisProceed가
-    // 이어받는다.
+    setPendingAnalysis({ name: targetName, companyId, forceRefresh });
+    setPurposeCategory(category);
+    setPurposeDetail(detail);
     setConfirmedPurposeDetailFormatted(undefined);
-    setPreAnalysisCheck({ hasFilingData: selectedCompany.listings.length > 0 });
+    setConfirmedPurposeDetailFormattedTruncated(false);
+    setPreAnalysisCheck({ hasFilingData });
 
-    const detail = purposeDetail.trim();
-    if (!detail) {
+    const trimmed = detail.trim();
+    if (!trimmed) {
       setPurposeReformat({ status: 'skipped' });
       return;
     }
@@ -649,8 +668,8 @@ export default function HomeContent() {
       const clientId = getClientId();
       const res = await fetch(`${API_URL}/api/analyze/reformat-purpose`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(clientId, session.access_token) },
-        body: JSON.stringify({ purposeCategory: purposeCategory ?? undefined, purposeDetail: detail, language }),
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(clientId, session!.access_token) },
+        body: JSON.stringify({ purposeCategory: category ?? undefined, purposeDetail: trimmed, language }),
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -665,6 +684,18 @@ export default function HomeContent() {
     }
   }
 
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (loading || resolving || preAnalysisCheck) return;
+    if (!session) { signInWithGoogle(); return; }
+    if (!selectedCompany || selectedCompany.name !== companyName.trim() || resolveResult?.cached) return;
+    await openPreAnalysisConfirm(
+      selectedCompany.name, selectedCompany.companyId,
+      selectedCompany.listings.length > 0, false,
+      purposeCategory, purposeDetail,
+    );
+  }
+
   function handlePreAnalysisProceed() {
     if (purposeReformat.status === 'success') {
       setConfirmedPurposeDetailFormatted(purposeReformat.text);
@@ -675,8 +706,10 @@ export default function HomeContent() {
     // status가 error|skipped면 confirmedPurposeDetailFormatted는 undefined로 남고,
     // 서버가 purpose_detail_formatted ?? purpose_detail로 원문에 자연 폴백한다.
     setPreAnalysisCheck(null);
-    if (!selectedCompany) return;
-    startAnalysis(selectedCompany.name, false, selectedCompany.companyId);
+    if (!pendingAnalysis) return;
+    const { name, companyId, forceRefresh } = pendingAnalysis;
+    setPendingAnalysis(null);
+    startAnalysis(name, forceRefresh, companyId);
   }
 
   function handlePreAnalysisBackToEdit() {
@@ -686,13 +719,60 @@ export default function HomeContent() {
 
   function handlePreAnalysisCancel() {
     setPreAnalysisCheck(null);
+    setPendingAnalysis(null);
+  }
+
+  // 재분석하기 다이얼로그에 이전 분석의 목적을 기본값으로 채우기 위한 조회 — 경로②(이미
+  // 로드된 리포트)는 result에 바로 있어 이 함수를 안 타고, 경로①(캐시 배너, 아직 리포트
+  // 미로드)만 analysisId로 조회한다. 실패해도 조용히 빈 값으로 폴백(목적 없이 진행하는
+  // 기존 흐름과 동일 — 재분석 자체를 막지 않는다).
+  async function fetchPreviousPurpose(analysisId: string | null): Promise<{ category: PurposeCategory | null; detail: string }> {
+    if (!analysisId) return { category: null, detail: '' };
+    try {
+      const clientId = getClientId();
+      const res = await fetch(`${API_URL}/api/analyses/${analysisId}`, {
+        headers: buildAuthHeaders(clientId, session?.access_token),
+      });
+      if (!res.ok) return { category: null, detail: '' };
+      const data: AnalysisDetail = await res.json();
+      return {
+        category: isValidPurposeCategory(data.purposeCategory) ? data.purposeCategory : null,
+        detail: data.purposeDetail ?? '',
+      };
+    } catch {
+      return { category: null, detail: '' };
+    }
   }
 
   async function handleForceRefresh(companyId?: string, name?: string) {
-    const targetName = name ?? companyName.trim();
+    // result?.companyName을 companyName(검색창 state)보다 우선 — ?id= URL 직접 진입 등
+    // typeahead를 안 거친 경우 companyName이 빈 채로 남아있을 수 있다(2026-08-21 발견,
+    // 경로② 재분석 버튼이 조용히 no-op되던 잠재 버그 — 이번에 같이 해결).
+    const targetName = name ?? result?.companyName ?? companyName.trim();
     if (!targetName || loading) return;
     if (!session) { signInWithGoogle(); return; }
-    await startAnalysis(targetName, true, companyId);
+
+    const usingLoadedResult = !!result && result.companyName === targetName;
+    const hasFilingData = usingLoadedResult
+      ? (result!.dataSource === 'dart' || result!.dataSource === 'edgar')
+      : (selectedCompany?.listings ? selectedCompany.listings.length > 0 : true);
+
+    // 폼이 비어있을 때만(첫 재분석 시도) 이전 목적을 기본값으로 채운다 — "뒤로가기" 후
+    // 유저가 수정 중인 값을 덮어쓰지 않기 위함.
+    let category = purposeCategory;
+    let detail = purposeDetail;
+    if (!detail.trim() && category === null) {
+      if (usingLoadedResult) {
+        category = isValidPurposeCategory(result!.purposeCategory) ? result!.purposeCategory : null;
+        detail = result!.purposeDetail ?? '';
+      } else {
+        const prev = await fetchPreviousPurpose(resolveResult?.analysisId ?? null);
+        category = prev.category;
+        detail = prev.detail;
+      }
+    }
+
+    await openPreAnalysisConfirm(targetName, companyId, hasFilingData, true, category, detail);
   }
 
   function handleRequestFreeTrial() {
@@ -1116,9 +1196,9 @@ export default function HomeContent() {
         />
       )}
 
-      {preAnalysisCheck && selectedCompany && (
+      {preAnalysisCheck && pendingAnalysis && (
         <PreAnalysisConfirmModal
-          companyName={selectedCompany.name}
+          companyName={pendingAnalysis.name}
           hasFilingData={preAnalysisCheck.hasFilingData}
           purposeDetail={purposeDetail.trim()}
           purposeReformat={purposeReformat}
