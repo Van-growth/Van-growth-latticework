@@ -7,7 +7,7 @@ import { getUiStrings } from '@/lib/i18n/uiStrings';
 export type PurposeReformatState =
   | { status: 'skipped' }
   | { status: 'loading' }
-  | { status: 'success'; text: string }
+  | { status: 'success'; text: string; truncated?: boolean }
   | { status: 'error' };
 
 interface PreAnalysisConfirmModalProps {
@@ -90,6 +90,9 @@ export default function PreAnalysisConfirmModal({
               <div className="bg-navy-50 border border-navy-100 rounded-lg px-3.5 py-3">
                 <p className="text-sm text-navy-800 leading-relaxed">&ldquo;{purposeReformat.text}&rdquo;</p>
               </div>
+              {purposeReformat.truncated && (
+                <p className="text-xs text-gray-400 mt-1.5">{t.purposeTruncatedNote}</p>
+              )}
             </div>
           ) : (
             <p className="text-sm text-risk leading-relaxed">{t.purposeErrorBody}</p>

@@ -64,6 +64,7 @@ interface UiStringDict {
     filingNotFoundBody: (company: string) => string;
     purposeSectionTitle: string;
     purposeConfirmedLabel: string;
+    purposeTruncatedNote: string;
     purposeLoadingLabel: string;
     purposeEmptyBody: string;
     purposeErrorBody: string;
@@ -204,6 +205,8 @@ interface UiStringDict {
     openAria: string;
     hint: string;
     contextLabel: (companyName: string) => string;
+    nudgeBanner: string;
+    greeting: (companyName: string) => string;
   };
   profileForm: {
     companyName: string;
@@ -275,6 +278,7 @@ const ko: UiStringDict = {
     filingNotFoundBody: (company: string) => `${company}은(는) 공식 공시 데이터(SEC EDGAR/DART)가 확인되지 않아요. 재무 데이터는 제한적일 수 있어요.`,
     purposeSectionTitle: '분석 목적 확인',
     purposeConfirmedLabel: '입력하신 목적을 이렇게 이해했어요',
+    purposeTruncatedNote: '목적을 간단히 요약했어요. 더 자세한 내용은 분석 완료 후 Ben에게 물어보실 수 있어요.',
     purposeLoadingLabel: '입력하신 목적을 정리하고 있어요...',
     purposeEmptyBody: '추가 상세 내용이 없습니다 — 상세 설명 없이 진행하면 구체적인 인사이트를 받지 못하실 수 있는 점 양해 부탁드립니다.',
     purposeErrorBody: '죄송해요, 목적 정리에 실패했어요. 원문 그대로 진행할까요?',
@@ -429,6 +433,8 @@ const ko: UiStringDict = {
     openAria: 'Ben 열기',
     hint: '이 분석 결과를 기반으로 질문해보세요.',
     contextLabel: (companyName: string) => `이 리포트: ${companyName}`,
+    nudgeBanner: '더 궁금한 점은 Ben에게 물어보세요',
+    greeting: (companyName: string) => `${companyName}에 관해 무엇을 도와드릴까요?`,
   },
   profileForm: {
     companyName: '회사명',
@@ -500,6 +506,7 @@ const en: UiStringDict = {
     filingNotFoundBody: (company: string) => `We couldn't confirm official filing data (SEC EDGAR/DART) for ${company}. Financial data may be limited.`,
     purposeSectionTitle: 'Confirm your purpose',
     purposeConfirmedLabel: "Here's how we understood your purpose",
+    purposeTruncatedNote: "We kept this a short summary — you can always ask Ben for more detail once the analysis is ready.",
     purposeLoadingLabel: 'Tidying up what you wrote...',
     purposeEmptyBody: "You didn't add any extra detail — without it, the report may miss the specific insights you're after.",
     purposeErrorBody: "Sorry, we couldn't clean up your purpose text. Continue with your original wording?",
@@ -654,6 +661,8 @@ Start each item with ✅ Good / ⚠️ Caution / ❌ Weak, followed by a one-lin
     openAria: 'Open Ben',
     hint: 'Ask questions grounded in this report.',
     contextLabel: (companyName: string) => `This report: ${companyName}`,
+    nudgeBanner: 'Have more questions? Ask Ben.',
+    greeting: (companyName: string) => `What would you like to know about ${companyName}?`,
   },
   profileForm: {
     companyName: 'Company name',

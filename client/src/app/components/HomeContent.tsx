@@ -169,6 +169,9 @@ export default function HomeContent() {
   // 다이얼로그 확정("네, 이대로 진행") 시점에만 채워지는 최종 값 — 모달이 열려있는 동안엔
   // purposeReformat.text가 미리보기일 뿐, 실제로 서버에 보낼 값은 이 state가 결정한다.
   const [confirmedPurposeDetailFormatted, setConfirmedPurposeDetailFormatted] = useState<string | undefined>(undefined);
+  // confirmedPurposeDetailFormatted가 재시도까지 실패해 잘린 상태로 확정됐는지 — /stream
+  // 요청 바디에 그대로 실어 보내 서버가 purpose_detail_formatted_truncated로 저장한다.
+  const [confirmedPurposeDetailFormattedTruncated, setConfirmedPurposeDetailFormattedTruncated] = useState(false);
   const purposeDetailRef = useRef<HTMLTextAreaElement | null>(null);
   // 비로그인 상태에서 드롭다운을 클릭한 경우 — resolve를 바로 부르는 대신 이 값을
   // 채워서 LoginPromptModal을 띄운다. 로그인은 페이지 전체가 리로드되는 OAuth
@@ -503,6 +506,7 @@ export default function HomeContent() {
           purposeCategory: purposeCategory ?? undefined,
           purposeDetail: purposeDetail.trim() || undefined,
           purposeDetailFormatted: confirmedPurposeDetailFormatted ?? undefined,
+          purposeDetailFormattedTruncated: confirmedPurposeDetailFormattedTruncated || undefined,
         }),
       });
 
@@ -652,7 +656,7 @@ export default function HomeContent() {
       clearTimeout(timeout);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.formatted) {
-        setPurposeReformat({ status: 'success', text: data.formatted });
+        setPurposeReformat({ status: 'success', text: data.formatted, truncated: !!data.truncated });
       } else {
         setPurposeReformat({ status: 'error' });
       }
@@ -664,6 +668,9 @@ export default function HomeContent() {
   function handlePreAnalysisProceed() {
     if (purposeReformat.status === 'success') {
       setConfirmedPurposeDetailFormatted(purposeReformat.text);
+      setConfirmedPurposeDetailFormattedTruncated(!!purposeReformat.truncated);
+    } else {
+      setConfirmedPurposeDetailFormattedTruncated(false);
     }
     // status가 error|skipped면 confirmedPurposeDetailFormatted는 undefined로 남고,
     // 서버가 purpose_detail_formatted ?? purpose_detail로 원문에 자연 폴백한다.

@@ -41,16 +41,21 @@ async function resolvePurposeDetailFormatted(
   purposeDetail: string | undefined,
   purposeDetailFormatted: string | undefined,
   language: Language,
-): Promise<string | null> {
+  // 클라이언트가 이미 정리된 텍스트(모달의 /reformat-purpose 결과)를 보냈을 때, 그 텍스트가
+  // 원래 잘렸었는지는 서버가 재생성 없이는 알 수 없다 — 클라이언트가 reformat-purpose 응답의
+  // truncated를 그대로 되돌려보내면 이 힌트로 사용, 안 보내는 구버전 클라이언트는 기존과
+  // 동일하게 false(하위호환).
+  clientTruncatedHint: boolean = false,
+): Promise<{ text: string | null; truncated: boolean }> {
   const trimmedFormatted = purposeDetailFormatted?.trim();
-  if (trimmedFormatted) return trimmedFormatted;
+  if (trimmedFormatted) return { text: trimmedFormatted, truncated: clientTruncatedHint };
   const trimmedDetail = purposeDetail?.trim();
-  if (!trimmedDetail) return null;
+  if (!trimmedDetail) return { text: null, truncated: false };
   const result = await generateReformattedPurpose(purposeCategory ?? null, trimmedDetail, language);
   if (result.truncated) {
     console.warn(`[analyze] resolvePurposeDetailFormatted truncated even after retry (purposeCategory=${purposeCategory ?? 'none'}, detailLength=${trimmedDetail.length})`);
   }
-  return result.text;
+  return result;
 }
 
 // company_id로 상장 정보 조회 — 다중상장 회사(EDGAR+DART 둘 다 있음)면
@@ -632,7 +637,7 @@ router.post('/reformat-purpose', async (req: Request, res: Response) => {
     if (result.truncated) {
       console.warn(`[POST /api/analyze/reformat-purpose] truncated even after retry (purposeCategory=${purposeCategory ?? 'none'}, detailLength=${purposeDetail.trim().length})`);
     }
-    res.json({ formatted: result.text });
+    res.json({ formatted: result.text, truncated: result.truncated });
   } catch (err) {
     console.error('[POST /api/analyze/reformat-purpose]', err);
     res.status(500).json({ error: '목적 정리 중 오류가 발생했습니다.' });
@@ -651,6 +656,7 @@ router.post('/stream', async (req: Request, res: Response) => {
   const {
     companyName, companyId, forceRefresh, sectorTag, baseRevenue,
     language: rawLanguage, purposeCategory: rawPurposeCategory, purposeDetail, purposeDetailFormatted,
+    purposeDetailFormattedTruncated,
   } = req.body as {
     companyName?: string;
     companyId?: string;
@@ -666,6 +672,9 @@ router.post('/stream', async (req: Request, res: Response) => {
     // 2026-08-17 사전 확인 다이얼로그에서 정리된 목적(표시 전용, POST /reformat-purpose
     // 결과) — 섹션 프롬프트에는 주입되지 않음, purposeDetail 원문만 계속 사용.
     purposeDetailFormatted?: string;
+    // /reformat-purpose 응답의 truncated를 클라이언트가 그대로 되돌려보낸 값(2026-08-21) —
+    // 모달 경로로 정리된 텍스트가 이미 잘렸는지 서버가 재판정 없이 알 수 있는 유일한 통로.
+    purposeDetailFormattedTruncated?: boolean;
   };
   // 기본값 EN(언어 정책 SSOT) — 클라이언트가 안 보내거나 알 수 없는 값이면 안전하게 폴백
   const language: Language = rawLanguage === 'ko' ? 'ko' : 'en';
@@ -870,13 +879,17 @@ router.post('/stream', async (req: Request, res: Response) => {
         // purposeDetailFormatted가 비어있으면(사전 확인 다이얼로그를 안 거친 진입 경로,
         // 예: 재분석하기) 여기서 서버가 한 번 채워 넣는다.
         let resolvedPurposeDetailFormatted = purposeDetailFormatted;
+        let resolvedPurposeDetailFormattedTruncated = false;
         if (purposeCategory) {
-          resolvedPurposeDetailFormatted = (await resolvePurposeDetailFormatted(purposeCategory, purposeDetail, purposeDetailFormatted, language)) ?? undefined;
+          const resolved = await resolvePurposeDetailFormatted(purposeCategory, purposeDetail, purposeDetailFormatted, language, !!purposeDetailFormattedTruncated);
+          resolvedPurposeDetailFormatted = resolved.text ?? undefined;
+          resolvedPurposeDetailFormattedTruncated = resolved.truncated;
           await supabase.from('analyses')
             .update({
               purpose_category: purposeCategory,
               purpose_detail: purposeDetail?.trim() || null,
               purpose_detail_formatted: resolvedPurposeDetailFormatted ?? null,
+              purpose_detail_formatted_truncated: resolvedPurposeDetailFormattedTruncated,
             })
             .eq('id', cached.id);
         }
@@ -990,7 +1003,8 @@ router.post('/stream', async (req: Request, res: Response) => {
     // purposeDetailFormatted가 비어있으면(사전 확인 다이얼로그를 안 거친 진입 경로, 예:
     // 재분석하기) 여기서 서버가 한 번 채워 넣는다 — batch1 insert/최종 done 페이로드 양쪽에
     // 동일하게 사용해 이번 응답부터 바로 다듬어진 문구가 보이도록 한다.
-    const resolvedPurposeDetailFormatted = await resolvePurposeDetailFormatted(purposeCategory, purposeDetail, purposeDetailFormatted, language);
+    const { text: resolvedPurposeDetailFormatted, truncated: resolvedPurposeDetailFormattedTruncated } =
+      await resolvePurposeDetailFormatted(purposeCategory, purposeDetail, purposeDetailFormatted, language, !!purposeDetailFormattedTruncated);
 
     const analysis = await analyzeCompany(
       name,
@@ -1020,6 +1034,7 @@ router.post('/stream', async (req: Request, res: Response) => {
               purpose_category: purposeCategory ?? null,
               purpose_detail:   purposeDetail?.trim() || null,
               purpose_detail_formatted: resolvedPurposeDetailFormatted,
+              purpose_detail_formatted_truncated: resolvedPurposeDetailFormattedTruncated,
               summary_v2:          data.summary_v2 ?? null,
               industry_history_v2: null,
               tech_evolution_v2:   null,
