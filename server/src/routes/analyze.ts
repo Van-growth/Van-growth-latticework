@@ -5,7 +5,7 @@ import {
   generateGrowthScenarioNarrative, generateSecBenchmarkInterpretations, generateReformattedPurpose,
   SecBenchmarkComparison, Language,
 } from '../lib/claude';
-import { fetchFinancialContext, CompanyListingRef } from '../lib/financialContext';
+import { fetchFinancialContext, appendBankContext, CompanyListingRef } from '../lib/financialContext';
 import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, isGenuineBankData } from '../lib/financialsTableBuilder';
 import { classifyIndustryCategory, IndustryCategory } from '../lib/industryClassification';
 import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
@@ -514,7 +514,8 @@ router.post('/', async (req: Request, res: Response) => {
     const listings = await fetchCompanyListings(companyId ?? company.id);
     const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name, listings);
     const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
-    const analysis = await analyzeCompany(name, contextText || undefined, undefined, { rawEdgar, rawDart, industryCategory });
+    const contextTextWithBank = appendBankContext(contextText, industryCategory, rawEdgar, rawDart);
+    const analysis = await analyzeCompany(name, contextTextWithBank || undefined, undefined, { rawEdgar, rawDart, industryCategory });
     fixAllEdgarSourceUrls(analysis, rawEdgar?.cik);
     if (dataSource === 'edgar' && rawEdgar) {
       const secBenchmarkResult = await buildSecBenchmarkComparison(name, rawEdgar).catch(() => EMPTY_SEC_BENCHMARK_RESULT);
@@ -898,6 +899,7 @@ router.post('/stream', async (req: Request, res: Response) => {
         send('meta', { isFirstLookup: !isCacheHit });
         const useCachedFin = !skipBatches.has(3) ? cachedFinancials : undefined;
         const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
+        const contextTextWithBank = appendBankContext(contextText, industryCategory, rawEdgar, rawDart);
 
         // fin_preview: send financials immediately from raw cache if batch 3 hasn't loaded yet
         if (!skipBatches.has(3)) {
@@ -919,7 +921,7 @@ router.post('/stream', async (req: Request, res: Response) => {
 
         const analysis = await analyzeCompany(
           name,
-          contextText || undefined,
+          contextTextWithBank || undefined,
           async (batchNum, data) => {
             completedCount++;
             fixAllEdgarSourceUrls(data, rawEdgar?.cik);
@@ -978,6 +980,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     const { source: dataSource, contextText, rawEdgar, rawDart, isCacheHit } = await fetchFinancialContext(name, listings);
     send('meta', { isFirstLookup: !isCacheHit });
     const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });
+    const contextTextWithBank = appendBankContext(contextText, industryCategory, rawEdgar, rawDart);
 
     // fin_preview: show financials immediately from raw/cached data if available
     {
@@ -1008,7 +1011,7 @@ router.post('/stream', async (req: Request, res: Response) => {
 
     const analysis = await analyzeCompany(
       name,
-      contextText || undefined,
+      contextTextWithBank || undefined,
       async (batchNum, data) => {
         batchCount++;
         fixAllEdgarSourceUrls(data, rawEdgar?.cik);

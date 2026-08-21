@@ -1720,6 +1720,21 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   (`analysisData.language`)를 쓰도록 버그 수정 — EN 리포트에서 한글 인사말이 뜨는
   것을 실측으로 발견 후 수정, `AnalysisCard.tsx`의 기존 `reportLanguage` 패턴과
   동일하게 통일 (`88d35dd`).
+- [x] 은행 업종 요약 탭(summary_v2) KPI 카드 재무 탭 불일치 수정 (2026-08-21) — 은행 게이트
+  (`isGenuineBankData`/`industryCategory`)가 `financials_v2`(배치3)에만 적용되고
+  summary_v2(배치1)는 완전히 별도 텍스트 경로(`phase1Context`)를 써서, Synchrony
+  Financial 같은 은행 기업은 재무 탭은 정상인데 요약 탭 KPI(Revenue/Operating margin/
+  YoY growth)만 "확인 필요"로 남던 문제. 원인은 배치 순서가 아니라 배선 누락 —
+  `industryCategory`는 `analyzeCompany()` 호출 전 이미 계산 완료돼 있었지만 텍스트
+  컨텍스트 빌더(`buildEdgarContext`/`buildDartContext`)에 전달되지 않았음. 신규
+  `appendBankContext()`(`financialContext.ts`)가 `industryCategory`+raw series로 은행
+  계정과목(순이자수익 등) 텍스트 블록을 매번 새로 조립해 `analyze.ts` 3개 호출부에서
+  후처리 주입 — `financial_cache` 히트/스테일 여부와 무관하게 항상 최신 raw series
+  기준으로 재계산되는 게 특징. `SECTION_SCHEMAS.summary_v2`에도 조건부 라벨링 지시
+  추가(Revenue→Net Interest Income, Operating margin→Not applicable 유지, YoY→NII
+  기준). 실 Claude 호출로 검증(Synchrony: 라벨/값/YoY 계산 전부 정확, Apple 회귀 없음).
+  프론트(`AnalysisCard.tsx`의 `MetricCard`)는 `key_metrics[].label`이 이미 완전히
+  동적이라 수정 불필요.
 
 ## Security Principles (SSOT)
 

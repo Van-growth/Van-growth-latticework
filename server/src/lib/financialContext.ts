@@ -1,10 +1,11 @@
 // Orchestrates DART+KIS / EDGAR+FMP data fetch and formats as Claude prompt context
 
-import { fetchDartData, fetchDartDataByCorpCode, DartData }                from './dart';
+import { fetchDartData, fetchDartDataByCorpCode, DartData, DartRawSeries } from './dart';
 import { fetchEdgarData, fetchEdgarDataByCik, EdgarData, EdgarRawSeries, lookupCikByName } from './edgar';
 import { fetchKisQuote, KisQuote }               from './kis';
 import { fetchFmpData, FmpData, buildFmpContext } from './fmp';
 import { supabase }                              from './supabase';
+import { isGenuineBankData, IndustryCategory }   from './financialsTableBuilder';
 
 export type DataSource = 'dart' | 'edgar' | 'web_search';
 
@@ -332,6 +333,92 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
   }
 
   return lines.join('\n');
+}
+
+// ── 은행 재무제표 템플릿 컨텍스트 보강 (2026-08-21) ──────────────────────────
+// financials_v2(배치3)는 isGenuineBankData() 게이트로 은행 계정과목을 서버가 직접
+// 덮어쓰지만(claude.ts의 overrideFinancialsTable), summary_v2(배치1) key_metrics는
+// Claude가 이 파일이 만드는 자유 텍스트 컨텍스트만 보고 채운다 — 그 텍스트에 은행
+// 계정과목이 없으면 표준 3항목이 구조적으로 빈 은행 기업은 항상 "확인 필요"만
+// 반환한다(Synchrony Financial 실측, 2026-08-21). contextText는 fetchFinancialContext()
+// 안에서 6개 분기 각각이 즉시 완성해 반환하는데, industryCategory는 그보다 나중에
+// (analyze.ts) 계산되므로 그 함수 내부에서는 이 정보를 못 쓴다 — industryCategory를
+// 아는 시점(analyze.ts, fetchFinancialContext 반환 직후)에 이 함수로 후처리한다.
+// isGenuineBankData() 재확인으로 SIC/KSIC 오분류(신한지주/LS 등 KSIC 64992 공유
+// 문제, industryClassification.ts 참고) 시 텍스트가 조용히 안 붙도록 동일 게이트를
+// 재사용 — financials_v2 뱃지 판정과 summary_v2 텍스트 삽입 판정이 항상 일치한다.
+// rawEdgar/rawDart는 financial_cache 히트 시에도 캐시 blob에서 그대로 넘어오므로,
+// 이 함수는 캐시 히트/미스와 무관하게 매번 최신 raw series 기준으로 재계산된다 —
+// 다른 필드들과 달리 financial_cache 텍스트 자체가 스테일해도 영향받지 않는다.
+export function appendBankContext(
+  contextText: string,
+  industryCategory: IndustryCategory,
+  rawEdgar: EdgarRawSeries | null | undefined,
+  rawDart: DartRawSeries | null | undefined,
+): string {
+  if (industryCategory !== 'bank') return contextText;
+  if (!isGenuineBankData(rawEdgar ?? null, rawDart ?? null)) return contextText;
+
+  const lines: string[] = ['\n[Bank-specific financial data — this company is a bank/lender]'];
+  lines.push(
+    "This company's SEC/DART filings don't tag standard Revenue/Operating Income — use the bank " +
+    'line items below instead. In summary_v2.key_metrics: rename the "Revenue" label to "Net ' +
+    'Interest Income" and use that figure; leave "Operating margin" as "Not applicable" (banks ' +
+    "don't report a comparable margin — do not calculate one); compute \"YoY growth\" from the " +
+    'Net Interest Income trend below instead of revenue.',
+  );
+
+  if (rawEdgar?.bankNetInterestIncome) {
+    const fmt = (v: number | null) => v != null ? fmpUsd(v) : undefined;
+    const row = (label: string, arr?: (number | null)[]) => {
+      const v = arr ? fmt(arr[0]) : undefined; // index 0 = 최신 회계연도(edgar.ts 컨벤션)
+      return v ? `· ${label.padEnd(24)} ${v}  (EDGAR)` : null;
+    };
+    if (rawEdgar.fiscalYears[0]) {
+      lines.push(`\n[${rawEdgar.fiscalYears[0]} bank income statement]`);
+      [
+        row('Interest Income',              rawEdgar.bankInterestIncome),
+        row('Interest Expense',             rawEdgar.bankInterestExpense),
+        row('Net Interest Income',          rawEdgar.bankNetInterestIncome),
+        row('Provision for Credit Losses',  rawEdgar.bankProvisionCreditLosses),
+        row('Noninterest Income',           rawEdgar.bankNoninterestIncome),
+        row('Noninterest Expense',          rawEdgar.bankNoninterestExpense),
+      ].filter(Boolean).forEach(l => lines.push(l!));
+    }
+    if (rawEdgar.fiscalYears.length > 1) {
+      lines.push('\n[Net Interest Income — multi-year trend, for YoY growth]');
+      rawEdgar.fiscalYears.forEach((fy, i) => {
+        const v = fmt(rawEdgar.bankNetInterestIncome![i] ?? null);
+        lines.push(`· ${fy}: ${v ?? 'Not disclosed'}`);
+      });
+    }
+  } else if (rawDart?.bankSeries) {
+    const b = rawDart.bankSeries;
+    const fmtKrw = (v: number | null) => v != null ? formatKrw(String(v)) : undefined;
+    const row = (label: string, arr: (number | null)[]) => {
+      const v = fmtKrw(arr[0] ?? null); // index 0 = thstrm(당기), dart.ts 컨벤션
+      return v ? `· ${label}: ${v}` : null;
+    };
+    if (b.fiscalYears[0]) {
+      lines.push(`\n[${b.fiscalYears[0]}년 은행 손익계산서]`);
+      [
+        row('이자수익', b.interestIncome),
+        row('이자비용', b.interestExpense),
+        row('순이자수익', b.netInterestIncome),
+        row('대손충당금전입액', b.provisionCreditLosses),
+      ].filter(Boolean).forEach(l => lines.push(l!));
+    }
+    if (b.fiscalYears.length > 1) {
+      lines.push('\n[순이자수익 — 다년도 추이, YoY 계산용]');
+      b.fiscalYears.forEach((fy, i) => {
+        lines.push(`· ${fy}년: ${fmtKrw(b.netInterestIncome[i] ?? null) ?? '확인 필요'}`);
+      });
+    }
+  } else {
+    return contextText; // 은행 후보였으나 실제 은행 계열 raw 데이터가 없음 — 원본 그대로
+  }
+
+  return contextText + '\n' + lines.join('\n');
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
