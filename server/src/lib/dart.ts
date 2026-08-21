@@ -10,9 +10,13 @@ async function fetchJson<T>(url: string, timeoutMs = 10_000): Promise<T | null> 
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[dart] fetchJson HTTP ${res.status} — ${url.split('?')[0]}`);
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (e) {
+    console.warn(`[dart] fetchJson 예외(timeout/network) — ${url.split('?')[0]}: ${(e as Error).message}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -91,6 +95,14 @@ export interface DartData {
   // 최근 12개월 이내 주요사항보고서(B001) — 유상증자/M&A 등 트리거 이벤트 후보. report_nm 자체가
   // "유상증자결정"·"타법인주식및출자증권취득결정" 등 사건 유형을 담고 있어 본문 조회 없이도 신호로 사용 가능.
   triggerEvents?: DartTriggerEvent[];
+  // 핵심 재무 시계열(fetchMultiYearSeries) 조회 중 DART API 레벨 오류(status가 '000'도 '013'도
+  // 아닌 경우 — 요청한도초과/인증오류/시스템점검 등) 또는 전송 계층 실패(timeout/network)가
+  // 있었는지. true면 rawSeries가 비어있어도 "진짜 데이터 없음"이 아니라 "확인 실패"라는 뜻
+  // (2026-08-21, DART/EDGAR 폴백 신뢰도 조사 계기).
+  hasFetchError?: boolean;
+  // 회사명이 corp_master 정확일치가 아니라 유사매칭(시작일치/포함일치/DART API검색)으로
+  // 결정됐는지 — 'exact'가 아니면 이름이 겹치는 다른 계열사로 잘못 매칭됐을 위험 신호.
+  matchTier?: 'exact' | 'starts_with' | 'contains' | 'api_search';
 }
 
 // 계정명 별칭 — 기업마다 표기 다양
@@ -160,19 +172,30 @@ function buildSeries(yearMap: Map<string, YearSlice>, years: string[]): DartFinS
 async function fetchMultiYearSeries(
   corpCode: string,
   key: string,
-): Promise<{ cfs: DartFinSeries | null; ofs: DartFinSeries | null }> {
+): Promise<{ cfs: DartFinSeries | null; ofs: DartFinSeries | null; hasFetchError: boolean }> {
   const YEARS = getRecentFiscalYears(5);
 
   const cfsMap = new Map<string, YearSlice>();
   const ofsMap = new Map<string, YearSlice>();
+  let hasFetchError = false;
 
   await Promise.allSettled(
     YEARS.map(async (year) => {
       const url =
         `${BASE}/fnlttSinglAcnt.json?crtfc_key=${encodeURIComponent(key)}` +
         `&corp_code=${corpCode}&bsns_year=${year}&reprt_code=11011`;
-      const res = await fetchJson<{ status: string; list?: DartFinRow[] }>(url);
-      if (res?.status !== '000' || !res.list?.length) return;
+      const res = await fetchJson<{ status: string; message?: string; list?: DartFinRow[] }>(url);
+      if (res === null) { hasFetchError = true; return; } // fetchJson이 이미 로그를 남김
+      if (res.status !== '000') {
+        // '013' = "조회된 데이터가 없습니다" — DART 기준 정상적인 빈 결과. 그 외 코드(020 요청
+        // 한도초과, 800 시스템점검 등)는 진짜 에러.
+        if (res.status !== '013') {
+          hasFetchError = true;
+          console.warn(`[dart] fnlttSinglAcnt corp_code=${corpCode} bsns_year=${year} — DART status=${res.status}${res.message ? ` (${res.message})` : ''}`);
+        }
+        return;
+      }
+      if (!res.list?.length) return;
 
       const cfsSlice = extractSlice(res.list, 'CFS');
       const ofsSlice = extractSlice(res.list, 'OFS');
@@ -181,7 +204,7 @@ async function fetchMultiYearSeries(
     }),
   );
 
-  return { cfs: buildSeries(cfsMap, YEARS), ofs: buildSeries(ofsMap, YEARS) };
+  return { cfs: buildSeries(cfsMap, YEARS), ofs: buildSeries(ofsMap, YEARS), hasFetchError };
 }
 
 // 은행 손익계산서/재무상태표 핵심 계정과목 — 신한지주 실제 공시(2026-08-20 실측)로 검증한
@@ -308,10 +331,44 @@ async function fetchTriggerEvents(corpCode: string, key: string): Promise<DartTr
 
 // ── corp_master 우선 조회 → API 폴백 ─────────────────────────────────────────
 
+// 유사매칭(②③) 공용 — 상장 여부(상장 우선) → 이름 길이(짧을수록 정확일치에 가까움) 순으로
+// 명시적 순위를 매겨 후보 중 하나를 고른다. Supabase JS 쿼리빌더가 length(corp_name) 같은
+// SQL 표현식 정렬을 지원하지 않아 후보 최대 20개를 가져와 이 함수에서 직접 정렬한다. 여러
+// 후보가 있었으면 어떤 걸 골랐고 나머지는 뭐였는지 로그로 남긴다(2026-08-21, 미래에셋 계열처럼
+// 이름이 겹치는 회사군에서 정렬 기준 없이 임의 선택되던 위험 수정).
+async function pickBestFuzzyMatch(
+  originalName: string,
+  pattern: string,
+): Promise<{ corpCode: string; corpName: string; stockCode: string | null } | null> {
+  const { data } = await supabase
+    .from('corp_master')
+    .select('corp_code, corp_name, stock_code')
+    .ilike('corp_name', pattern)
+    .limit(20);
+  if (!data || data.length === 0) return null;
+
+  const ranked = [...data].sort((a, b) => {
+    const aListed = a.stock_code != null ? 0 : 1;
+    const bListed = b.stock_code != null ? 0 : 1;
+    if (aListed !== bListed) return aListed - bListed;
+    return a.corp_name.length - b.corp_name.length;
+  });
+
+  const best = ranked[0];
+  if (ranked.length > 1) {
+    console.warn(
+      `[dart] lookupCorpCode 유사매칭 "${originalName}" → "${pattern}" 후보 ${ranked.length}개 중 ` +
+      `"${best.corp_name}"(${best.corp_code}) 선택. 나머지: ${ranked.slice(1, 5).map(r => r.corp_name).join(', ')}` +
+      (ranked.length > 5 ? ' 외' : ''),
+    );
+  }
+  return { corpCode: best.corp_code, corpName: best.corp_name, stockCode: best.stock_code ?? null };
+}
+
 async function lookupCorpCode(
   name: string,
   key: string,
-): Promise<{ corpCode: string; corpName: string; stockCode: string | null } | null> {
+): Promise<{ corpCode: string; corpName: string; stockCode: string | null; matchTier: 'exact' | 'starts_with' | 'contains' | 'api_search' } | null> {
   // 1. 마스터 테이블 — exact
   {
     const { data } = await supabase
@@ -319,29 +376,19 @@ async function lookupCorpCode(
       .select('corp_code, corp_name, stock_code')
       .eq('corp_name', name)
       .maybeSingle();
-    if (data) return { corpCode: data.corp_code, corpName: data.corp_name, stockCode: data.stock_code ?? null };
+    if (data) return { corpCode: data.corp_code, corpName: data.corp_name, stockCode: data.stock_code ?? null, matchTier: 'exact' };
   }
 
   // 2. 마스터 테이블 — starts-with
   {
-    const { data } = await supabase
-      .from('corp_master')
-      .select('corp_code, corp_name, stock_code')
-      .ilike('corp_name', `${name}%`)
-      .limit(1)
-      .maybeSingle();
-    if (data) return { corpCode: data.corp_code, corpName: data.corp_name, stockCode: data.stock_code ?? null };
+    const picked = await pickBestFuzzyMatch(name, `${name}%`);
+    if (picked) return { ...picked, matchTier: 'starts_with' };
   }
 
   // 3. 마스터 테이블 — contains
   {
-    const { data } = await supabase
-      .from('corp_master')
-      .select('corp_code, corp_name, stock_code')
-      .ilike('corp_name', `%${name}%`)
-      .limit(1)
-      .maybeSingle();
-    if (data) return { corpCode: data.corp_code, corpName: data.corp_name, stockCode: data.stock_code ?? null };
+    const picked = await pickBestFuzzyMatch(name, `%${name}%`);
+    if (picked) return { ...picked, matchTier: 'contains' };
   }
 
   // 4. DART API 검색 폴백
@@ -359,7 +406,7 @@ async function lookupCorpCode(
     stock_code: null,
   }, { onConflict: 'corp_code' });
 
-  return { corpCode: best.corp_code, corpName: best.corp_name, stockCode: null };
+  return { corpCode: best.corp_code, corpName: best.corp_name, stockCode: null, matchTier: 'api_search' };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -371,11 +418,12 @@ export async function fetchDartData(companyName: string): Promise<DartData | nul
   const corp = await lookupCorpCode(companyName, key);
   if (!corp) return null;
 
-  return fetchDartDataById(corp.corpCode, corp.corpName, corp.stockCode, key);
+  return fetchDartDataById(corp.corpCode, corp.corpName, corp.stockCode, key, corp.matchTier);
 }
 
 // company_listings로 corp_code를 이미 아는 경우(다중상장 회사 등) — 이름 기반
-// lookupCorpCode를 건너뛰고 바로 DART API 조회.
+// lookupCorpCode를 건너뛰고 바로 DART API 조회. matchTier 없음 — identifier 직접 조회라
+// 이름 매칭 자체가 없음.
 export async function fetchDartDataByCorpCode(corpCode: string, stockCode: string | null, corpName: string): Promise<DartData | null> {
   const key = process.env.DART_API_KEY;
   if (!key) return null;
@@ -383,7 +431,10 @@ export async function fetchDartDataByCorpCode(corpCode: string, stockCode: strin
   return fetchDartDataById(corpCode, corpName, stockCode, key);
 }
 
-async function fetchDartDataById(corpCode: string, corpName: string, stockCode: string | null, key: string): Promise<DartData | null> {
+async function fetchDartDataById(
+  corpCode: string, corpName: string, stockCode: string | null, key: string,
+  matchTier?: 'exact' | 'starts_with' | 'contains' | 'api_search',
+): Promise<DartData> {
   // 은행 재무제표 템플릿(2026-08-20) — KSIC로 은행 후보군인 회사만 fnlttSinglAcntAll.json을
   // 추가 조회(비은행 회사엔 API 호출 증가 없음). classifyIndustryCategory() 자체도 별도
   // supabase 조회 1회라 다른 조회들과 병렬로 시작해두고, 필요할 때만 bankSeries를 기다린다.
@@ -398,8 +449,8 @@ async function fetchDartDataById(corpCode: string, corpName: string, stockCode: 
   ]);
 
   const disclosures = disclosuresResult.status === 'fulfilled' ? disclosuresResult.value : [];
-  const { cfs, ofs } =
-    seriesResult.status === 'fulfilled' ? seriesResult.value : { cfs: null, ofs: null };
+  const { cfs, ofs, hasFetchError } =
+    seriesResult.status === 'fulfilled' ? seriesResult.value : { cfs: null, ofs: null, hasFetchError: true };
   const triggerEvents = triggerResult.status === 'fulfilled' ? triggerResult.value : [];
 
   const bankSeries = (industryCategory.status === 'fulfilled' && industryCategory.value === 'bank')
@@ -426,5 +477,9 @@ async function fetchDartDataById(corpCode: string, corpName: string, stockCode: 
         }
       : undefined;
 
-  return { corpCode, corpName, stockCode, disclosures, financials, rawSeries, triggerEvents: triggerEvents.length > 0 ? triggerEvents : undefined };
+  return {
+    corpCode, corpName, stockCode, disclosures, financials, rawSeries,
+    triggerEvents: triggerEvents.length > 0 ? triggerEvents : undefined,
+    hasFetchError, matchTier,
+  };
 }

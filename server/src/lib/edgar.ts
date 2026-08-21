@@ -9,9 +9,13 @@ async function fetchJson<T>(url: string, timeoutMs = 15_000): Promise<T | null> 
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { headers: EDGAR_HEADERS, signal: controller.signal });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[edgar] fetchJson HTTP ${res.status} — ${url}`);
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (e) {
+    console.warn(`[edgar] fetchJson 예외(timeout/network) — ${url}: ${(e as Error).message}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -249,13 +253,54 @@ export interface EdgarData {
   rawSeries?: EdgarRawSeries;
   // 최근 12개월 이내 8-K 중 트리거 이벤트 후보(투자유치/M&A/대규모계약) 원문 — summary_v2 프롬프트에서 구조화
   triggerEvents?: TriggerEventCandidate[];
+  // companyfacts(XBRL) fetch가 404(이 CIK는 XBRL 데이터 자체 없음)가 아닌 다른 이유로
+  // 실패했는지(403/429/500/timeout 등 — 진짜 에러). true면 financials/rawSeries가
+  // 비어있어도 "진짜 데이터 없음"이 아니라 "확인 실패"라는 뜻(2026-08-21, DART/EDGAR
+  // 폴백 신뢰도 조사 계기).
+  hasFetchError?: boolean;
+  // 회사명이 cik_master 정확일치가 아니라 유사매칭으로 결정됐는지 — 'ticker_exact'/'name_exact'가
+  // 아니면 이름이 겹치는 다른 회사로 잘못 매칭됐을 위험 신호.
+  matchTier?: 'ticker_exact' | 'name_exact' | 'starts_with' | 'contains' | 'api_search';
 }
 
 // ── cik_master 우선 조회 → EFTS 폴백 ─────────────────────────────────────────
 
+// 유사매칭(③④) 공용 — ticker 존재 여부(있으면 우선) → 이름 길이(짧을수록 정확일치에 가까움)
+// 순으로 명시적 순위를 매겨 후보 중 하나를 고른다. dart.ts의 pickBestFuzzyMatch와 동일한
+// 설계(2026-08-21, 이름이 겹치는 회사군에서 정렬 기준 없이 임의 선택되던 위험 수정) —
+// lookupCik()/lookupCikByName() 둘 다 여기로 통일.
+async function pickBestCikMatch(
+  originalName: string,
+  pattern: string,
+): Promise<{ cik: string; name: string; ticker: string | null } | null> {
+  const { data } = await supabase
+    .from('cik_master')
+    .select('cik, name, ticker')
+    .ilike('name', pattern)
+    .limit(20);
+  if (!data || data.length === 0) return null;
+
+  const ranked = [...data].sort((a, b) => {
+    const aTicker = a.ticker != null ? 0 : 1;
+    const bTicker = b.ticker != null ? 0 : 1;
+    if (aTicker !== bTicker) return aTicker - bTicker;
+    return a.name.length - b.name.length;
+  });
+
+  const best = ranked[0];
+  if (ranked.length > 1) {
+    console.warn(
+      `[edgar] lookupCik 유사매칭 "${originalName}" → "${pattern}" 후보 ${ranked.length}개 중 ` +
+      `"${best.name}"(${best.cik}) 선택. 나머지: ${ranked.slice(1, 5).map(r => r.name).join(', ')}` +
+      (ranked.length > 5 ? ' 외' : ''),
+    );
+  }
+  return { cik: best.cik, name: best.name, ticker: best.ticker ?? null };
+}
+
 async function lookupCik(
   name: string,
-): Promise<{ cik: string; name: string; ticker: string | null } | null> {
+): Promise<{ cik: string; name: string; ticker: string | null; matchTier: 'ticker_exact' | 'name_exact' | 'starts_with' | 'contains' | 'api_search' } | null> {
   const norm = name.toUpperCase();
 
   // 1. 마스터 테이블 — ticker 일치
@@ -267,7 +312,7 @@ async function lookupCik(
       .maybeSingle();
     if (data) {
       console.log(`[edgar] CIK lookup HIT (ticker) "${name}" → ${data.cik} ${data.name}`);
-      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null, matchTier: 'ticker_exact' };
     }
   }
 
@@ -280,35 +325,25 @@ async function lookupCik(
       .maybeSingle();
     if (data) {
       console.log(`[edgar] CIK lookup HIT (exact) "${name}" → ${data.cik} ${data.name}`);
-      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null, matchTier: 'name_exact' };
     }
   }
 
   // 3. 마스터 테이블 — starts-with
   {
-    const { data } = await supabase
-      .from('cik_master')
-      .select('cik, name, ticker')
-      .ilike('name', `${name}%`)
-      .limit(1)
-      .maybeSingle();
-    if (data) {
-      console.log(`[edgar] CIK lookup HIT (startsWith) "${name}" → ${data.cik} ${data.name}`);
-      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    const picked = await pickBestCikMatch(name, `${name}%`);
+    if (picked) {
+      console.log(`[edgar] CIK lookup HIT (startsWith) "${name}" → ${picked.cik} ${picked.name}`);
+      return { ...picked, matchTier: 'starts_with' };
     }
   }
 
   // 4. 마스터 테이블 — contains
   {
-    const { data } = await supabase
-      .from('cik_master')
-      .select('cik, name, ticker')
-      .ilike('name', `%${name}%`)
-      .limit(1)
-      .maybeSingle();
-    if (data) {
-      console.log(`[edgar] CIK lookup HIT (contains) "${name}" → ${data.cik} ${data.name}`);
-      return { cik: data.cik, name: data.name, ticker: data.ticker ?? null };
+    const picked = await pickBestCikMatch(name, `%${name}%`);
+    if (picked) {
+      console.log(`[edgar] CIK lookup HIT (contains) "${name}" → ${picked.cik} ${picked.name}`);
+      return { ...picked, matchTier: 'contains' };
     }
   }
 
@@ -333,7 +368,7 @@ async function lookupCik(
     { onConflict: 'cik' },
   );
 
-  return { cik, name: hname, ticker: null };
+  return { cik, name: hname, ticker: null, matchTier: 'api_search' };
 }
 
 // ── XBRL helpers ─────────────────────────────────────────────────────────────
@@ -485,11 +520,11 @@ export async function lookupCikByName(
   { const { data } = await supabase.from('cik_master').select(sel).ilike('name', name).maybeSingle();
     if (data) return { cik: data.cik, ticker: data.ticker ?? null }; }
 
-  { const { data } = await supabase.from('cik_master').select(sel).ilike('name', `${name}%`).limit(1).maybeSingle();
-    if (data) return { cik: data.cik, ticker: data.ticker ?? null }; }
+  { const picked = await pickBestCikMatch(name, `${name}%`);
+    if (picked) return { cik: picked.cik, ticker: picked.ticker }; }
 
-  { const { data } = await supabase.from('cik_master').select(sel).ilike('name', `%${name}%`).limit(1).maybeSingle();
-    if (data) return { cik: data.cik, ticker: data.ticker ?? null }; }
+  { const picked = await pickBestCikMatch(name, `%${name}%`);
+    if (picked) return { cik: picked.cik, ticker: picked.ticker }; }
 
   return null;
 }
@@ -501,29 +536,57 @@ export async function fetchEdgarData(companyName: string): Promise<EdgarData | n
     console.log(`[edgar] fetchEdgarData MISS (no CIK): "${companyName}"`);
     return null;
   }
-  return fetchEdgarDataById(found.cik, found.name, found.ticker);
+  return fetchEdgarDataById(found.cik, found.name, found.ticker, found.matchTier);
 }
 
 // company_listings로 CIK를 이미 아는 경우(다중상장 회사 등) — 이름 기반 lookupCik를
-// 건너뛰고 바로 SEC 조회. entityName은 로그/표시용일 뿐 조회 자체엔 안 쓰임.
+// 건너뛰고 바로 SEC 조회. entityName은 로그/표시용일 뿐 조회 자체엔 안 쓰임. matchTier
+// 없음 — identifier 직접 조회라 이름 매칭 자체가 없음.
 export async function fetchEdgarDataByCik(cik: string, ticker: string | null, entityName?: string): Promise<EdgarData | null> {
   console.log(`[edgar] fetchEdgarDataByCik start: CIK ${cik}`);
   return fetchEdgarDataById(cik, entityName ?? ticker ?? cik, ticker);
 }
 
-async function fetchEdgarDataById(cik: string, entityName: string, ticker: string | null): Promise<EdgarData | null> {
+// companyfacts(XBRL) 전용 fetch — 404(이 CIK는 XBRL 데이터 자체가 없음, 신규/소형 filer 등)와
+// 그 외 실패(403/429/500/timeout — 진짜 에러)를 구분한다. DART의 status='013' 처리와 동일한
+// 설계지만, SEC는 DART 같은 세분화된 에러코드가 없어 HTTP status만으로 판단(2026-08-21).
+async function fetchCompanyFacts(
+  cik: string,
+): Promise<{ data: { facts?: { 'us-gaap'?: Record<string, any> } } | null; hasFetchError: boolean }> {
+  const url = `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(url, { headers: EDGAR_HEADERS, signal: controller.signal });
+    if (res.status === 404) return { data: null, hasFetchError: false };
+    if (!res.ok) {
+      console.warn(`[edgar] companyfacts fetch HTTP ${res.status} — CIK ${cik}`);
+      return { data: null, hasFetchError: true };
+    }
+    return { data: (await res.json()) as { facts?: { 'us-gaap'?: Record<string, any> } }, hasFetchError: false };
+  } catch (e) {
+    console.warn(`[edgar] companyfacts fetch 예외(timeout/network) — CIK ${cik}: ${(e as Error).message}`);
+    return { data: null, hasFetchError: true };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchEdgarDataById(
+  cik: string, entityName: string, ticker: string | null,
+  matchTier?: 'ticker_exact' | 'name_exact' | 'starts_with' | 'contains' | 'api_search',
+): Promise<EdgarData | null> {
   console.log(`[edgar] fetching submissions + companyfacts for CIK ${cik} (${entityName})`);
 
   // 최근 공시 + XBRL 전체 팩트(다년도 포함) 병렬 조회
-  const [subRes, factsRes] = await Promise.all([
+  const [subRes, factsResult] = await Promise.all([
     fetchJson<SubmissionsData>(`https://data.sec.gov/submissions/CIK${cik}.json`),
-    fetchJson<{ facts?: { 'us-gaap'?: Record<string, any> } }>(
-      `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
-    ),
+    fetchCompanyFacts(cik),
   ]);
+  const factsRes = factsResult.data;
 
   if (!subRes) {
-    console.log(`[edgar] submissions fetch FAILED for CIK ${cik}`);
+    console.warn(`[edgar] submissions fetch FAILED for CIK ${cik}`);
     return null;
   }
 
@@ -695,5 +758,8 @@ async function fetchEdgarDataById(cik: string, entityName: string, ticker: strin
 
   console.log(`[edgar] XBRL result for "${entityName}" (CIK ${cik}): rev=${financials.revenue ?? 'null'} opInc=${financials.operatingIncome ?? 'null'} netInc=${financials.netIncome ?? 'null'} year=${financials.year ?? 'null'} years=${rawSeries?.fiscalYears.length ?? 0}`);
 
-  return { cik, companyName: entityName, ticker, filings, financials, rawSeries, triggerEvents };
+  return {
+    cik, companyName: entityName, ticker, filings, financials, rawSeries, triggerEvents,
+    hasFetchError: factsResult.hasFetchError, matchTier,
+  };
 }

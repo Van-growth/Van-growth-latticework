@@ -45,6 +45,10 @@ export interface FinancialContext {
   // financial_cache(배치 프리컴퓨트) 히트 여부 — false면 EDGAR/DART 라이브 조회로,
   // 첫 조회 기업일 가능성이 높아 프론트에서 "조금 더 걸려요" 안내에 사용
   isCacheHit:  boolean;
+  // 회사명이 정확일치가 아니라 유사매칭으로 결정됐는지(dart.ts/edgar.ts의 matchTier 그대로
+  // 전달) — 'exact'/'ticker_exact'/'name_exact'가 아니면 낮은 신뢰도 신호. 이번 스코프는
+  // 이 필드에 신호를 싣는 것까지만 — UI 표시는 별도 작업(2026-08-21).
+  matchTier?: 'exact' | 'ticker_exact' | 'name_exact' | 'starts_with' | 'contains' | 'api_search';
 }
 
 // 한글 음절이 포함되면 한국 기업으로 판단
@@ -349,18 +353,18 @@ export async function fetchFinancialContext(
   if (edgarListing && dartListing) {
     try {
       const edgar = await fetchEdgarDataByCik(edgarListing.identifier, edgarListing.ticker);
-      if (edgar && (edgar.financials.revenue || edgar.rawSeries)) {
+      if (edgar && edgar.rawSeries && !edgar.hasFetchError) {
         const fmpData = edgarListing.ticker
           ? await fetchFmpData(companyName, edgarListing.ticker).catch(() => null)
           : null;
         console.log(`[financialCtx] "${companyName}" → 다중상장 source=edgar (CIK ${edgarListing.identifier})`);
-        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData), rawEdgar: edgar.rawSeries, isCacheHit: false };
+        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData), rawEdgar: edgar.rawSeries, isCacheHit: false, matchTier: edgar.matchTier };
       }
       const dart = await fetchDartDataByCorpCode(dartListing.identifier, dartListing.ticker, companyName);
-      if (dart) {
+      if (dart && dart.rawSeries && !dart.hasFetchError) {
         const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
         console.log(`[financialCtx] "${companyName}" → 다중상장, EDGAR 데이터 없음 → source=dart (corp_code ${dartListing.identifier})`);
-        return { source: 'dart', contextText: buildDartContext(dart, kis), rawDart: dart.rawSeries, isCacheHit: false };
+        return { source: 'dart', contextText: buildDartContext(dart, kis), rawDart: dart.rawSeries, isCacheHit: false, matchTier: dart.matchTier };
       }
       console.log(`[financialCtx] "${companyName}" → 다중상장, EDGAR/DART 둘 다 실패 → source=web_search`);
       return { source: 'web_search', contextText: '', isCacheHit: false };
@@ -398,21 +402,21 @@ export async function fetchFinancialContext(
 
       // DART + KIS 병렬
       const dart = await fetchDartData(companyName);
-      if (dart) {
+      if (dart && dart.rawSeries && !dart.hasFetchError) {
         const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
         const contextText = buildDartContext(dart, kis);
-        if (dart.stockCode) await upsertFinancialCache(dart.stockCode, 'DART', contextText, { raw_dart: dart.rawSeries });
-        return { source: 'dart', contextText, rawDart: dart.rawSeries, isCacheHit: false };
+        if (dart.stockCode && !dart.hasFetchError) await upsertFinancialCache(dart.stockCode, 'DART', contextText, { raw_dart: dart.rawSeries });
+        return { source: 'dart', contextText, rawDart: dart.rawSeries, isCacheHit: false, matchTier: dart.matchTier };
       }
       // DART 실패 시 EDGAR 시도
       const edgar = await fetchEdgarData(companyName);
-      if (edgar) {
+      if (edgar && edgar.rawSeries && !edgar.hasFetchError) {
         const fmpData = edgar.ticker
           ? await fetchFmpData(companyName, edgar.ticker).catch(() => null)
           : null;
         const contextText = buildEdgarContext(edgar, fmpData);
-        if (edgar.ticker) await upsertFinancialCache(edgar.ticker, 'EDGAR', contextText, { raw_edgar: edgar.rawSeries });
-        return { source: 'edgar', contextText, rawEdgar: edgar.rawSeries, isCacheHit: false };
+        if (edgar.ticker && !edgar.hasFetchError) await upsertFinancialCache(edgar.ticker, 'EDGAR', contextText, { raw_edgar: edgar.rawSeries });
+        return { source: 'edgar', contextText, rawEdgar: edgar.rawSeries, isCacheHit: false, matchTier: edgar.matchTier };
       }
     } else {
       if (!force) {
@@ -445,15 +449,15 @@ export async function fetchFinancialContext(
       const e = edgar.status  === 'fulfilled' ? edgar.value  : null;
       const f = fmpData.status === 'fulfilled' ? fmpData.value : null;
 
-      if (e) {
+      if (e && e.rawSeries && !e.hasFetchError) {
         // FMP는 EDGAR ticker를 우선 사용해 재시도
         const fmpFinal = f ?? (e.ticker
           ? await fetchFmpData(companyName, e.ticker).catch(() => null)
           : null);
         console.log(`[financialCtx] "${companyName}" → source=edgar (EDGAR+FMP) rev=${e.financials.revenue ?? 'null'}`);
         const contextText = buildEdgarContext(e, fmpFinal);
-        if (e.ticker) await upsertFinancialCache(e.ticker, 'EDGAR', contextText, { raw_edgar: e.rawSeries });
-        return { source: 'edgar', contextText, rawEdgar: e.rawSeries, isCacheHit: false };
+        if (e.ticker && !e.hasFetchError) await upsertFinancialCache(e.ticker, 'EDGAR', contextText, { raw_edgar: e.rawSeries });
+        return { source: 'edgar', contextText, rawEdgar: e.rawSeries, isCacheHit: false, matchTier: e.matchTier };
       }
       if (f) {
         // EDGAR 없이 FMP만 있는 경우 (raw 데이터 없어 캐시 반영 스킵)
@@ -463,11 +467,11 @@ export async function fetchFinancialContext(
 
       // EDGAR/FMP 모두 실패 시 DART 시도
       const dart = await fetchDartData(companyName);
-      if (dart) {
+      if (dart && dart.rawSeries && !dart.hasFetchError) {
         const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
         const contextText = buildDartContext(dart, kis);
-        if (dart.stockCode) await upsertFinancialCache(dart.stockCode, 'DART', contextText, { raw_dart: dart.rawSeries });
-        return { source: 'dart', contextText, rawDart: dart.rawSeries, isCacheHit: false };
+        if (dart.stockCode && !dart.hasFetchError) await upsertFinancialCache(dart.stockCode, 'DART', contextText, { raw_dart: dart.rawSeries });
+        return { source: 'dart', contextText, rawDart: dart.rawSeries, isCacheHit: false, matchTier: dart.matchTier };
       }
     }
   } catch {
