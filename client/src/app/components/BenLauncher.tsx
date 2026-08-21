@@ -21,6 +21,8 @@ import { getUiStrings } from '@/lib/i18n/uiStrings';
 // portal로 document.body에 직접 렌더하면 이 containing block 문제를 완전히 피해간다.
 const WIDTH_PRESETS: Record<BenWidthPreset, number> = { default: 420, wide: 640 };
 const WIDTH_LS_KEY = 'ben_panel_width';
+// 신규 유저 인디케이터(2026-08-20) — 패널을 한 번이라도 열면 사라지고 다시 안 뜬다.
+const SEEN_LS_KEY = 'ben_panel_seen';
 
 function loadSavedWidthPreset(): BenWidthPreset {
   if (typeof window === 'undefined') return 'default';
@@ -28,17 +30,30 @@ function loadSavedWidthPreset(): BenWidthPreset {
 }
 
 export default function BenLauncher() {
-  const { analysisData } = useAnalysis();
+  // isOpen은 이제 로컬 state가 아니라 AnalysisContext에서 온다 — 리포트 탭 하단 넛지
+  // 배너(AnalysisCard.tsx, 이 컴포넌트와 형제 관계)가 같은 상태를 읽고 써서 패널을
+  // 열 수 있어야 하기 때문(2026-08-20).
+  const { analysisData, benOpen: isOpen, setBenOpen: setIsOpen } = useAnalysis();
   const { language } = useLanguage();
   const t = getUiStrings(language).ben;
-  const [isOpen, setIsOpen] = useState(false);
   const [widthPreset, setWidthPresetState] = useState<BenWidthPreset>('default');
   const [mounted, setMounted] = useState(false);
+  // 기본 true로 시작(SSR/hydration 시 깜빡임 방지) — mount 후 실제 localStorage 값으로 교체.
+  const [hasSeenBen, setHasSeenBen] = useState(true);
 
   useEffect(() => {
     setWidthPresetState(loadSavedWidthPreset());
+    setHasSeenBen(window.localStorage.getItem(SEEN_LS_KEY) === '1');
     setMounted(true);
   }, []);
+
+  // isOpen이 true가 되는 순간(아이콘 클릭이든 탭 넛지 배너 클릭이든 트리거 경로 무관)
+  // "본 적 있음" 처리 — 인디케이터가 즉시 사라지고 새로고침해도 다시 안 뜬다.
+  useEffect(() => {
+    if (!isOpen) return;
+    setHasSeenBen(true);
+    try { window.localStorage.setItem(SEEN_LS_KEY, '1'); } catch { /* ignore */ }
+  }, [isOpen]);
 
   function setWidthPreset(preset: BenWidthPreset) {
     setWidthPresetState(preset);
@@ -78,14 +93,20 @@ export default function BenLauncher() {
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(v => !v)}
+        onClick={() => setIsOpen(!isOpen)}
         aria-label={t.openAria}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        className="flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1.5 shadow-sm hover:bg-gray-50 transition-colors shrink-0"
+        className="relative flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1.5 shadow-sm hover:bg-gray-50 transition-colors shrink-0"
       >
         <span aria-hidden="true">🧑‍💼</span>
         {t.panelTitle}
+        {mounted && !hasSeenBen && (
+          <span
+            className="absolute -top-1 -right-1 w-3 h-3 bg-risk rounded-full ring-2 ring-white"
+            aria-hidden="true"
+          />
+        )}
       </button>
 
       {mounted && createPortal(overlay, document.body)}

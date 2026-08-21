@@ -10,7 +10,7 @@ import dynamic from 'next/dynamic';
 import {
   BarChart2, Zap, GitBranch, Users, DollarSign, Target,
   BookOpen, ExternalLink, Building2, Clock, Briefcase, User, RefreshCw,
-  TrendingUp, Lock, Copy, Check, Lightbulb, Star, ArrowUp, ArrowDown,
+  TrendingUp, Lock, Copy, Check, Lightbulb, Star, ArrowUp, ArrowDown, MessageCircle,
 } from 'lucide-react';
 const ExportPdfButton = dynamic(() => import('./ExportPdfButton'), { ssr: false, loading: () => null });
 import {
@@ -2418,6 +2418,22 @@ function EmptySectionState({ message, onReanalyze, reanalyzeLabel }: { message: 
 // 스크롤-스택 문서(2026-08-17)의 섹션 하나 — 구 탭 콘텐츠 패널을 대체. id는 상단 sticky
 // 그리드의 jumpToSection()이 scrollIntoView로 찾는 앵커. scroll-mt로 sticky 그리드에
 // 가려지지 않게 오프셋을 준다.
+// AI 비서(Ben) 발견성 개선(2026-08-20) — 각 섹션 카드 하단 범용 넛지, 전 탭 동일 문구.
+// v2.0.0 changelog의 "nudge 배너"(진행상태용 플로팅 배너)는 2026-08-17 sticky 그리드
+// 전환 때 이미 삭제된 완전히 별개 컴포넌트라 재사용 대상이 없음 — 신규 최소 컴포넌트.
+function BenNudgeBanner({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-4 w-full flex items-center justify-center gap-1.5 text-sm text-navy-600 hover:text-navy-800 hover:bg-navy-50 border border-navy-100 rounded-lg px-3 py-2 transition-colors"
+    >
+      <MessageCircle size={13} />
+      {label}
+    </button>
+  );
+}
+
 function ReportSection({ id, title, icon: Icon, children, getMarkdown, uiT }: {
   id: string;
   title: string;
@@ -3043,7 +3059,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
   // 섹션만 추적, 헤더의 "이 섹션 복사" 버튼(getActiveTabMarkdown)이 이 값을 참조한다.
   const [tab, setTab] = useState<TabKey>('summary');
   const [, startTransition] = useTransition();
-  const { completedBatches } = useAnalysis();
+  const { completedBatches, setBenOpen } = useAnalysis();
   // 그리드 클릭/섹션 내부 링크 클릭 시 공통으로 쓰는 헬퍼 — tab state를 갱신하고(복사
   // 버튼용) 해당 섹션 id로 스무스 스크롤한다. scroll-mt-* 유틸로 sticky 그리드에
   // 가려지지 않게 오프셋을 준다(각 섹션 래퍼에 적용).
@@ -3274,6 +3290,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <SummaryV2Tab s={data.summary_v2} sources={data.summary_v2.sources ?? data.sources?.summary} onTabChange={key => jumpToSection(key as TabKey)} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('summary') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <SummaryTab data={data} />}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         {/* Pain Diagnosis(industry_history+tech_evolution 통합, 2026-08-16부터 배치5) —
@@ -3308,6 +3325,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 : <p className="text-base text-gray-500 py-8 text-center">아직 생성되지 않은 섹션입니다.</p>}
             </div>
           </div>
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         <ReportSection id="value_chain" title={uiT.tabs.value_chain.label} icon={GitBranch} uiT={uiT} getMarkdown={() => data.value_chain_v2 ? valueChainToMd(data.value_chain_v2, data.value_chain_v2.sources ?? data.sources?.value_chain) : ''}>
@@ -3317,6 +3335,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <ValueChainV2Tab vc={data.value_chain_v2} sources={data.value_chain_v2.sources ?? data.sources?.value_chain} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('value_chain') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('value_chain')}<ValueChainTab data={data} /></>}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         <ReportSection id="business_model" title={uiT.tabs.business_model.label} icon={DollarSign} uiT={uiT} getMarkdown={() => data.business_model_v2 ? businessModelToMd(data.business_model_v2, data.business_model_v2.sources ?? data.sources?.business_model) : ''}>
@@ -3326,6 +3345,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <BusinessModelV2Tab bm={data.business_model_v2} sources={data.business_model_v2.sources ?? data.sources?.business_model} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('business_model') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('business_model')}<BusinessModelTab data={data} /></>}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         <ReportSection id="competitors" title={uiT.tabs.competitors.label} icon={Users} uiT={uiT} getMarkdown={() => data.competitors_v2 ? competitorsToMd(data.competitors_v2, data.competitors_v2.sources ?? data.sources?.competitors) : ''}>
@@ -3335,6 +3355,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <CompetitorsV2Tab c={data.competitors_v2} sources={data.competitors_v2.sources ?? data.sources?.competitors} dataSource={data.dataSource} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('competitors') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('competitors')}<CompetitorsTab data={data} /></>}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         <ReportSection id="financials" title={uiT.tabs.financials.label} icon={BarChart2} uiT={uiT} getMarkdown={() => financialsV2Local ? financialsToMd(financialsV2Local, financialsV2Local.sources ?? data.sources?.financials) : ''}>
@@ -3356,6 +3377,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                     />
                   : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('financials') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('financials')}<FinancialsTab data={data} /></>}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         <ReportSection id="strategy" title={uiT.tabs.strategy.label} icon={Target} uiT={uiT} getMarkdown={() => data.strategy_v2 ? strategyToMd(data.strategy_v2, data.strategy_v2.sources ?? data.sources?.strategy) : ''}>
@@ -3365,6 +3387,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <StrategyV2Tab s={data.strategy_v2} sources={data.strategy_v2.sources ?? data.sources?.strategy} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('strategy') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('strategy')}<StrategyTab data={data} /></>}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         <ReportSection id="founder" title={uiT.tabs.founder.label} icon={User} uiT={uiT} getMarkdown={() => data.founder_v2 ? founderToMd(data.founder_v2) : ''}>
@@ -3374,6 +3397,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <FounderV2Tab f={data.founder_v2} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('founder') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('founder')}<p className="text-base text-gray-500 py-4 text-center">창업자 데이터가 없습니다.</p></>}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         <ReportSection id="cross_industry_nudge" title={uiT.tabs.cross_industry_nudge.label} icon={Lightbulb} uiT={uiT} getMarkdown={() => data.cross_industry_nudge_v1 ? crossIndustryNudgeToMd(data.cross_industry_nudge_v1) : ''}>
@@ -3383,6 +3407,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
                 ? <CrossIndustryNudgeV1Tab n={data.cross_industry_nudge_v1} sources={data.cross_industry_nudge_v1.sources} />
                 : <EmptySectionState message={uiT.actions.sectionFailedEmpty} onReanalyze={onReanalyze ? () => onReanalyze('nudge') : undefined} reanalyzeLabel={uiT.actions.reanalyzeSection} />)
             : <>{reanalyzeBtn('nudge')}<p className="text-base text-gray-500 py-4 text-center">넛지 데이터가 없습니다.</p></>}
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
 
         {/* growth_scenario: 그리드 셀에는 없지만(요청사항 10개 순서 밖) 출처 바로
@@ -3403,6 +3428,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             뒤로 이동).** */}
         <ReportSection id="sources" title={uiT.home.progressCardSources} icon={BookOpen} uiT={uiT} getMarkdown={() => sourcesToMd(data, uiT)}>
           <AllSourcesSummary data={data} uiT={uiT} />
+          <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
       </div>
     </div>

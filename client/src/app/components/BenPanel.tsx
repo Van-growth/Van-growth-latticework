@@ -23,6 +23,14 @@ export default function BenPanel({ analysisData, widthPreset, setWidthPreset }: 
   const { language } = useLanguage();
   const uiT = getUiStrings(language).ben;
   const { messages, sendMessage, reset, isStreaming, rateLimited, error } = useBenChat(analysisData?.id ?? null);
+  // 컨텍스트 인사말(2026-08-20) — Ben이 먼저 건네는 인사, 실제 유저 메시지가 아니므로
+  // useBenChat의 messages(서버 대화 히스토리)엔 절대 안 실리고 이 컴포넌트 로컬 렌더에서만
+  // 존재한다. messages.length===0(이 기업에 대해 아직 대화 이력 없음)일 때만 표시 — 기존
+  // 대화가 있으면 그 위에 매번 겹쳐 보이는 어색함을 막고, 유저가 실제로 메시지를 보내는
+  // 순간 messages.length가 바뀌어 자동으로 사라진다. 이 패널은 BenLauncher.tsx에서
+  // {isOpen && <BenPanel/>}로 매번 마운트되므로, 별도 "한 번만 표시" 플래그 없이도
+  // 열 때마다 자연히 다시 계산된다.
+  const greeting = analysisData && messages.length === 0 ? uiT.greeting(analysisData.companyName) : null;
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -123,6 +131,13 @@ export default function BenPanel({ analysisData, widthPreset, setWidthPreset }: 
         <>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+            {greeting && (
+              <div className="flex justify-start">
+                <div className="max-w-[88%] rounded-xl px-3 py-2 text-xs bg-gray-100 text-gray-800 rounded-bl-sm">
+                  <span className="leading-relaxed">{greeting}</span>
+                </div>
+              </div>
+            )}
             {messages.length === 0 && (
               <p className="text-[11px] text-gray-400 text-center py-4">
                 {session ? uiT.hint : uiT.signInToChat}
