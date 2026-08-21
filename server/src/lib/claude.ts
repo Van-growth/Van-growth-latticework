@@ -1164,7 +1164,8 @@ export async function refreshFinancials(companyName: string, language: Language 
   // 유무를 판단 — 없으면 gatherFinancialResearch(웹서치)/callSection(Claude) 자체를 아예
   // 건너뛴다. 작업 D(2026-08-16) — 병렬로 두면 이미 시작된 웹서치를 취소할 수 없어 "생성은
   // 스킵하지만 검색 비용은 이미 씀"이 되므로 순서를 바꿈.
-  const { contextText, rawEdgar, rawDart } = await fetchFinancialContext(companyName);
+  // 새로고침 버튼 전용 함수 — 캐시 만료 여부와 무관하게 항상 DART/EDGAR를 재조회한다.
+  const { contextText, rawEdgar, rawDart } = await fetchFinancialContext(companyName, undefined, true);
   if (!rawEdgar && !rawDart) return emptyFinancialsV2();
 
   const industryCategory = await classifyIndustryCategory({ cik: rawEdgar?.cik, corpCode: rawDart?.corp_code });

@@ -6,6 +6,7 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { createClient } from '@supabase/supabase-js';
+import { getRecentFiscalYears } from '../src/lib/fiscalYears';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -22,7 +23,10 @@ const DART_BASE   = 'https://opendart.fss.or.kr/api';
 const DELAY_MS    = 300;
 const RETRY_WAIT  = 5_000;
 const MAX_RETRIES = 3;
-const YEARS       = ['2024', '2023', '2022', '2021'] as const;
+// 하드코딩 → 동적 계산(2026-08-21) — 예전엔 시간이 지나면 배열이 그대로 굳어 최신 사업보고서를
+// 영구히 못 가져오는 구조적 결함이었다(데이원컴퍼니 FY2025 미표시로 발견). 라이브 경로
+// (dart.ts)와 동일한 공용 헬퍼 사용.
+const YEARS = getRecentFiscalYears(4);
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));

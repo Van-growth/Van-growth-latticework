@@ -2748,7 +2748,7 @@ Comprehensive Income/재무상태표/IFRS 표현 등 오탐 방지 4종)로 별�
 | 버전 | 내용 |
 |---|---|
 | v1.0.0 | 초기 출시 — 순차 배치, 24시간 캐시, 기본 분석 |
-| v2.0.0 | 2026-06-29 — EDGAR/DART 배치 적재(9,583개), 배치 병렬화(75s→35s), founder 독립 batch5, financial_cache 우선순위 + 출처 뱃지, TTL 무기한, Quality Gate, Prompt Caching, 로딩 애니메이션, 탭 상태 아이콘, nudge 배너, 탭별 재분석 버튼, Render Cron Job 매월 1일 자동화 |
+| v2.0.0 | 2026-06-29 — EDGAR/DART 배치 적재(9,583개), 배치 병렬화(75s→35s), founder 독립 batch5, financial_cache 우선순위 + 출처 뱃지, TTL 90일(분기별), Quality Gate, Prompt Caching, 로딩 애니메이션, 탭 상태 아이콘, nudge 배너, 탭별 재분석 버튼, Render Cron Job 매월 1일 자동화 |
 | v2.0.1 | 2026-07-03 — 섹터 매핑(sector_mapping, KSIC/SIC→12개 태그), financial_cache/라이브 조회 4개년 시계열, 몬테카를로 성장 시나리오 엔진, 배치 1차(요약+재무)/2차(백그라운드)/3차(몬테카를로) 스플릿, 무료 분석 횟수 제한(rolling 7일 2회, 임시 식별자), 성장 시나리오 탭 프리미엄 게이팅 |
 | v2.1.0 | 구글 로그인(완료, 2026-07-03) + 온보딩 설문(완료, 2026-07-10) + Posthog/Microsoft Clarity(완료, 2026-07-09) |
 | v2.1.1 | 2026-07-16 — companies/company_listings 스키마 분리(지연 생성), 검색-캐시 조회

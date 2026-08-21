@@ -8,6 +8,27 @@ import { supabase }                              from './supabase';
 
 export type DataSource = 'dart' | 'edgar' | 'web_search';
 
+// 라이브 DART/EDGAR 조회 성공 시 financial_cache에 반영(2026-08-21) — 지금까지 이 캐시는
+// 배치 스크립트만 썼고 라이브 경로는 읽기 전용이라, 캐시가 만료돼 라이브로 최신 데이터를
+// 가져와도 다음 조회 때 버려지고 있었다(데이원컴퍼니 FY2025 조사 계기). company_name
+// UNIQUE 제약 기반 upsert라 배치와 동시에 같은 행을 써도 Postgres가 원자적으로 처리 —
+// 마지막 커밋이 이길 뿐 데이터 손상 없음. 실패해도 이번 요청 응답 자체는 막지 않는다.
+async function upsertFinancialCache(
+  companyKey: string,
+  source: 'DART' | 'EDGAR',
+  contextText: string,
+  raw: { raw_dart?: unknown; raw_edgar?: unknown },
+): Promise<void> {
+  const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from('financial_cache')
+    .upsert(
+      { company_name: companyKey, source, context_text: contextText, expires_at: expiresAt, ...raw },
+      { onConflict: 'company_name' },
+    );
+  if (error) console.warn(`[financialCtx] financial_cache upsert 실패 (${companyKey}): ${error.message}`);
+}
+
 // company_listings 행 — 다중상장 회사(company_id에 EDGAR+DART 둘 다 있는 경우) 재무
 // 우선순위 판단용. 하나만 있거나 아예 안 넘어오면 기존 이름 휴리스틱 경로를 그대로 탄다.
 export interface CompanyListingRef {
@@ -311,7 +332,13 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function fetchFinancialContext(companyName: string, listings?: CompanyListingRef[]): Promise<FinancialContext> {
+// force=true면 financial_cache 만료 여부와 무관하게 DART/EDGAR를 무조건 재조회한다 —
+// "데이터 새로고침" 버튼(refreshFinancials) 전용, 기본값 false로 기존 동작(캐시 우선) 유지.
+export async function fetchFinancialContext(
+  companyName: string,
+  listings?: CompanyListingRef[],
+  force = false,
+): Promise<FinancialContext> {
   console.log(`[financialCtx] start "${companyName}"`);
 
   // 다중상장 회사(company_listings에 EDGAR+DART 둘 다 존재) — 이름 기반 한글 휴리스틱
@@ -347,23 +374,25 @@ export async function fetchFinancialContext(companyName: string, listings?: Comp
 
   try {
     if (isKorean) {
-      // financial_cache 선체크 (DART 배치 프리컴퓨트 데이터)
-      const { data: corpRow } = await supabase
-        .from('corp_master')
-        .select('stock_code')
-        .ilike('corp_name', companyName)
-        .not('stock_code', 'is', null)
-        .maybeSingle();
-      if (corpRow?.stock_code) {
-        const { data: cachedDart } = await supabase
-          .from('financial_cache')
-          .select('context_text, raw_dart')
-          .eq('company_name', corpRow.stock_code)
-          .gt('expires_at', new Date().toISOString())
+      if (!force) {
+        // financial_cache 선체크 (DART 배치 프리컴퓨트 데이터)
+        const { data: corpRow } = await supabase
+          .from('corp_master')
+          .select('stock_code')
+          .ilike('corp_name', companyName)
+          .not('stock_code', 'is', null)
           .maybeSingle();
-        if (cachedDart?.context_text) {
-          console.log(`[financialCtx] "${companyName}" → financial_cache HIT DART (${corpRow.stock_code})`);
-          return { source: 'dart', contextText: cachedDart.context_text, rawDart: cachedDart.raw_dart ?? undefined, isCacheHit: true };
+        if (corpRow?.stock_code) {
+          const { data: cachedDart } = await supabase
+            .from('financial_cache')
+            .select('context_text, raw_dart')
+            .eq('company_name', corpRow.stock_code)
+            .gt('expires_at', new Date().toISOString())
+            .maybeSingle();
+          if (cachedDart?.context_text) {
+            console.log(`[financialCtx] "${companyName}" → financial_cache HIT DART (${corpRow.stock_code})`);
+            return { source: 'dart', contextText: cachedDart.context_text, rawDart: cachedDart.raw_dart ?? undefined, isCacheHit: true };
+          }
         }
       }
 
@@ -371,7 +400,9 @@ export async function fetchFinancialContext(companyName: string, listings?: Comp
       const dart = await fetchDartData(companyName);
       if (dart) {
         const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
-        return { source: 'dart', contextText: buildDartContext(dart, kis), rawDart: dart.rawSeries, isCacheHit: false };
+        const contextText = buildDartContext(dart, kis);
+        if (dart.stockCode) await upsertFinancialCache(dart.stockCode, 'DART', contextText, { raw_dart: dart.rawSeries });
+        return { source: 'dart', contextText, rawDart: dart.rawSeries, isCacheHit: false };
       }
       // DART 실패 시 EDGAR 시도
       const edgar = await fetchEdgarData(companyName);
@@ -379,25 +410,29 @@ export async function fetchFinancialContext(companyName: string, listings?: Comp
         const fmpData = edgar.ticker
           ? await fetchFmpData(companyName, edgar.ticker).catch(() => null)
           : null;
-        return { source: 'edgar', contextText: buildEdgarContext(edgar, fmpData), rawEdgar: edgar.rawSeries, isCacheHit: false };
+        const contextText = buildEdgarContext(edgar, fmpData);
+        if (edgar.ticker) await upsertFinancialCache(edgar.ticker, 'EDGAR', contextText, { raw_edgar: edgar.rawSeries });
+        return { source: 'edgar', contextText, rawEdgar: edgar.rawSeries, isCacheHit: false };
       }
     } else {
-      // financial_cache 선체크 (EDGAR 배치 프리컴퓨트 데이터)
-      const cikInfo = await lookupCikByName(companyName).catch(() => null);
-      // CIK 조회 티커 우선, 없으면 companyName 자체가 ticker인 경우 직접 시도
-      const lookupTicker =
-        cikInfo?.ticker?.toUpperCase() ??
-        (/^[A-Z0-9]{1,6}$/.test(companyName.toUpperCase()) ? companyName.toUpperCase() : null);
-      if (lookupTicker) {
-        const { data: cached } = await supabase
-          .from('financial_cache')
-          .select('context_text, raw_edgar')
-          .eq('company_name', lookupTicker)
-          .gt('expires_at', new Date().toISOString())
-          .maybeSingle();
-        if (cached?.context_text) {
-          console.log(`[financialCtx] "${companyName}" → financial_cache HIT EDGAR (${lookupTicker})`);
-          return { source: 'edgar', contextText: cached.context_text, rawEdgar: cached.raw_edgar ?? undefined, isCacheHit: true };
+      if (!force) {
+        // financial_cache 선체크 (EDGAR 배치 프리컴퓨트 데이터)
+        const cikInfo = await lookupCikByName(companyName).catch(() => null);
+        // CIK 조회 티커 우선, 없으면 companyName 자체가 ticker인 경우 직접 시도
+        const lookupTicker =
+          cikInfo?.ticker?.toUpperCase() ??
+          (/^[A-Z0-9]{1,6}$/.test(companyName.toUpperCase()) ? companyName.toUpperCase() : null);
+        if (lookupTicker) {
+          const { data: cached } = await supabase
+            .from('financial_cache')
+            .select('context_text, raw_edgar')
+            .eq('company_name', lookupTicker)
+            .gt('expires_at', new Date().toISOString())
+            .maybeSingle();
+          if (cached?.context_text) {
+            console.log(`[financialCtx] "${companyName}" → financial_cache HIT EDGAR (${lookupTicker})`);
+            return { source: 'edgar', contextText: cached.context_text, rawEdgar: cached.raw_edgar ?? undefined, isCacheHit: true };
+          }
         }
       }
 
@@ -416,10 +451,12 @@ export async function fetchFinancialContext(companyName: string, listings?: Comp
           ? await fetchFmpData(companyName, e.ticker).catch(() => null)
           : null);
         console.log(`[financialCtx] "${companyName}" → source=edgar (EDGAR+FMP) rev=${e.financials.revenue ?? 'null'}`);
-        return { source: 'edgar', contextText: buildEdgarContext(e, fmpFinal), rawEdgar: e.rawSeries, isCacheHit: false };
+        const contextText = buildEdgarContext(e, fmpFinal);
+        if (e.ticker) await upsertFinancialCache(e.ticker, 'EDGAR', contextText, { raw_edgar: e.rawSeries });
+        return { source: 'edgar', contextText, rawEdgar: e.rawSeries, isCacheHit: false };
       }
       if (f) {
-        // EDGAR 없이 FMP만 있는 경우
+        // EDGAR 없이 FMP만 있는 경우 (raw 데이터 없어 캐시 반영 스킵)
         console.log(`[financialCtx] "${companyName}" → source=edgar (FMP only)`);
         return { source: 'edgar', contextText: buildFmpContext(f), isCacheHit: false };
       }
@@ -428,7 +465,9 @@ export async function fetchFinancialContext(companyName: string, listings?: Comp
       const dart = await fetchDartData(companyName);
       if (dart) {
         const kis = dart.stockCode ? await fetchKisQuote(dart.stockCode).catch(() => null) : null;
-        return { source: 'dart', contextText: buildDartContext(dart, kis), rawDart: dart.rawSeries, isCacheHit: false };
+        const contextText = buildDartContext(dart, kis);
+        if (dart.stockCode) await upsertFinancialCache(dart.stockCode, 'DART', contextText, { raw_dart: dart.rawSeries });
+        return { source: 'dart', contextText, rawDart: dart.rawSeries, isCacheHit: false };
       }
     }
   } catch {

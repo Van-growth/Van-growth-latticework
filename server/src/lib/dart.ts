@@ -1,6 +1,7 @@
 // DART (금융감독원 전자공시시스템) API client
 import { supabase } from './supabase';
 import { classifyIndustryCategory } from './industryClassification';
+import { getRecentFiscalYears } from './fiscalYears';
 
 const BASE = 'https://opendart.fss.or.kr/api';
 
@@ -160,8 +161,7 @@ async function fetchMultiYearSeries(
   corpCode: string,
   key: string,
 ): Promise<{ cfs: DartFinSeries | null; ofs: DartFinSeries | null }> {
-  const currentYear = new Date().getFullYear();
-  const YEARS = [currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4, currentYear - 5].map(String);
+  const YEARS = getRecentFiscalYears(5);
 
   const cfsMap = new Map<string, YearSlice>();
   const ofsMap = new Map<string, YearSlice>();
