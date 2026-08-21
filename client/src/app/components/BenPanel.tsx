@@ -20,8 +20,13 @@ interface BenPanelProps {
 
 export default function BenPanel({ analysisData, widthPreset, setWidthPreset }: BenPanelProps) {
   const { session } = useAuth();
-  const { language } = useLanguage();
-  const uiT = getUiStrings(language).ben;
+  const { language: globalLanguage } = useLanguage();
+  // 리포트 자체의 저장된 언어를 우선(AnalysisCard.tsx의 reportLanguage와 동일 패턴) — 안 그러면
+  // EN 리포트를 보면서도 인사말만 전역 토글(기본 KR)을 따라가는 불일치가 생긴다(2026-08-21,
+  // NVIDIA CORP(language=en) 리포트에서 한글 인사말이 뜨는 걸 실측으로 발견).
+  const reportLanguage = analysisData?.language === 'ko' || analysisData?.language === 'en'
+    ? analysisData.language : globalLanguage;
+  const uiT = getUiStrings(reportLanguage).ben;
   const { messages, sendMessage, reset, isStreaming, rateLimited, error } = useBenChat(analysisData?.id ?? null);
   // 컨텍스트 인사말(2026-08-20) — Ben이 먼저 건네는 인사, 실제 유저 메시지가 아니므로
   // useBenChat의 messages(서버 대화 히스토리)엔 절대 안 실리고 이 컴포넌트 로컬 렌더에서만
