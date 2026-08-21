@@ -6,6 +6,7 @@ import {
   SecBenchmarkComparison, Language,
 } from '../lib/claude';
 import { fetchFinancialContext, appendBankContext, CompanyListingRef } from '../lib/financialContext';
+import { findOrCreateCompany } from '../lib/companies';
 import { buildIncomeStatementRows, buildBalanceSheetRows, buildRevenueLines, isGenuineBankData } from '../lib/financialsTableBuilder';
 import { classifyIndustryCategory, IndustryCategory } from '../lib/industryClassification';
 import { computeSecBenchmarkDeviations, SEC_BENCHMARK_SOURCE_URL } from '../lib/secIndustryBenchmark';
@@ -504,12 +505,7 @@ router.post('/', async (req: Request, res: Response) => {
   const name = companyName.trim();
 
   try {
-    const { data: company, error: companyErr } = await supabase
-      .from('companies')
-      .upsert({ name }, { onConflict: 'name' })
-      .select('id')
-      .single();
-    if (companyErr) throw companyErr;
+    const company = await findOrCreateCompany(name);
 
     const listings = await fetchCompanyListings(companyId ?? company.id);
     const { source: dataSource, contextText, rawEdgar, rawDart } = await fetchFinancialContext(name, listings);
@@ -728,12 +724,7 @@ router.post('/stream', async (req: Request, res: Response) => {
 
   try {
     // 1. Upsert company
-    const { data: company, error: companyErr } = await supabase
-      .from('companies')
-      .upsert({ name }, { onConflict: 'name' })
-      .select('id')
-      .single();
-    if (companyErr) throw companyErr;
+    const company = await findOrCreateCompany(name);
 
     // 다중상장 회사(EDGAR+DART 둘 다 company_listings에 있음)면 fetchFinancialContext가
     // 이름 휴리스틱 대신 이 identifier로 직접 조회한다 — 없으면 기존 경로 그대로.

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { resolveAuthUser } from '../lib/authUser';
 import { recordAnalysisUsage } from '../lib/analysisUsage';
 import { isAdminUser } from '../lib/admin';
+import { findOrCreateCompany } from '../lib/companies';
 
 const router = Router();
 
@@ -168,12 +169,7 @@ router.post('/resolve', async (req: Request, res: Response) => {
   }
 
   try {
-    const { data: company, error: companyErr } = await supabase
-      .from('companies')
-      .upsert({ name: name.trim() }, { onConflict: 'name' })
-      .select('id')
-      .single();
-    if (companyErr) throw companyErr;
+    const company = await findOrCreateCompany(name);
 
     if (listings?.length) {
       const rows = listings
