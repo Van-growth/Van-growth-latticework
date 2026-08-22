@@ -5,7 +5,7 @@
 import type {
   Language,
   SummaryV2, IndustryHistoryV2, TechEvolutionV2, ValueChainV2, BusinessModelV2,
-  CompetitorsV2, StrategyV2, FinancialsV2, FounderV2,
+  CompetitorsV2, StrategyV2, FinancialsV2, FounderV2, SectionSource,
 } from './claude';
 
 export interface BenAnalysisRow {
@@ -39,6 +39,9 @@ ${BEN_TONE[language]}
 [Grounding — non-negotiable]
 Answer only using the analysis data provided in the next system block (and anything the user says earlier in this conversation). If something isn't covered by that data, say so plainly rather than inventing an answer or reasoning from general knowledge about the company. Never present an outside guess as if it came from the report.
 
+[Citing sources]
+Each section in the next system block ends with a "Sources:" list — lines like "[n] Organization — description (L1) https://...". The section text itself sometimes carries bare [n] markers inline, but this chat has no footnote list to resolve them against, so never leave a bare [n] in your reply. When you state a specific number or fact, cite it as a markdown link built from that source's name and URL — e.g. "revenue grew 12% ([SEC EDGAR 10-K FY2025](https://...))" — instead of a bare marker. If the matching source has no URL, name it in plain text instead (no link). Never invent a URL that isn't in the data. Source tiers: L1 = official filing (SEC/DART/company IR), L2 = reputable secondary source, L3 = web-search estimate — when a fact is only backed by an L3 source, flag it as an estimate the way the rest of the report does, rather than stating it as settled fact.
+
 [Tone & voice]
 Write like a sharp US B2B practitioner — Sales, BD, or Strategy — briefing a peer, not like an equity research report. Aim for Gong / HubSpot / Salesforce blog voice, not McKinsey deck voice.
 - Investor vocabulary stays banned: no "valuation multiple," no "P/E," no ROE/ROIC/owner-earnings framing, no stock-price talk.
@@ -55,13 +58,24 @@ function joinNonEmpty(items: (string | null | undefined)[]): string {
   return items.filter((s): s is string => !!s && s.trim().length > 0).join('\n');
 }
 
-function serializeSection<T extends { sources?: unknown } | null>(label: string, section: T): string {
+// 각 섹션의 sources[]를 "[n] Organization — content (LEVEL) url" 한 줄씩으로 압축 —
+// 리포트 각주와 동일한 인용 재료(조직명/설명/신뢰도/URL)만 남기고, 그 외 원본 JSON
+// 부가필드는 채팅 그라운딩에 불필요해 제외한다.
+function serializeSources(sources: SectionSource[] | undefined): string {
+  if (!sources || sources.length === 0) return '';
+  const lines = sources.map(s => {
+    const label = [s.organization, s.content].filter(Boolean).join(' — ');
+    return `[${s.index}] ${label} (${s.level})${s.url ? ` ${s.url}` : ''}`;
+  });
+  return `Sources:\n${lines.join('\n')}`;
+}
+
+function serializeSection<T extends { sources?: SectionSource[] } | null>(label: string, section: T): string {
   if (!section) return '';
-  // sources[]는 채팅 그라운딩에 불필요한 인용 메타데이터(URL 등)라 컨텍스트 크기만
-  // 늘린다 — 캐시 블록에서 의도적으로 제외.
-  const { sources: _sources, ...rest } = section as Record<string, unknown>;
+  const { sources, ...rest } = section as Record<string, unknown> & { sources?: SectionSource[] };
   if (Object.keys(rest).length === 0) return '';
-  return `## ${label}\n${JSON.stringify(rest, null, 1)}`;
+  const sourcesText = serializeSources(sources);
+  return `## ${label}\n${JSON.stringify(rest, null, 1)}${sourcesText ? `\n${sourcesText}` : ''}`;
 }
 
 // 관리자 대시보드 전용 Ben — /api/admin/insights/ask. 리포트를 보는 일반 유저나 특정

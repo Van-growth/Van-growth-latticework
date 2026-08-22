@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAuth } from '@/app/context/AuthContext';
 import { getUiStrings } from '@/lib/i18n/uiStrings';
-import { BenMessage } from '@/app/hooks/useBenChat';
+import { BenMessage, BenLoadError } from '@/app/hooks/useBenChat';
 import { RateLimitInfo } from '@/lib/benSseClient';
 
 export type BenWidthPreset = 'default' | 'wide';
@@ -15,6 +15,8 @@ export type BenWidthPreset = 'default' | 'wide';
 // 둘 다 이 셸을 그대로 쓴다 — 이 컴포넌트는 순수 프레젠테이션이라 AnalysisDetail도,
 // useBenChat도 직접 알지 못한다. 데이터 소스(useBenChat vs useAdminInsightsChat)와
 // 라벨은 각 호출부가 준비해서 넘긴다.
+// loadError/retryLoad는 optional — 대화를 저장/복원하지 않는 관리자 Ben
+// (useAdminInsightsChat)은 이 개념 자체가 없어 넘기지 않는다.
 export interface BenChatState {
   messages: BenMessage[];
   sendMessage: (text: string) => void;
@@ -22,6 +24,8 @@ export interface BenChatState {
   isStreaming: boolean;
   rateLimited: RateLimitInfo | null;
   error: boolean;
+  loadError?: BenLoadError;
+  retryLoad?: () => void;
 }
 
 interface BenPanelProps {
@@ -44,7 +48,7 @@ export default function BenPanel({
 }: BenPanelProps) {
   const { session } = useAuth();
   const uiT = getUiStrings(language).ben;
-  const { messages, sendMessage, reset, isStreaming, rateLimited, error } = chat;
+  const { messages, sendMessage, reset, isStreaming, rateLimited, error, loadError, retryLoad } = chat;
   // 컨텍스트 인사말(2026-08-20) — Ben이 먼저 건네는 인사, 실제 유저 메시지가 아니므로
   // messages(서버/휘발성 대화 이력)엔 절대 안 실리고 이 컴포넌트 로컬 렌더에서만 존재한다.
   // messages.length===0(이 대상에 대해 아직 대화 이력 없음)일 때만 표시 — 기존 대화가
@@ -151,6 +155,22 @@ export default function BenPanel({
         <>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+            {loadError && (
+              <div className="flex flex-col items-center gap-1.5 py-3 text-center">
+                <p className="text-[11px] text-risk">
+                  {loadError === 'auth' ? uiT.loadErrorAuth : uiT.loadErrorNetwork}
+                </p>
+                {loadError === 'network' && retryLoad && (
+                  <button
+                    type="button"
+                    onClick={retryLoad}
+                    className="text-[11px] font-medium text-navy-600 hover:text-navy-800 underline"
+                  >
+                    {uiT.retryButton}
+                  </button>
+                )}
+              </div>
+            )}
             {greeting && (
               <div className="flex justify-start">
                 <div className="max-w-[88%] rounded-xl px-3 py-2 text-xs bg-gray-100 text-gray-800 rounded-bl-sm">
@@ -182,6 +202,16 @@ export default function BenPanel({
                           h2: ({ children }) => <div className="text-xs font-semibold text-gray-900 mt-1.5 mb-0.5 border-b border-gray-200 pb-0.5">{children}</div>,
                           h3: ({ children }) => <div className="text-[11px] font-semibold text-gray-700 mt-1 mb-0.5">{children}</div>,
                           strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                          a: ({ href, children }) => (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-navy-600 underline hover:text-navy-800"
+                            >
+                              {children}
+                            </a>
+                          ),
                           p: ({ children }) => <p className="text-xs leading-relaxed mb-1 last:mb-0">{children}</p>,
                           ul: ({ children }) => <ul className="mb-1 pl-3 space-y-0.5">{children}</ul>,
                           ol: ({ children }) => <ol className="mb-1 pl-3 space-y-0.5 list-decimal">{children}</ol>,

@@ -195,12 +195,13 @@ interface UiStringDict {
     emptyState: string;
     placeholder: string;
     quickQuestions: string[];
-    mungerPromptLabel: string;
-    mungerPrompt: string;
     resetButton: string;
     signInToChat: string;
     rateLimited: (usedCount: number, limit: number) => string;
     genericError: string;
+    loadErrorAuth: string;
+    loadErrorNetwork: string;
+    retryButton: string;
     widthDefault: string;
     widthWide: string;
     openAria: string;
@@ -416,20 +417,13 @@ const ko: UiStringDict = {
     emptyState: '기업을 먼저 분석해주세요. 분석이 끝나면 이 리포트를 바탕으로 질문할 수 있어요.',
     placeholder: '질문을 입력하세요...',
     quickQuestions: ['핵심 리스크 요약', '경쟁사 대비 포지션', '이 회사에 대해 더 알아야 할 게 있을까요?'],
-    mungerPromptLabel: '멍거 체크리스트',
-    mungerPrompt: `찰리 멍거 관점에서 이 기업을 체크리스트로 평가해줘. 아래 5개 프레임 각각에 대해 현재 분석 데이터 기반으로 간결하게 답해줘:
-
-1. 비즈니스 퀄리티: 진입장벽 / Pricing power / 10년 내구성
-2. 해자(Moat): 전환비용 / 규모의 경제 / 네트워크 효과
-3. 경영진: 자본배분 / 가이던스 실행력 / SBC 수준
-4. 재무: ROE·ROIC vs 자본비용 / FCF vs 순이익 괴리 / 부채 안전성
-5. 밸류에이션: 현재 가격에 반영된 성장 가정 / 최악 시나리오 손실 / 5년 후 이 가격이 싸 보일 조건
-
-각 항목은 ✅ 양호 / ⚠️ 주의 / ❌ 취약 으로 시작하고 한 줄 근거를 붙여줘.`,
     resetButton: '대화 초기화',
     signInToChat: '로그인 후 Ben과 대화할 수 있어요.',
     rateLimited: (usedCount: number, limit: number) => `오늘 사용 가능한 메시지(${limit}개)를 모두 사용했어요 (${usedCount}/${limit}). 내일 다시 시도해주세요.`,
     genericError: '오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+    loadErrorAuth: '세션이 만료됐어요. 새로고침 후 다시 시도해주세요.',
+    loadErrorNetwork: '대화 기록을 불러오지 못했어요.',
+    retryButton: '다시 시도',
     widthDefault: '기본',
     widthWide: '넓게',
     openAria: 'Ben 열기',
@@ -645,20 +639,13 @@ const en: UiStringDict = {
     emptyState: 'Analyze a company first. Once it finishes, you can ask questions grounded in this report.',
     placeholder: 'Ask a question...',
     quickQuestions: ['Summarize the core risks', 'How does this stack up against competitors?', 'What else should I know about this company?'],
-    mungerPromptLabel: 'Munger checklist',
-    mungerPrompt: `Evaluate this company as a checklist from Charlie Munger's perspective. Answer each of the 5 frames below concisely based on the current analysis data:
-
-1. Business quality: barriers to entry / pricing power / 10-year durability
-2. Moat: switching costs / economies of scale / network effects
-3. Management: capital allocation / guidance execution / SBC levels
-4. Financials: ROE/ROIC vs. cost of capital / FCF vs. net income gap / debt safety
-5. Valuation: growth assumptions priced in today / worst-case downside / conditions under which this price looks cheap in 5 years
-
-Start each item with ✅ Good / ⚠️ Caution / ❌ Weak, followed by a one-line rationale.`,
     resetButton: 'Reset chat',
     signInToChat: 'Sign in to chat with Ben.',
     rateLimited: (usedCount: number, limit: number) => `You've used all ${limit} messages available today (${usedCount}/${limit}). Please try again tomorrow.`,
     genericError: 'Something went wrong. Please try again shortly.',
+    loadErrorAuth: 'Your session expired. Please refresh and try again.',
+    loadErrorNetwork: "Couldn't load your conversation history.",
+    retryButton: 'Retry',
     widthDefault: 'Default',
     widthWide: 'Wide',
     openAria: 'Open Ben',

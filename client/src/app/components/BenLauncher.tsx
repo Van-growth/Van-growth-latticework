@@ -38,7 +38,7 @@ function AnalysisBenPanel({ analysisData, widthPreset, setWidthPreset }: {
       contextLabel={analysisData ? uiT.contextLabel(analysisData.companyName) : null}
       greetingText={analysisData ? uiT.greeting(analysisData.companyName) : null}
       resetKey={analysisData?.id ?? null}
-      extraAction={{ label: uiT.mungerPromptLabel, prompt: uiT.mungerPrompt }}
+      extraAction={null}
       widthPreset={widthPreset}
       setWidthPreset={setWidthPreset}
     />
