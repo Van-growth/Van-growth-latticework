@@ -40,12 +40,12 @@ ${BEN_TONE[language]}
 Answer only using the analysis data provided in the next system block (and anything the user says earlier in this conversation). If something isn't covered by that data, say so plainly rather than inventing an answer or reasoning from general knowledge about the company. Never present an outside guess as if it came from the report.
 
 [Citing sources]
-Each section in the next system block ends with a "Sources:" list — lines like "[n] Organization — description (L1) https://...". The section text itself sometimes carries bare [n] markers inline, but this chat has no footnote list to resolve them against, so never leave a bare [n] in your reply. When you state a specific number or fact, cite it as a markdown link built from that source's name and URL — e.g. "revenue grew 12% ([SEC EDGAR 10-K FY2025](https://...))" — instead of a bare marker. If the matching source has no URL, name it in plain text instead (no link). Never invent a URL that isn't in the data. Source tiers: L1 = official filing (SEC/DART/company IR), L2 = reputable secondary source, L3 = web-search estimate — when a fact is only backed by an L3 source, flag it as an estimate the way the rest of the report does, rather than stating it as settled fact.
+Each section in the next system block ends with a "Sources:" list — lines like "[n] Organization — description (L1)", and only when a URL actually exists, that same line ends with it: "[n] Organization — description (L1) https://actual-url-copied-here". Most sources in this app have no URL at all — that's the normal case, not something to work around. Default to citing by organization name in plain text, no brackets, no parentheses, no link syntax — e.g. "revenue grew 12% (SEC EDGAR 10-K FY2025)". Only produce a markdown link when the matching source line literally ends with an https:// URL, and copy that URL character-for-character — never write "https://" (or any URL) from memory or as a placeholder just to make a citation look like a link; a citation with no real URL must stay plain text. The section text itself sometimes carries bare [n] markers inline — this chat has no footnote list to resolve them against, so replace those with the plain-text or link citation above, never leave a bare [n] in your reply. Source tiers: L1 = official filing (SEC/DART/company IR), L2 = reputable secondary source, L3 = web-search estimate — when a fact is only backed by an L3 source, flag it as an estimate the way the rest of the report does, rather than stating it as settled fact.
 
 [Tone & voice]
 Write like a sharp US B2B practitioner — Sales, BD, or Strategy — briefing a peer, not like an equity research report. Aim for Gong / HubSpot / Salesforce blog voice, not McKinsey deck voice.
 - Investor vocabulary stays banned: no "valuation multiple," no "P/E," no ROE/ROIC/owner-earnings framing, no stock-price talk.
-- No Bull/Bear framing — talk in terms of growth momentum and core risks instead.
+- No Bull/Bear framing — talk in terms of growth momentum and core risks instead. This applies even if the underlying data still labels these internally as bull_case/bear_case somewhere — never say those words out loud, always say "growth momentum" / "core risks" (or their translation in the answer's language).
 - No academic or overly formal tone. Skip hedges like "it can be argued that" or "it is worth noting that."
 
 [Chat-specific rules]
@@ -70,12 +70,39 @@ function serializeSources(sources: SectionSource[] | undefined): string {
   return `Sources:\n${lines.join('\n')}`;
 }
 
-function serializeSection<T extends { sources?: SectionSource[] } | null>(label: string, section: T): string {
+function serializeSection<T extends { sources?: SectionSource[] } | null>(
+  label: string,
+  section: T,
+  relabel?: (rest: Record<string, unknown>) => Record<string, unknown>,
+): string {
   if (!section) return '';
   const { sources, ...rest } = section as Record<string, unknown> & { sources?: SectionSource[] };
-  if (Object.keys(rest).length === 0) return '';
+  const relabeled = relabel ? relabel(rest) : rest;
+  if (Object.keys(relabeled).length === 0) return '';
   const sourcesText = serializeSources(sources);
-  return `## ${label}\n${JSON.stringify(rest, null, 1)}${sourcesText ? `\n${sourcesText}` : ''}`;
+  return `## ${label}\n${JSON.stringify(relabeled, null, 1)}${sourcesText ? `\n${sourcesText}` : ''}`;
+}
+
+// bull_case/bear_case는 SECTION_SCHEMAS 전체에서 유일하게 남은 투자프레임 필드명(다른 필드는
+// 전부 2026-07-30 "Munger/Buffett Metrics" 제거 때 스키마에서 사라짐) — serializeSection()이
+// raw JSON.stringify로 그대로 넘기면 이 두 키가 문자 그대로 Ben 컨텍스트에 노출돼,
+// [Tone & voice]의 "No Bull/Bear framing" 프롬프트 지시를 무력화한다(2026-08-22 실측 —
+// prose 지시가 있었는데도 raw 필드명이 매 턴 반복 노출되는 쪽이 더 강한 신호였던 것으로
+// 보임, Ben이 실제로 "bear/bull 케이스"라고 답변). UI가 이미 쓰는 라벨(AnalysisCard.tsx의
+// "성장 모멘텀"/"핵심 리스크" BulletCallout 타이틀)로 직렬화 시점에만 리라벨링 — 내부
+// 스키마 필드명(SummaryV2.bull_case/bear_case) 자체는 그대로 둔다. AnalysisCard.tsx 쪽에
+// 이 라벨의 중앙 i18n 소스가 없어(그 파일도 한글 하드코딩) 재사용할 상수가 없었으므로
+// 여기 최소 매핑만 별도로 둠 — 새 중앙 소스를 만드는 건 이번 스코프 밖.
+const BULL_BEAR_LABEL: Record<Language, { bull: string; bear: string }> = {
+  ko: { bull: '성장 모멘텀', bear: '핵심 리스크' },
+  en: { bull: 'growth momentum', bear: 'core risks' },
+};
+
+function relabelBullBear(rest: Record<string, unknown>, language: Language): Record<string, unknown> {
+  if (!('bull_case' in rest) && !('bear_case' in rest)) return rest;
+  const { bull_case, bear_case, ...others } = rest;
+  const labels = BULL_BEAR_LABEL[language];
+  return { ...others, [labels.bull]: bull_case, [labels.bear]: bear_case };
 }
 
 // 관리자 대시보드 전용 Ben — /api/admin/insights/ask. 리포트를 보는 일반 유저나 특정
@@ -179,8 +206,9 @@ ${topCompaniesText}`;
 // 분석별 데이터 블록 — 대화 세션 내내 고정이라 별도 cache_control 브레이크포인트 대상
 // (routes/ben.ts에서 이 문자열에 cache_control을 건다).
 export function buildBenAnalysisContext(companyName: string, analysis: BenAnalysisRow): string {
+  const language: Language = analysis.language === 'ko' ? 'ko' : 'en';
   const sections = joinNonEmpty([
-    serializeSection('Summary', analysis.summary_v2),
+    serializeSection('Summary', analysis.summary_v2, rest => relabelBullBear(rest, language)),
     serializeSection('Value Chain', analysis.value_chain_v2),
     serializeSection('Business Model', analysis.business_model_v2),
     serializeSection('Competitors', analysis.competitors_v2),

@@ -653,7 +653,14 @@ L1/L2/L3 텍스트 유저 화면에 절대 노출 금지.
   노출)과 분석 로딩화면 회전 문구("찰리 멍거라면 이 회사를 어떻게 봤을까요")에 같은 프레임이
   남아있었음 — 신규 기능/문구를 추가할 때 이 원칙을 체크리스트에 넣지 않으면 다른 표면에서
   반복 재발할 수 있다는 신호, 상세는 아래 완료 목록 참고.
-- Bull/Bear 금지 → 성장 모멘텀/핵심 리스크
+- Bull/Bear 금지 → 성장 모멘텀/핵심 리스크. **Ben 컨텍스트 구성 원칙(2026-08-22 추가)**:
+  `benContext.ts`에 새 필드를 넘길 때는 raw 필드명(`bull_case`/`bear_case` 같은 스키마 내부
+  이름)을 그대로 직렬화하지 말고, UI에서 이미 쓰는 라벨로 매핑해서 넘길 것 — `bull_case`/
+  `bear_case`를 `serializeSection()`이 그대로 `JSON.stringify`해 Ben 컨텍스트에 노출한
+  탓에, `[Tone & voice]`에 "No Bull/Bear framing" prose 지시가 이미 있었는데도 raw 필드명
+  쪽이 더 강한 신호가 되어 Ben이 실제로 "bear/bull 케이스"라고 답변한 사고 발견+수정
+  (상세는 아래 완료 목록 참고). prose 지시만으로는 raw 데이터 구조와 충돌 시 뚫릴 수 있다는
+  실증 사례 — 필드명 자체가 금지어와 겹치는 경우 직렬화 시점 리라벨링을 우선할 것.
 - "확인 필요" 남발 금지 → 추정값이라도 출처와 함께 제공
 
 ### 재무 파생 지표 처리 원칙 (2026-08-15 확정 — Ford 세그먼트 매출 비중 오류 조사에서 촉발)
@@ -1833,6 +1840,39 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   배열/같은 파일에서 멍거 문구를 걷어내는 김에 같은 기준을 일관 적용하는 게 향후
   재발 방지에도 낫다고 판단. 서버+클라이언트 `tsc --noEmit`/클라이언트 eslint 클린
   (서버는 eslint 설정 자체가 없어 원래도 대상 아님).
+- [x] Ben 채팅 출처 링크 빈 URL 사고 + bull_case/bear_case 투자용어 누출 수정
+  (2026-08-22, 위 3건 커밋 이후 발견된 후속 사고 2건) — (1) **출처 링크가 `href="https://"`
+  (host 없는 빈 URL)로 렌더돼 클릭 시 `about:blank#blocked...`로 뜸**: 실제 저장된
+  `ben_conversations` 대화 원문을 대조해 원인 확정 — `benStaticSystem()`의 인용 예시
+  문구가 `https://...`를 "URL 자리"라는 생략 표기로 썼는데 모델이 이를 문자 그대로의
+  템플릿("항상 이 형태로 링크를 감싸라")으로 흉내내면서, 실제 소스에 url이 없는데도
+  (이 앱 DART/웹서치 소스는 url=null이 오히려 정상 케이스) 빈 `(https://)`를 만들어냄.
+  `[Citing sources]` 프롬프트를 "URL 없음이 기본 케이스, 있을 때만 그 줄의 URL을
+  문자 그대로 복사, 자리표시자로 https:// 쓰지 말 것"으로 재작성 + `BenPanel.tsx`에
+  방어 레이어 추가(`safeBenUrlTransform` — `new URL()`로 실제 host 있는 http(s)만 통과,
+  `a` 렌더러도 href 없으면 `<a>` 대신 `<span>`으로 저하). 실제 Claude 호출 2건(URL
+  있는 소스/없는 소스 각각)으로 raw markdown 확인 후, `react-dom/server`
+  `renderToStaticMarkup`으로 BenPanel.tsx와 동일한 렌더링 로직을 SSR 재현해 실제
+  `<a>`/`<span>` 결과까지 검증 — URL 있는 소스는 remark-gfm autolink로 실제 도메인
+  링크(`[label](url)` 마크다운 문법 대신 맨 URL 노출을 모델이 스스로 선택, 기능적으로
+  동일), URL 없는 소스는 `<a>`/`<span>` 둘 다 0건(애초에 링크 시도 자체가 없어짐) 확인.
+  (2) **Ben이 "bear/bull 케이스"라고 투자 용어를 직접 발화**: `SummaryV2.bull_case`/
+  `bear_case`(SECTION_SCHEMAS 전체에서 유일하게 남은 투자프레임 필드명 — 나머지는
+  2026-07-30 Munger/Buffett Metrics 제거 때 이미 사라짐)를 `serializeSection()`이
+  raw `JSON.stringify`로 그대로 노출하고 있었음 — `[Tone & voice]`에 이미 "No
+  Bull/Bear framing" prose 지시가 있었는데도(8/16 최초 구현 때부터 존재) raw 필드명
+  쪽이 더 강한 신호가 돼 뚫림. `serializeSection()`에 `relabel` 콜백 파라미터 추가,
+  Summary 섹션만 `bull_case`/`bear_case`를 UI가 이미 쓰는 라벨(`AnalysisCard.tsx`의
+  BulletCallout 타이틀 — "성장 모멘텀"/"핵심 리스크")로 `language`(ko/en) 분기해
+  직렬화 시점에 리라벨링, 내부 스키마 필드명 자체는 안 건드림. `[Tone & voice]`
+  지시문도 "내부 데이터가 bull_case/bear_case로 라벨돼 있어도 그 단어를 입 밖에
+  내지 말 것"으로 보강(이중 방어). 실제 Claude 호출로 재검증 — 유저가 직접 "bull
+  case, bear case"라는 단어를 써서 물어본 적대적 테스트에서도 본문 불릿은 전부
+  "성장 모멘텀"/"핵심 리스크"만 사용(유저 용어를 "~대신"으로 1회 언급한 것 제외),
+  중립 질문("좋은 점/위험 요인 알려줘")에서는 "bull"/"bear" 완전히 0건 확인.
+  둘 다 서버 `tsc --noEmit` 클린. **AnalysisCard.tsx의 "성장 모멘텀"/"핵심 리스크"
+  타이틀 자체가 언어 분기 없이 한글 하드코딩(EN 리포트에서도 한글로 뜰 가능성)이라는
+  별개 기존 갭 발견 — 이번 스코프 밖, 백로그 후보로만 기록.**
 
 ## Security Principles (SSOT)
 

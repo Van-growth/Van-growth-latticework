@@ -11,6 +11,26 @@ import { RateLimitInfo } from '@/lib/benSseClient';
 
 export type BenWidthPreset = 'default' | 'wide';
 
+// react-markdown 기본 urlTransform은 프로토콜만 확인해서 http(s)면 그대로 통과시킨다 —
+// "https://"처럼 host가 없는 URL도 프로토콜 검사는 통과하므로 그대로 새 링크로 렌더된다.
+// 이런 hostless URL은 브라우저가 정상 페이지로 못 열고 about:blank 같은 오류로 떨어지는데,
+// 유저 입장엔 "링크가 깨졌다"로만 보인다 — 여기서 실제 host가 있는 http(s) URL만 통과시키고
+// 그 외(빈 문자열, host 없는 스킴, javascript: 등)는 전부 걸러내 <a> 대신 일반 텍스트로
+// 떨어지게 한다(2026-08-22, Ben이 근거 URL 없는 인용을 "(https://)"로 흉내내던 사고 계기 —
+// 근본 원인은 benContext.ts 프롬프트 쪽이라 거기서 우선 수정했지만, 모델 응답은 결정론적이지
+// 않아 이 방어를 같이 둔다).
+function safeBenUrlTransform(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname) {
+      return url;
+    }
+  } catch {
+    // 상대경로/스킴만 있고 host 없는 문자열("https://" 등) — URL 생성자가 던짐
+  }
+  return '';
+}
+
 // analysis Ben과 관리자 Ben(BenLauncher.tsx의 AnalysisBenPanel/AdminInsightsBenPanel)
 // 둘 다 이 셸을 그대로 쓴다 — 이 컴포넌트는 순수 프레젠테이션이라 AnalysisDetail도,
 // useBenChat도 직접 알지 못한다. 데이터 소스(useBenChat vs useAdminInsightsChat)와
@@ -197,20 +217,30 @@ export default function BenPanel({
                     msg.content ? (
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
+                        urlTransform={safeBenUrlTransform}
                         components={{
                           h1: ({ children }) => <div className="text-xs font-bold text-gray-900 mt-1 mb-0.5">{children}</div>,
                           h2: ({ children }) => <div className="text-xs font-semibold text-gray-900 mt-1.5 mb-0.5 border-b border-gray-200 pb-0.5">{children}</div>,
                           h3: ({ children }) => <div className="text-[11px] font-semibold text-gray-700 mt-1 mb-0.5">{children}</div>,
                           strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                          // urlTransform이 이미 host 없는/불완전한 URL을 빈 문자열로 걸러내지만,
+                          // react-markdown은 그래도 href="" 인 <a>를 그대로 만든다(현재 페이지로
+                          // 이동하는 죽은 링크) — 여기서 한 번 더 방어해 href가 없으면 아예 링크가
+                          // 아닌 일반 텍스트로 내려가도록 한다(2026-08-22, Ben이 "(https://)"처럼
+                          // URL 없는 인용을 링크처럼 흉내내던 사고 계기).
                           a: ({ href, children }) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-navy-600 underline hover:text-navy-800"
-                            >
-                              {children}
-                            </a>
+                            href ? (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-navy-600 underline hover:text-navy-800"
+                              >
+                                {children}
+                              </a>
+                            ) : (
+                              <span>{children}</span>
+                            )
                           ),
                           p: ({ children }) => <p className="text-xs leading-relaxed mb-1 last:mb-0">{children}</p>,
                           ul: ({ children }) => <ul className="mb-1 pl-3 space-y-0.5">{children}</ul>,
