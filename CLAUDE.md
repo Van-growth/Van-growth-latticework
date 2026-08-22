@@ -9,77 +9,54 @@
 > 내용이 누적되지 않고 항상 최신 상태 하나만 유지되므로, 과거 세션 기록이 필요하면
 > git log/커밋 메시지를 참고할 것.
 
-**날짜**: 2026-08-21
-**커밋**: `b439610`, `705c49b`, `bb227f9`, `d426e59`, `2c68a86`, `4320547`, `88d35dd`,
-`15de7a6`, `4921d23` (전부 푸시 완료) — PDF 버튼 조건 변경 1건은 여전히 미커밋
-상태(아래 "남음" 참고, 변동 없음). 이 CLAUDE.md 문서 정합성 정정 자체는 이번 커밋에
-함께 포함.
+**날짜**: 2026-08-23
+**커밋**: `1fe4b49`, `54b1cea`, `360cbaa`, `6ae9598`, `c79c4ac`, `d891456`, `5832d8c`
+(전부 푸시 완료) — PDF 버튼 조건 변경 1건은 여전히 미커밋 상태(아래 "남음" 참고,
+변동 없음).
 **Render 배포**: 미확인 — 이 환경엔 Render API 토큰/CLI/대시보드 접근 수단이 없음
-(반복 확인된 제약, 변동 없음).
+(재확인 시도했으나 동일 결과, 반복 확인된 제약).
 
 ### 완료
-- 은행 업종 재무제표 템플릿 1단계 — SIC/KSIC 게이트로 은행업 후보(EDGAR SIC
-  6020-6036/6099/6199/6712/6719, DART KSIC `64xxx`)를 넓게 잡고, 구조적 핵심 계정
-  (대출채권/예금) 존재 여부로 실제 적용을 좁게 재확인하는 `isGenuineBankData()` 게이트로
-  표준 3항목(매출/매출총이익/영업이익) 대신 은행 전용 계정(이자수익/이자비용/순이자수익
-  등)을 `financials_v2`에 적용 + DART 계정명 공백 정규화 버그 동시 수정 (`b439610`)
-- purpose 재구성 truncated 플래그 전체 배관 완성 — `generateReformattedPurpose()`의
-  max_tokens/stop_reason 재시도 자체는 이전 세션에 이미 구현돼 있었으나, 잘렸다는
-  사실(`truncated`)이 라우트→클라이언트→DB까지 전달되지 않던 공백을 마이그레이션
-  (`purpose_detail_formatted_truncated`, prod만 적용) + `resolvePurposeDetailFormatted()`/
-  `POST /reformat-purpose`/`PreAnalysisConfirmModal.tsx` 수정으로 해소, 잘린 경우
-  모달에 안내 문구 노출 (`705c49b`)
-- DART 재무 데이터가 새 사업보고서 발행 후에도 영영 갱신 안 되던 버그의 근본원인
-  3가지 수정 — (1) `dartBatchPrecompute.ts`의 하드코딩 `YEARS` 배열을 매년 손으로
-  안 고쳐도 되는 `getRecentFiscalYears()`(신규 `fiscalYears.ts`, `dart.ts`/배치
-  스크립트 공유)로 교체, (2) "재무 데이터 새로고침" 버튼이 실제로는 90일 캐시를
-  그대로 반환하던 것을 `force` 파라미터로 캐시 우회하도록 수정, (3) 라이브 재조회
-  결과가 `financial_cache`에 다시 기록되지 않아 매번 재조회하던 것을
-  `upsertFinancialCache()`로 해소 — Synchrony Financial/데이원컴퍼니로 재현 확인 (`bb227f9`)
-- DART/EDGAR 회사명 유사매칭이 임의 후보를 집던 버그 + API 오류를 "데이터 없음"으로
-  오인하던 버그 수정 — 근거 없는 `.limit(1)`을 상장여부/이름길이 기준 명시적
-  랭킹(`pickBestFuzzyMatch`/`pickBestCikMatch`)으로 교체, `matchTier`/`hasFetchError`
-  신호를 생성만 하던 것을 `financialContext.ts`의 실제 폴백 분기(6개 성공 조건)까지
-  연결해 API 오류 시엔 캐시에 쓰지 않고 정상 폴백하도록 수정 — 실제 DART/EDGAR
-  호출로 검증 (`d426e59`)
-- AI 비서 "Ben" 발견성 개선 3건 — 헤더 아이콘에 미확인 뱃지(localStorage 추적, 패널을
-  한 번 열면 영구히 사라짐) + 리포트 전 섹션 하단 넛지 배너 추가(`2c68a86`), 배너
-  문구에 "우측 상단" 위치 안내 추가(`4320547`), 패널이 리포트 자체 저장 언어 대신
-  전역 언어 토글을 쓰던 버그 수정 — EN 리포트(NVIDIA CORP)에서 한글 인사말이 뜨는
-  것을 실측으로 발견 후 수정, `AnalysisCard.tsx`의 기존 `reportLanguage` 패턴과
-  동일하게 통일 (`88d35dd`)
-- CLAUDE.md 재무수치 데이터 소스 우선순위 표 정정 — 한글기업명/비한글기업명/
-  다중상장 3갈래 분기를 명시하고, FMP/StockAnalysis가 독립된 우선순위 단계가
-  아니라 웹검색 폴백 내부에서 Claude가 참고하는 후보 사이트일 뿐임을 명확화 (`15de7a6`)
-- "재분석하기"(`handleForceRefresh`)가 신규 검색과 다른 경로로 동작해 목적 확인
-  모달을 건너뛰던 문제를 `PreAnalysisConfirmModal` 공용 흐름으로 통합(`pendingAnalysis`
-  상태 도입) + 이전 분석의 purpose를 프리필. 조사 중 발견한 별개 버그 — URL 직접
-  진입(`/?id=...`)/히스토리 경로로 로드한 리포트는 `isCached`가 한 번도 true가 안 돼
-  재분석 배너 자체가 안 뜨던 gap — 도 같은 세션에서 함께 수정 (`4921d23`)
-- AI 비서 "Ben" 신규 구현(`7b70a84`, 2026-08-16, 이전 Handoff 주기에 누락됐다가
-  이번에 소급 기록) — 상세는 위 "완료" 목록 "AI 비서 'Ben' 신규 구현 + 발견성
-  개선 3건" 항목 참고. 같은 커밋에서 ICP 인사이트 기능이 완전히 삭제됨(아래 참고)
-- CLAUDE.md 전체 vs 실제 코드 정합성 감사(5개 병렬 조사 + 직접 조사) — ICP 인사이트가
-  이미 삭제됐는데 문서엔 핵심기능으로 남아있던 것, AI비서가 Ben으로 재구현됐는데
-  백로그엔 "미착수"로 남아있던 것, `analyses` 캐시 TTL "24시간" 문서 vs 실제
-  무기한, 창업자정보 데이터소스 문서(LinkedIn>Crunchbase>TheVC>언론) vs 실제(자유
-  web_search 3쿼리) 등 다수 불일치 발견 → 이번 문서 정정으로 반영. 신규 기술부채
-  3건도 등록(TradingView 죽은 컴포넌트, `rate_limited` 언어 하드코딩, 트리거이벤트
-  표기 재검토) — 상세는 백로그 🟡 2순위 참고
+- 관리자 유저 대시보드 신규 구현 — `profiles.role`/`allow_private_search` 마이그레이션 +
+  `admin_user_login_stats` 뷰, 유저 목록/통계/필터/CSV, Ben 런처가 `/admin` 경로에서
+  전체 유저 집계 컨텍스트로 자동 전환 (`c79c4ac`)
+- analysisCount 계산 로직 통일 — 관리자 화면과 관리자 Ben 컨텍스트 양쪽 다
+  `is_cache_view=false` 기준으로 일치 (`c79c4ac`)
+- `GET /api/analyses/:id`가 무인증+소유권체크 없이 `purpose_category`/`purpose_detail`을
+  원문 노출하던 프라이버시 취약점 수정 — 소유자 본인에게만 필드 노출 (`54b1cea`)
+- 대소문자/공백 차이로 같은 회사가 다른 `company_id`로 쪼개지던 dedup 버그 수정
+  (워트인텔리전스 실사례) — `findOrCreateCompany()`로 정규화 매칭 후 기존 행 재사용
+  (`360cbaa`)
+- 은행 업종 `summary_v2` KPI 카드가 `financials_v2`와 다른 라벨을 표시하던 wiring gap
+  수정 — `industryCategory` 신호를 `phase1Context`에 연결(2026-08-21 우선순위 #2 완료)
+  (`1fe4b49`)
+- Ben 채팅 버그 3건 — 패널 재오픈 시 대화 사라짐(GET 실패를 401/네트워크로 구분해
+  안내), "멍거 체크리스트" 넛지 버튼+로딩화면 회전 문구 제거(투자자 언어 금지 원칙
+  재위반 발견), 출처 인용 배관 1차 수정 (`d891456`)
+- Ben 출처 링크가 `href="https://"`(host 없는 빈 URL)로 렌더돼 클릭 시 차단되던 사고
+  수정 — 프롬프트 재작성("URL 없으면 텍스트만") + `safeBenUrlTransform` 방어 레이어,
+  실제 Claude 호출+SSR 렌더링 재현으로 라이브 검증 (`5832d8c`)
+- Ben이 "bear/bull 케이스"라고 투자 용어를 직접 발화하던 사고 수정 — raw 필드명
+  `bull_case`/`bear_case`를 `language` 분기로 UI 라벨("성장 모멘텀"/"핵심 리스크" ↔
+  "growth momentum"/"core risks")로 리라벨링 + 프롬프트 이중 방어, 적대적 테스트
+  포함 라이브 검증 (`5832d8c`)
 
 ### 남음
-- **PDF 다운로드 버튼 노출 조건 `isAdmin`→`isLoggedIn` 변경 — 코드 수정은 끝났고
-  버튼 노출/숨김 로직은 스크린샷으로 검증 완료(로그인 시 보임·비로그인 시 안
-  보임, KR/EN 둘 다)했으나, 실제 다운로드 완주(`pdf().toBlob()`→download 이벤트)를
-  헤드리스 브라우저로 기다리다 세션이 종료돼 미완료 — 사용자가 "다운로드 확인되면
-  커밋"으로 조건부 승인해둔 상태. 미커밋.** `client/src/app/components/
-  AnalysisCard.tsx`(`isLoggedIn` 조건 적용, `isAdmin`/`ADMIN_EMAILS`는 보존)까지는
-  반영됐지만, `client/src/app/context/AuthContext.tsx`는 테스트용으로 `AuthContext`를
-  임시 `export`해둔 채로 남아있고 `client/src/app/testpdfbutton/`+
-  `client/_shot_pdfbtn*.js`(임시 검증 스크립트)도 미정리 상태 — 다음 세션 최우선
-  (아래 "다음 세션 우선순위" 참고)
-- `GET /api/analyses/:id`/`GET /api/share/:token` 무인증 전체 데이터 반환
-  설계를 유지할지 재검토 — 별도 세션(사용자 결정 필요, 누적 이월)
+- **PDF 다운로드 버튼 실제 다운로드 완주 검증 + 임시 파일 정리
+  (`testpdfbutton/`, `_shot_pdfbtn*.js`) + `AuthContext.tsx` export 원복 → 커밋/푸시
+  — 2026-08-21부터 "다음 세션 최우선"으로 이월 중, 변동 없음**
+- Supabase dev + Render dev 완전 분리(prod 격리) — 다음 배포 전 필수, 별도 세션
+  (사용자 지정, 신규)
+- DART 8/21 `getRecentFiscalYears()` 수정 실제 배포 여부 확인 → `financial_cache`
+  2,851건 배치 재실행(소규모 테스트 우선, 레이트리밋 감안 소요시간 추정) — 다음
+  배포 전 필수. 개별 기업은 "데이터 새로고침" 버튼으로 즉시 우회 가능하나
+  `financials_v2`만 갱신되고 `summary_v2`는 별도 재분석 필요(신규)
+- `buildDartContext()`의 "별도 기준" 하드코딩 라벨링 버그(실제로는 연결 CFS 기준인데
+  오표기) — 다음 배포 전 필수, 수정 여부 미확인·재확인 필요(신규)
+- 관리자 대시보드 통계 카드 확장 — "총 분석 횟수" 추가 + 3+3(2줄) 레이아웃 재배치
+  — 다음 배포 전 필수, 미착수(신규)
+- `GET /api/analyses/:id`/`GET /api/share/:token` 무인증 전체 데이터 반환 설계를
+  유지할지 재검토 — 별도 세션(사용자 결정 필요, 누적 이월)
 - typeahead "DE" 티커 순위 버그(DART 노이즈가 EDGAR 결과 밀어냄) 수정 — 사용자
   보류, 다음 요청 시 재개(누적 이월)
 - 한글 음역/별칭 매핑 레이어 신규 구축 여부 — 별도 세션(사용자 결정 필요, 스코프
@@ -88,45 +65,51 @@
   응답 필드 누락 — 다음 세션(누적 이월)
 - 배포 후 실 로그인으로 최근 세션들의 UI 수정 전체 클릭 플로우 재현 검증 — 다음
   세션(실 로그인 수단 없음은 여전한 제약, 누적 이월)
-- Ben 채팅 실제 브라우저 검증 — Anthropic 한도 해제(2026-09-01) 이후(누적 이월)
+- Ben 채팅 실제 브라우저 검증 — Anthropic 사용량 한도는 해제 확인됨(2026-08-22),
+  API 직접호출+SSR 렌더링 재현으로 출처링크/bull-bear 케이스는 대체 검증했으나 실제
+  브라우저 클릭 검증 자체는 여전히 미완(이 환경 제약, 다음 세션)
 - PDF 서버사이드 이전 + 이메일 알림 — 사용자 별도 세션 명시 지정(누적 이월)
 - 백그라운드 폰트 프리페치 적용 여부 — 사용자 요청 시 별도 세션(누적 이월)
-- summary_v2(배치1) KPI 카드가 financials_v2(배치3) 은행 템플릿과 무관한 별도
-  텍스트 경로(`financialContext.ts`의 `buildEdgarContext`/`buildDartContext`)를 써서,
-  은행 기업(Synchrony Financial 실측)은 재무 탭은 정상인데 요약 탭 KPI만 "확인
-  필요"로 남는 불일치 확인(2026-08-21 조사, 수정 안 함) — 순서 문제 아니라 배선
-  누락: `industryCategory`는 배치1 시작 전 이미 resolve돼 있으나(`analyze.ts:516,980`)
-  `phase1Context`/`sharedContext` 빌더가 이 값을 안 받음. 다음 세션 후보
+- TradingView 죽은 컴포넌트 처리 방향 결정(위젯 실제 연결 vs 숨김 로직 제거) —
+  2026-08-21부터 이월, 미착수
+- `rate_limited` 메시지 언어 대응 수정 — 2026-08-21부터 이월, 미착수
 
 ### 발견 (미처리)
 - PDF 생성(`pdf().toBlob()`) 헤드리스 브라우저 테스트에서 6분+ 소요, 다운로드
-  이벤트 미완주 — 폰트 파일 fetch는 정상 진행 확인(멈춘 게 아님), 문서화된
-  예상치(1~3분)보다 오래 걸리는 게 헤드리스 환경 특성인지 실제로 느린지는
-  미판정, 다음 세션에서 계속 기다려보거나 원인 확인 필요
+  이벤트 미완주 — 원인 미판정, 변동 없음
 - `AnalysisPdf.tsx`에 `Array.isArray()` 가드 없는 `.map()` 호출부 다수 잔존 —
   변동 없음
 - ⚠️ KR/EN 미확인 — `/privacy` 페이지 하드코딩 한국어(변동 없음, 의도된 설계)
-- ⚠️ KR/EN 확인됨(하드코딩 맞음, 이번 세션 스크린샷으로 재확인) — `ExportPdfButton.tsx`
-  ("PDF 내보내기"/"PDF 준비 중...")와 `DataSourceBadge`("DART 연동됨")가 EN 리포트
-  에서도 한국어로 뜸(`uiStrings.ts` 미사용) — 수정은 안 함, 범위 밖
+- ⚠️ KR/EN 확인됨(하드코딩 맞음) — `ExportPdfButton.tsx`/`DataSourceBadge`가 EN
+  리포트에서도 한국어로 뜸(`uiStrings.ts` 미사용) — 수정 안 함, 범위 밖(변동 없음)
+- ⚠️ KR/EN 미확인(신규) — `AnalysisLoader.tsx`의 로딩화면 `STEPS`/`SUB_MESSAGES`
+  전체가 language 분기 없이 한글 고정. 이번 세션은 기존 배열에서 멍거/버핏 문구
+  2건만 제거했을 뿐 언어분기 자체는 안 건드림 — 기존부터 있던 갭인지 확정 안 됨
+- ⚠️ KR/EN 미확인(신규) — `AnalysisCard.tsx`의 "성장 모멘텀"/"핵심 리스크" 섹션
+  타이틀이 language 분기 없이 한글 하드코딩(bull/bear 리라벨링 작업 중 발견) —
+  EN 리포트에서도 한글로 노출될 가능성, 언어 정책 위반
 - typeahead 랭킹 알파벳순 한계, corp_master 정기 갱신 미자동화, 크레딧 시스템
   카피만 존재, DART 현금흐름표 파이프라인 공백 — 전부 기존 기록, 변동 없음
-- Anthropic API 계정 사용량 한도(2026-09-01 재개), 비용/토큰 실측 인프라 부재
-- TradingView 위젯 죽은 컴포넌트 + 시가총액 카드 공백 가능성 (백로그 🟡 신규 등록,
-  UI 실측 필요)
-- `rate_limited` 메시지 언어 하드코딩 (백로그 🟡 신규 등록)
-- 은행 업종 요약 탭 KPI 미반영(위 "남음" 참고) — 실측 영향 범위는 현재 캐시 기준
-  Synchrony Financial 1개사뿐(prod DB 직접 조회, 2026-08-21), 다만 `analyses` 캐시가
-  무기한이라 향후 분석되는 모든 은행 기업에 동일하게 재발함. 보험/증권은
-  `industryClassification.ts`에 아직 코드 자체가 없음(2단계 스코프, 미착수)
+- 비용/토큰 실측 인프라 부재(Anthropic 사용량 한도 자체는 해제됨, 변동 없음)
+- [영향범위 큼, 근본원인 조사 필요, 신규] `business_model_v2`/`competitors_v2`/
+  `strategy_v2`/`financials_v2`/`value_chain_v2`/`summary_v2` 6개 섹션의 출처 URL이
+  리포트 생성 시점부터 원래 비어있음(회귀 아님, NEO Battery Materials 리포트로 확인
+  — `founder_v2`/`industry_history_v2`/`tech_evolution_v2`는 실제 URL 존재). 다른
+  리포트도 같은 패턴인지 범위 확인 요청했으나 미회신 — 범위 확인 후 별도 작업으로
+  스코프 잡을 것
+- [신규] 매출총이익 행 — DART(K-IFRS) 소스는 항상 "해당없음"이 정상(재무 파생 지표
+  원칙 준수), EDGAR 소스는 값 있음 확인 → 전체 연도 공란일 때만 행 숨기는 조건부
+  렌더링으로 개선 검토(삭제 금지, 원칙 5 위반 주의)
+- [신규] 성장 시나리오 "최종 연도 매출 분포" 막대그래프에 축 라벨/툴팁/수치 없음 —
+  데이터 유실인지 라벨링만 누락인지 원인 미진단
+- [신규] 리포트 텍스트 "캡ex"(CapEx 한영 혼용 깨짐) 오탈자 — 생성 텍스트라 재현성
+  낮음, 패턴 반복되면만 대응
+- [신규] Ben 실시간 웹서치 기능 부재 — 유저가 "최신 뉴스 검색해줘" 요청 시 한계를
+  정직하게 인지하고 거절함 확인(정상 동작), 향후 웹서치 도구 연동 여부는 별도
+  제품 결정(아키텍처/비용/UX 설계 필요)
 
 ### 다음 세션 우선순위
-1. PDF 다운로드 버튼 검증 마무리(실제 다운로드 완주 확인) → 임시 테스트 파일
-   정리(`testpdfbutton/`, `_shot_pdfbtn*.js`) + `AuthContext.tsx` export 원복 →
-   커밋/푸시
-2. summary_v2 KPI 카드에 은행 계정과목(순이자수익 등) 반영 여부 결정 + 구현
-3. TradingView 죽은 컴포넌트 처리 방향 결정(위젯 실제 연결 vs 숨김 로직 제거)
-4. `rate_limited` 메시지 언어 대응 수정
+1. Supabase dev + Render dev 완전 분리(prod 격리)
 
 ## Vision & Mission
 
