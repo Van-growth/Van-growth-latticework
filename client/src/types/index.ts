@@ -603,3 +603,43 @@ export interface AnalysisDetail {
 export interface AnalyzeResponse extends AnalysisDetail {
   analysisId: string;
 }
+
+// 관리자 유저 대시보드(2026-08-22) — GET /api/admin/users, GET /api/admin/users/stats
+// 응답 shape. 이 앱의 다른 도메인 타입과 달리 리포트 콘텐츠가 아니라 운영 도구 전용이라
+// 언어 필드가 없다(대시보드 자체가 한국어 고정).
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  createdAt: string | null;
+  lastSignInAt: string | null;
+  lastAnalysisAt: string | null;
+  companyName: string | null;
+  orgSize: string | null;
+  industry: string | null;
+  jobRole: string | null;
+  jobLevel: string | null;
+  region: string | null;
+  purpose: string[];
+  purposeOther: string | null;
+  isPremium: boolean;
+  allowPrivateSearch: boolean;
+  analysisCount: number;
+}
+
+export interface AdminUserStatsTrendPoint {
+  bucket: string;
+  count: number;
+}
+
+export interface AdminUserStats {
+  total: number;
+  premiumCount: number;
+  freeCount: number;
+  privateSearchCount: number;
+  newThisMonth: number;
+  zeroAnalysisCount: number;
+  zeroAnalysisRate: number;
+  purposeCounts: Record<string, number>;
+  trend: AdminUserStatsTrendPoint[];
+  period: 'week' | 'month' | 'quarter' | 'half' | 'year';
+}

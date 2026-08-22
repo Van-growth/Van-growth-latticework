@@ -12,6 +12,7 @@ interface UiStringDict {
     industries: string;
     history: string;
     guide: string;
+    admin: string;
     settings: string;
     logout: string;
     logoutAria: string;
@@ -231,6 +232,7 @@ const ko: UiStringDict = {
     industries: '산업별 보기',
     history: '히스토리',
     guide: '사용법',
+    admin: '관리자',
     settings: '설정',
     logout: '로그아웃',
     logoutAria: '로그아웃',
@@ -459,6 +461,7 @@ const en: UiStringDict = {
     industries: 'By Industry',
     history: 'History',
     guide: 'Guide',
+    admin: 'Admin',
     settings: 'Settings',
     logout: 'Log out',
     logoutAria: 'Log out',

@@ -8,6 +8,7 @@ import shareRouter from './routes/share';
 import profileRouter from './routes/profile';
 import industriesRouter from './routes/industries';
 import benRouter from './routes/ben';
+import adminRouter from './routes/admin';
 import { APP_ENV } from './lib/env';
 
 dotenv.config();
@@ -41,5 +42,6 @@ app.use('/api/share', shareRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/industries', industriesRouter);
 app.use('/api/analyses', benRouter);
+app.use('/api/admin', adminRouter);
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT} (APP_ENV=${APP_ENV})`));

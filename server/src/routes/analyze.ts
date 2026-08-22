@@ -592,7 +592,7 @@ router.get('/usage', async (req: Request, res: Response) => {
     res.status(401).json({ error: '로그인이 필요합니다.' });
     return;
   }
-  const isAdmin = isAdminUser(authUser.id);
+  const isAdmin = await isAdminUser(authUser.id);
   if (await isPremiumUser({ clientId: null, authUserId: authUser.id })) {
     res.json({ isPremium: true, isAdmin, usedCount: 0, limit: null, nextAvailableAt: null });
     return;

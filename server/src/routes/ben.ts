@@ -16,13 +16,62 @@ import { benStaticSystem, buildBenAnalysisContext, BenAnalysisRow } from '../lib
 
 const router = Router();
 
-interface BenMessage {
+export interface BenMessage {
   role: 'user' | 'assistant';
   content: string;
-  created_at: string;
+  // 관리자 Ben(routes/admin.ts)은 대화를 저장하지 않아 클라이언트가 매 요청마다
+  // {role, content}만 보낸다 — streamBenReply()도 이 두 필드만 읽으므로 optional.
+  created_at?: string;
 }
 
 type CompanyRef = { name: string } | null;
+
+// 스트리밍 한 턴 실행 — 정적 톤 블록 + 컨텍스트 블록(각각 별도 cache_control)을 시스템
+// 프롬프트로 넘기고, 델타를 SSE 'token' 이벤트로 흘려보낸 뒤 최종 텍스트를 반환한다.
+// /:id/ask(리포트 컨텍스트)와 관리자용 /api/admin/users/:id/ask(유저 컨텍스트) 둘 다
+// 이 함수를 그대로 공유 — 두 라우트가 다른 건 컨텍스트를 어떻게 만드는지와 그 뒤의
+// 저장/레이트리밋 여부뿐, "Ben이 어떻게 말하는지"는 한 곳에만 존재한다.
+export async function streamBenReply(params: {
+  res: Response;
+  staticSystemText: string;
+  contextText: string;
+  priorMessages: BenMessage[];
+  userMessage: string;
+  cacheLogLabel: string;
+}): Promise<string> {
+  const { res, staticSystemText, contextText, priorMessages, userMessage, cacheLogLabel } = params;
+
+  const send = (event: string, data: unknown) => {
+    if (!res.writableEnded) {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+  };
+
+  const stream = anthropic.messages.stream({
+    model: 'claude-sonnet-5',
+    max_tokens: 2048,
+    system: [
+      { type: 'text' as const, text: staticSystemText, cache_control: { type: 'ephemeral' as const } },
+      { type: 'text' as const, text: contextText, cache_control: { type: 'ephemeral' as const } },
+    ],
+    messages: [
+      ...priorMessages.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user' as const, content: userMessage },
+    ],
+  });
+
+  stream.on('text', (delta: string) => {
+    send('token', { text: delta });
+  });
+
+  const finalMessage = await stream.finalMessage();
+  console.log(`[cache-stats][${cacheLogLabel}] input=${finalMessage.usage.input_tokens} cache_read=${finalMessage.usage.cache_read_input_tokens ?? 0} cache_write=${finalMessage.usage.cache_creation_input_tokens ?? 0}`);
+
+  return finalMessage.content
+    .filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
+    .map(b => b.text)
+    .join('');
+}
 
 // GET /api/analyses/:id/ask — 패널 오픈 시 기존 대화 복원
 router.get('/:id/ask', async (req: Request, res: Response) => {
@@ -143,30 +192,14 @@ router.post('/:id/ask', async (req: Request, res: Response) => {
 
     const analysisContext = buildBenAnalysisContext(companyName, analysis as unknown as BenAnalysisRow);
 
-    const stream = anthropic.messages.stream({
-      model: 'claude-sonnet-5',
-      max_tokens: 2048,
-      system: [
-        { type: 'text' as const, text: benStaticSystem(language), cache_control: { type: 'ephemeral' as const } },
-        { type: 'text' as const, text: analysisContext, cache_control: { type: 'ephemeral' as const } },
-      ],
-      messages: [
-        ...priorMessages.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user' as const, content: userMessage },
-      ],
+    const assistantText = await streamBenReply({
+      res,
+      staticSystemText: benStaticSystem(language),
+      contextText: analysisContext,
+      priorMessages,
+      userMessage,
+      cacheLogLabel: 'ben',
     });
-
-    stream.on('text', (delta: string) => {
-      send('token', { text: delta });
-    });
-
-    const finalMessage = await stream.finalMessage();
-    console.log(`[cache-stats][ben] input=${finalMessage.usage.input_tokens} cache_read=${finalMessage.usage.cache_read_input_tokens ?? 0} cache_write=${finalMessage.usage.cache_creation_input_tokens ?? 0}`);
-
-    const assistantText = finalMessage.content
-      .filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
-      .map(b => b.text)
-      .join('');
 
     const now = new Date().toISOString();
     const nextMessages: BenMessage[] = [

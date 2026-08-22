@@ -3035,9 +3035,6 @@ export function hasTabData(key: TabKey, data: AnalysisDetail, financialsV2: Fina
   }
 }
 
-// 관리자 전용 기능 노출 대상(PDF 내보내기 등) — 추가 시 이 배열에 이메일만 추가.
-const ADMIN_EMAILS = ['sg.van.p@gmail.com'];
-
 function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isShareView }: {
   data: AnalysisDetail;
   reanalyzingTabs?: Set<string>;
@@ -3046,8 +3043,11 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
   // 공유 링크 전용(ShareContent.tsx) — 즐겨찾기 별표 등 로그인 유저 전용 액션을 숨긴다.
   isShareView?: boolean;
 }) {
-  const { user, session, signInWithGoogle } = useAuth();
-  const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
+  const { session, signInWithGoogle } = useAuth();
+  // PDF 내보내기 노출 조건(2026-08-19) — 로그인한 모든 사용자에게 개방.
+  // 구 isAdmin(ADMIN_EMAILS 하드코딩 화이트리스트) 게이트는 2026-08-22 관리자 대시보드
+  // 도입으로 profiles.role='admin' 단일 기준으로 전환되며 삭제됨(server/src/lib/admin.ts).
+  const isLoggedIn = !!session;
   // 탭 라벨/버튼은 전역 선호값이 아니라 이 리포트 자체의 저장된 언어를 우선한다 —
   // 안 그러면 KR로 생성해둔 과거 리포트를 열었을 때 콘텐츠는 한국어인데 탭 라벨만
   // 전역 설정(EN)을 따라가는 불일치가 생긴다. data가 아직 없을 때만 전역값으로 폴백.
@@ -3189,7 +3189,7 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             )}
             <CopyButton getMarkdown={() => analysisToMd(data)} label={uiT.actions.copyAll} copiedLabel={uiT.actions.copied} />
             <CopyButton getMarkdown={getActiveTabMarkdown} label={uiT.actions.copyTab} shortLabel={uiT.actions.copyTabShort} copiedLabel={uiT.actions.copied} />
-            {isAdmin && <ExportPdfButton data={data} />}
+            {isLoggedIn && <ExportPdfButton data={data} />}
             <DataSourceBadge source={data.dataSource ?? 'web_search'} />
           </div>
         </div>

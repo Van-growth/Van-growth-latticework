@@ -21,7 +21,10 @@ const JOB_LEVELS = ['junior', 'mid', 'senior', 'team_lead', 'executive'];
 const PURPOSES = ['meeting_prep', 'partner_research', 'competitor_analysis', 'other'];
 const REGIONS = ['kr', 'us', 'other'];
 
-const PROFILE_FIELDS = 'company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, onboarding_completed_at, icp_product, icp_target_industry, icp_target_role, nickname';
+// role은 읽기 전용 노출만 — PATCH 핸들러의 body destructure/fields 조립 어디에도
+// role을 받지 않으므로 이 엔드포인트로 자기 자신을 admin으로 못 올린다(2026-08-22,
+// 관리자 대시보드 Header 네비 링크/페이지 접근 게이트용).
+const PROFILE_FIELDS = 'role, company_name, org_size, industry, job_role, job_level, purpose, purpose_other, region, onboarding_completed_at, icp_product, icp_target_industry, icp_target_role, nickname';
 
 router.get('/', async (req: Request, res: Response) => {
   const authUser = await resolveAuthUser(req);

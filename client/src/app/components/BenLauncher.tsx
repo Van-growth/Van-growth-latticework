@@ -1,11 +1,79 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import BenPanel, { BenWidthPreset } from './BenPanel';
 import { useAnalysis } from '@/app/context/AnalysisContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { getUiStrings } from '@/lib/i18n/uiStrings';
+import { useBenChat } from '@/app/hooks/useBenChat';
+import { useAdminInsightsChat } from '@/app/hooks/useAdminInsightsChat';
+import { AnalysisDetail } from '@/types';
+
+// BenPanel은 순수 프레젠테이션 셸이라 useBenChat(analysis 컨텍스트 전용 데이터 소스)을
+// 여기서 대신 호출해 넘겨준다 — 이 컴포넌트는 BenLauncher에서 {isOpen && ...}로만
+// 마운트되므로, 대화 이력 복원 GET 요청도 기존과 동일하게 패널을 실제로 열 때만 나간다
+// (useBenChat을 BenLauncher 최상단에서 무조건 호출하면 리포트를 열자마자 패널을 안 열어도
+// 매번 GET이 나가는 회귀가 생김).
+function AnalysisBenPanel({ analysisData, widthPreset, setWidthPreset }: {
+  analysisData: AnalysisDetail | null;
+  widthPreset: BenWidthPreset;
+  setWidthPreset: (preset: BenWidthPreset) => void;
+}) {
+  const { language: globalLanguage } = useLanguage();
+  // 리포트 자체의 저장된 언어를 우선(AnalysisCard.tsx의 reportLanguage와 동일 패턴) — 안 그러면
+  // EN 리포트를 보면서도 인사말만 전역 토글(기본 KR)을 따라가는 불일치가 생긴다(2026-08-21,
+  // NVIDIA CORP(language=en) 리포트에서 한글 인사말이 뜨는 걸 실측으로 발견).
+  const reportLanguage = analysisData?.language === 'ko' || analysisData?.language === 'en'
+    ? analysisData.language : globalLanguage;
+  const uiT = getUiStrings(reportLanguage).ben;
+  const chat = useBenChat(analysisData?.id ?? null);
+
+  return (
+    <BenPanel
+      chat={chat}
+      language={reportLanguage}
+      hasContext={!!analysisData}
+      contextLabel={analysisData ? uiT.contextLabel(analysisData.companyName) : null}
+      greetingText={analysisData ? uiT.greeting(analysisData.companyName) : null}
+      resetKey={analysisData?.id ?? null}
+      extraAction={{ label: uiT.mungerPromptLabel, prompt: uiT.mungerPrompt }}
+      widthPreset={widthPreset}
+      setWidthPreset={setWidthPreset}
+    />
+  );
+}
+
+// 관리자 대시보드(/admin) 전용 컨텍스트 — 개별 유저 채팅(2026-08-22 폐기)이 있던 자리를
+// 대체한다. Ben 아이콘/패널의 위치·디자인·열고닫는 방식은 AnalysisBenPanel과 완전히
+// 동일(같은 BenPanel 셸) — 바뀌는 건 useBenChat 대신 useAdminInsightsChat을 쓰고,
+// 리포트 대신 전체 유저 집계를 그라운딩 데이터로 삼는다는 것뿐.
+function AdminInsightsBenPanel({ widthPreset, setWidthPreset }: {
+  widthPreset: BenWidthPreset;
+  setWidthPreset: (preset: BenWidthPreset) => void;
+}) {
+  const chat = useAdminInsightsChat();
+
+  return (
+    <BenPanel
+      chat={chat}
+      language="ko"
+      hasContext
+      contextLabel="전체 유저 통계"
+      greetingText="유저 데이터에 대해 무엇이 궁금하신가요?"
+      resetKey="admin-insights"
+      quickQuestions={[
+        '요즘 가입자 중 어떤 목적이 많아?',
+        '분석 0회인 유저 몇 명이야?',
+        '가장 많이 검색된 기업은?',
+      ]}
+      extraAction={null}
+      widthPreset={widthPreset}
+      setWidthPreset={setWidthPreset}
+    />
+  );
+}
 
 // Ben 전역 노출 — 상단 네비게이션 상시 버튼 → 우측 세로 슬라이드 패널. 컨텍스트는
 // AnalysisContext.analysisData(루트 레이아웃에서 한 번만 provide, 라우트 전환에도 언마운트
@@ -36,6 +104,10 @@ export default function BenLauncher() {
   const { analysisData, benOpen: isOpen, setBenOpen: setIsOpen } = useAnalysis();
   const { language } = useLanguage();
   const t = getUiStrings(language).ben;
+  // 관리자 대시보드 경로에 있으면 컨텍스트만 전체 유저 집계로 바뀐다 — 그 외엔 기존
+  // analysis 컨텍스트 그대로(2026-08-22, 개별 유저 채팅 대신 경로 기반 컨텍스트 분기로 재설계).
+  const pathname = usePathname();
+  const isAdminRoute = pathname?.startsWith('/admin') ?? false;
   const [widthPreset, setWidthPresetState] = useState<BenWidthPreset>('default');
   const [mounted, setMounted] = useState(false);
   // 기본 true로 시작(SSR/hydration 시 깜빡임 방지) — mount 후 실제 localStorage 값으로 교체.
@@ -83,7 +155,9 @@ export default function BenLauncher() {
         aria-label={t.panelTitle}
       >
         {isOpen && (
-          <BenPanel analysisData={analysisData} widthPreset={widthPreset} setWidthPreset={setWidthPreset} />
+          isAdminRoute
+            ? <AdminInsightsBenPanel widthPreset={widthPreset} setWidthPreset={setWidthPreset} />
+            : <AnalysisBenPanel analysisData={analysisData} widthPreset={widthPreset} setWidthPreset={setWidthPreset} />
         )}
       </div>
     </>

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Settings } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
+import { useIsAdmin } from '@/app/hooks/useIsAdmin';
 import { getUiStrings } from '@/lib/i18n/uiStrings';
 import BenLauncher from './BenLauncher';
 
@@ -24,6 +25,7 @@ export default function Header() {
   const pathname = usePathname();
   const { user, loading, signInWithGoogle, signOut } = useAuth();
   const { language } = useLanguage();
+  const { isAdmin } = useIsAdmin();
   const t = getUiStrings(language).header;
 
   // 최상단 내비게이션 — 기업분석/산업별 보기/히스토리/사용법 4개 nav 링크(로그인 여부
@@ -55,6 +57,9 @@ export default function Header() {
             <Link href="/industries" className={navLinkCls(pathname === '/industries')}>{t.industries}</Link>
             <Link href="/history" className={navLinkCls(pathname === '/history')}>{t.history}</Link>
             <Link href="/guide" className={navLinkCls(pathname === '/guide')}>{t.guide}</Link>
+            {isAdmin && (
+              <Link href="/admin/users" className={navLinkCls(pathname?.startsWith('/admin') ?? false)}>{t.admin}</Link>
+            )}
           </div>
         </div>
 
