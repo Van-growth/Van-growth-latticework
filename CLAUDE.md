@@ -361,13 +361,25 @@ Supabase CLI(`npx supabase`, MCP와는 별도 경로로 이미 로그인되어 �
 `migration repair`)와의 호환이 깨진다. MCP가 정상화되더라도 이 네이밍 규칙은 유지할 것 —
 CLI가 유일하게 신뢰 가능한 대체 경로였다는 게 이번에 확인됐고, 다음에 MCP가 또 막힐 수 있음.
 
-**dev 프로젝트 현재 상태**: `ininmbvzzdqplnfdnisf`("1min-dev")는 여전히 존재하지만 현재
-운영에 실질적으로 쓰이지 않고 있음 — "dev 환경이 없다"는 뜻이 아니라 "있지만 이번
-마이그레이션 검증에는 안 씀"이라는 의도적 결정(2026-08-15). 이번 2건은 **prod에만 적용됨**,
-dev에는 미적용 — dev를 나중에 다시 활성화해서 쓰게 되면 이 마이그레이션도 그때 동일하게
-재적용해야 함. 위 "규칙: 새 마이그레이션 파일 작성 시 반드시... prod + dev 둘 다" 원칙은 dev가
-실제로 운영에 쓰이는 상태를 전제로 한 것 — 지금처럼 dev가 사실상 미사용 상태인 동안은 이
-원칙이 잠정 보류됨.
+**dev 프로젝트 현재 상태 (2026-08-25 갱신 — 재활성화)**: 위 2026-08-15의 "dev 잠정 미사용"
+결정은 종료됨. 사유: 외부 공유 링크/솔루션 배포로 외부 유입이 시작되면서 prod DB를 직접
+테스트 용도로 쓰는 리스크가 커져, dev를 다시 실사용 환경으로 되살리기로 결정. 8/15~8/22
+사이 prod에만 적용되고 dev에 밀려있던 마이그레이션 8개(`icp_insights.created_by` /
+`profiles.nickname` / `analyses.purpose_category`·`purpose_detail` / `analysis_favorites`
+테이블 / `analyses.purpose_detail_formatted` / `ben_conversations`·`ben_message_usage`
+테이블 / `analyses.purpose_detail_formatted_truncated` / `profiles.role`·
+`allow_private_search` + `admin_user_login_stats` 뷰)를 2026-08-25에 원 순서 그대로
+재적용 완료 — `information_schema`/`pg_constraint` 직접 대조로 컬럼·제약조건 diff 0건 확인.
+위 "규칙: 새 마이그레이션 파일 작성 시 반드시... prod + dev 둘 다" 원칙은 **다시 발효** —
+한쪽만 적용하고 넘어가는 것 금지(8/15~8/22 drift가 정확히 이렇게 재발했던 사례라 재발
+방지가 핵심 이유).
+
+**알려진 이슈(무해, 2026-08-25 재확인)**: 2026-07-09/07-10 마이그레이션 16개는 prod/dev
+원격 이력에 기록된 타임스탬프 문자열이 서로 다르다(예: prod `20260709121621` ↔ dev
+`20260709144256`) — dev 프로젝트 생성 시점(2026-07-09)과 그 이후 실제 적용 시각 차이 때문
+(바로 위 "로컬 파일명 vs 원격 타임스탬프 포맷 불일치"와 같은 계열의 현상). `information_schema`/
+`pg_constraint` 대조 결과 실제 스키마는 완전히 동일(diff 0건) — `migration list` 상에서만
+mismatch로 보일 뿐 실질적 drift 아님, 별도 조치 불필요.
 
 ## Dev
 ```bash
@@ -1247,6 +1259,15 @@ AnalysisCard.tsx`의 `TAB_GROUPS`/`TABS`(각 탭에 `group: 'company' | 'pain'` 
   HTTP 계층 우회 리팩터링 필요, 착수 전(2026-07-16 확인, 실전 발견 이력 14번 참고)
 
 ### 🔵 탐색 중 (아직 확정 안됨 — 우선순위 미부여, 방향성만 잡힌 상태)
+- [ ] **1min MCP 개인 커넥터** (2026-08-25 논의, 보류) — 신규 기업 리서치 중 1min↔Claude를
+  왔다갔다 하는 마찰을 줄이기 위한 개인 전용 커스텀 MCP 커넥터 구상.
+  - 스코프: 개인 전용(MCP 디렉토리 등록 아님, Anthropic 심사 불필요)
+  - 툴 2개, 전부 읽기 전용: `search_company(query)`, `get_company_context(company_id)`
+  - 호스팅: Render 공개 HTTPS 엔드포인트, API 키 1개로 인증
+  - 명시적 제외: 다중 유저 인증, 과금, MCP 디렉토리 등록 — 개인 워크플로우 편의 도구로만
+    스코프 한정
+  - 2026-08-25 논의 시점 기준 보류 — 착수 여부/시점 미정, 이 한 줄 스코프 이상 구체화된
+    설계 없음
 - [ ] AE Skills 콘텐츠 파이프라인 (VOC.md → DB화) — 최상위 3단 탭 중 "AE Skills"는
   2026-08에 UI 뼈대(카테고리 칩 + 카드 피드)만 먼저 구현됨(`AeSkillsView.tsx`, 하드코딩
   더미 카드 4개). 실제 콘텐츠는 VOC(고객 목소리) 수동 관리 문서(VOC.md — 현재 저장소엔
