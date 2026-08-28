@@ -3427,6 +3427,14 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
             앞이었으나, 출처는 항상 스택의 마지막이어야 한다는 재검토로 성장시나리오
             뒤로 이동).** */}
         <ReportSection id="sources" title={uiT.home.progressCardSources} icon={BookOpen} uiT={uiT} getMarkdown={() => sourcesToMd(data, uiT)}>
+          {/* 2026-08-28 — sources 필드는 여태까지 재분석 경로 자체가 없었다(REANALYZE_FIELD/
+              REANALYZE_SECTION_MAP 누락, 진단 세션에서 발견). 다른 8개 섹션처럼 전체를
+              EmptySectionState로 갈아치우지 않고, 기존 legacy-fallback 섹션들과 동일한
+              reanalyzeBtn() 상단 링크 패턴을 재사용 — AllSourcesSummary는 data.sources 외에도
+              각 섹션 자체 출처를 모아 보여주는 통합 뷰라 data.sources 하나가 비었다고 전체를
+              숨기면 오히려 정보가 줄어든다. batchDone(4)(sources가 속한 배치) 이전엔 아직
+              스트리밍 중일 뿐 실패가 아니므로 링크를 띄우지 않는다. */}
+          {batchDone(4) && Object.values(data.sources ?? {}).every(arr => !arr || arr.length === 0) && reanalyzeBtn('sources')}
           <AllSourcesSummary data={data} uiT={uiT} />
           <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>

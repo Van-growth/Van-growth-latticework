@@ -379,6 +379,8 @@ export default function HomeContent() {
     strategy:       'strategy_v2',
     financials:     'financials_v2',
     founder:        'founder_v2',
+    // 2026-08-28 — 서버 REANALYZE_SECTION_MAP과 동일하게 추가, sources 탭에도 재분석 경로 부여.
+    sources:        'sources',
   };
 
   async function handleReanalyzeTab(tab: string) {

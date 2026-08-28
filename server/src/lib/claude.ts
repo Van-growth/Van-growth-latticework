@@ -581,6 +581,46 @@ async function runWithWebSearch(
   return lastTexts || `[${label}] 리서치 라운드 초과로 데이터를 완전히 수집하지 못함 — 확보된 정보만으로 진행.`;
 }
 
+// 2026-08-28 — "이중 객체 연결" 파싱 실패 패턴 전용 복구(2026-08-28 진단 세션, 로컬
+// value_chain_v2 샘플 실측: `{industry,layers}` + `{value_flow,subject_position,
+// key_bullets,discovery_questions,sources}` 두 조각이 완전한 JSON 객체로 각각
+// 유효한 채 그대로 이어붙어 있었음 — 스키마가 두 조각에 나뉘어 있어 한쪽만 쓰면
+// 나머지 절반이 통째로 사라진다). 배열/필드 조기 마감(다른 실패 패턴, 데이터 유실을
+// 동반하는 구조적 손상)과 달리 이 패턴은 두 조각 다 완전한 값이라 안전하게 분리
+// 가능 — 문자열 내부에 우연히 등장하는 "}{"까지 오탐하지 않도록 따옴표/이스케이프를
+// 추적하며, 실제 최상위 중괄호 깊이가 0으로 돌아오는 지점만 경계로 삼는다.
+function splitTopLevelJsonObjects(text: string): string[] | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{')) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let firstEnd = -1;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) { firstEnd = i; break; }
+    }
+  }
+
+  if (firstEnd === -1) return null;
+  const rest = trimmed.slice(firstEnd + 1).trim();
+  if (!rest.startsWith('{')) return null;
+
+  return [trimmed.slice(0, firstEnd + 1), rest];
+}
+
 function extractJson<T>(raw: string, label = 'response'): T | null {
   const text = raw.trim();
 
@@ -599,6 +639,22 @@ function extractJson<T>(raw: string, label = 'response'): T | null {
   const block = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
   if (block) {
     try { return JSON.parse(block[0]) as T; } catch {}
+  }
+
+  // 이중 객체 연결 패턴만 표적으로 복구 — 조각 2개가 전부 배열이 아닌 객체로 파싱
+  // 성공할 때만 얕은 병합(뒤 조각이 겹치는 키를 덮어씀)해 반환. 조기 마감(패턴 1)처럼
+  // 애초에 완전한 값 2개로 쪼개지지 않는 손상은 이 함수가 null을 반환해 그대로
+  // 실패 처리되고, callSection()/callFounderSection()의 자동 1회 재시도에 맡겨진다 —
+  // 여기서 억지로 복구를 시도하지 않는다.
+  const parts = splitTopLevelJsonObjects(text);
+  if (parts) {
+    try {
+      const objs = parts.map(p => JSON.parse(p));
+      if (objs.every(o => o && typeof o === 'object' && !Array.isArray(o))) {
+        console.warn(`[claude] ${label}: 이중 객체 연결 패턴 감지, ${objs.length}개 조각 병합해 복구`);
+        return Object.assign({}, ...objs) as T;
+      }
+    } catch {}
   }
 
   console.error(`[claude] ${label}: JSON parse failed. Preview:\n${text.slice(0, 400)}`);
@@ -949,145 +1005,185 @@ async function gatherResearch2(companyName: string): Promise<string> {
 
 // ── Section call (no web search, uses shared context) ─────────────────────────
 
+// 2026-08-28 진단 세션 계기 — batch1~5(최초 분석)에는 자동 재시도가 전혀 없어서, 한 번
+// 실패하면 그대로 빈 placeholder로 고정되고 유저가 "다시 분석" 버튼을 눌러야만 복구됐다
+// (그 버튼이 호출하는 handleReanalyzeTab은 이미 2초 지연 후 1회 자동 재시도를 갖고 있는데
+// 최초 분석 경로만 빠져 있었음). 이 헬퍼가 그 격차를 메운다 — attempt()를 최대 2회(최초
+// 1회 + 재시도 1회) 실행하고, 클라이언트 쪽과 달리 지연은 두지 않는다(실패 원인이 대부분
+// 네트워크 일시 장애가 아니라 모델 생성 자체의 형식 오류라 지연을 둔다고 성공률이
+// 달라지지 않고, 각 호출 자체가 20~40초+ 걸려 API에 자연히 여유가 있다). retry=false는
+// reanalyzeSingleSection()(수동 "다시 분석" 경로) 전용 — 그 경로는 이미 클라이언트가 자체
+// 2회 재시도를 갖고 있어, 여기서도 재시도를 켜면 클릭 1번에 최대 4회 호출까지 겹쳐(2×2)
+// "필드당 최대 1회"라는 재시도 원칙과 API 비용 절제 원칙을 함께 벗어난다 — 그래서 최초
+// 분석 경로(batch1~5의 callSection/callFounderSection 직접 호출)에서만 retry 기본값 true.
+async function withOneRetry<T>(
+  sectionKey: string,
+  companyName: string,
+  retry: boolean,
+  attempt: () => Promise<{ result: T | null; failReason: string | null }>,
+): Promise<T | null> {
+  const first = await attempt();
+  if (first.result !== null || !retry) return first.result;
+  console.warn(`[claude] ${sectionKey} RETRY 1/1 (company: ${companyName}) — 원인: ${first.failReason}`);
+  const second = await attempt();
+  return second.result;
+}
+
 // model 파라미터: 섹션별 모델 티어링 도입 대비(2026-08-12) — 기본값은 기존 sonnet 그대로,
 // 프로덕션 분기 로직은 아직 연결 안 함(검토 후 결정 예정).
-export async function callSection<T>(context: string, sectionKey: string, language: Language, model = 'claude-sonnet-5'): Promise<T | null> {
-  const t0 = Date.now();
-  try {
-    const response = await anthropic.messages.create({
-      model,
-      // 2026-08-15 4000→6000→8000 상향 — Sonnet 5 신규 토크나이저가 동일 내용도 ~30-35%
-      // 더 많은 토큰을 소비해(모델 마이그레이션 가이드 실측), strategy_coherence 등
-      // 서술형 필드가 있는 스키마가 4000에서 응답이 잘려 JSON 파싱 실패로 이어졌음
-      // (2026-08-15 J&J 실측 — strategy_v2/cross_industry_nudge_v1 재현). 6000으로 올린
-      // 뒤에도 NVIDIA financials_v2가 stop_reason=max_tokens(정확히 6000 도달)로 재현돼
-      // 8000으로 재상향. financials_v2 전용 분기를 두는 대신 8개 스키마 전체에 동일
-      // 적용(ponytail 원칙 — 스키마별 분기는 코드 복잡도만 늘리고, max_tokens는 상한선이라
-      // 실제로 다 안 쓰면 비용 증가 없음). 실전 발견 이력 참고.
-      max_tokens: 8000,
-      system: [{ type: 'text', text: sectionSystem(language), cache_control: { type: 'ephemeral' } }] as any,
-      messages: [{
-        role: 'user',
-        content: `${context}\n\n---\n\n${SECTION_SCHEMAS[sectionKey]}`,
-      }],
-    });
-    logCacheUsage(sectionKey, response.usage);
-    const raw = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map(b => b.text)
-      .join('');
-    const result = extractJson<T>(raw, sectionKey);
-    // ── Quality Gate (Rules 1–3) ──────────────────────────────────────────
-    if (result !== null) {
-      // Rule 1: -999 placeholder 감지 → 필드 단위 제거 (섹션 전체 폐기 금지)
-      sanitizePlaceholderNumbers(result, sectionKey);
-      // Rule 2: 섹션에 실제 콘텐츠가 하나도 없으면 null 처리 (필드 단위 판정).
-      // 대표 텍스트 필드가 placeholder여도 배열 필드에 콘텐츠가 있으면 섹션은 유지 —
-      // 배열·텍스트 신호가 모두 비어있을 때만 섹션 전체를 폐기한다.
-      const r = result as any;
-      const signals = SECTION_CONTENT_SIGNALS[sectionKey];
-      if (signals) {
-        const hasArrayContent = (signals.arrays ?? []).some(path => {
-          const v = getByPath(r, path);
-          return Array.isArray(v) && v.length > 0;
-        });
-        const hasTextContent = (signals.text ?? []).some(f => !isPlaceholderText(r[f]));
-        if (!hasArrayContent && !hasTextContent) {
-          console.warn(`[quality-gate] ${sectionKey} 콘텐츠 전무 (배열·텍스트 모두 비어있음) → null`);
-          return null;
+export async function callSection<T>(
+  context: string,
+  sectionKey: string,
+  language: Language,
+  model = 'claude-sonnet-5',
+  opts?: { retry?: boolean },
+): Promise<T | null> {
+  // context는 phase1Context/sharedContext(analyzeCompany)와 reanalyzeSingleSection의
+  // context 둘 다 항상 첫 줄이 `Company: ${companyName}`로 고정돼 있어(재시도 로그용
+  // 회사명만 필요, 함수 시그니처 자체를 바꿔 11개 호출부를 전부 고치는 대신 여기서
+  // 추출) — 매칭 실패 시에도 로그 한 줄이 조금 덜 유용해질 뿐 동작에는 영향 없다.
+  const companyName = context.match(/^Company: (.+)$/m)?.[1] ?? 'unknown';
+
+  return withOneRetry<T>(sectionKey, companyName, opts?.retry ?? true, async () => {
+    const t0 = Date.now();
+    try {
+      const response = await anthropic.messages.create({
+        model,
+        // 2026-08-15 4000→6000→8000 상향 — Sonnet 5 신규 토크나이저가 동일 내용도 ~30-35%
+        // 더 많은 토큰을 소비해(모델 마이그레이션 가이드 실측), strategy_coherence 등
+        // 서술형 필드가 있는 스키마가 4000에서 응답이 잘려 JSON 파싱 실패로 이어졌음
+        // (2026-08-15 J&J 실측 — strategy_v2/cross_industry_nudge_v1 재현). 6000으로 올린
+        // 뒤에도 NVIDIA financials_v2가 stop_reason=max_tokens(정확히 6000 도달)로 재현돼
+        // 8000으로 재상향. financials_v2 전용 분기를 두는 대신 8개 스키마 전체에 동일
+        // 적용(ponytail 원칙 — 스키마별 분기는 코드 복잡도만 늘리고, max_tokens는 상한선이라
+        // 실제로 다 안 쓰면 비용 증가 없음). 실전 발견 이력 참고.
+        max_tokens: 8000,
+        system: [{ type: 'text', text: sectionSystem(language), cache_control: { type: 'ephemeral' } }] as any,
+        messages: [{
+          role: 'user',
+          content: `${context}\n\n---\n\n${SECTION_SCHEMAS[sectionKey]}`,
+        }],
+      });
+      logCacheUsage(sectionKey, response.usage);
+      const raw = response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map(b => b.text)
+        .join('');
+      const result = extractJson<T>(raw, sectionKey);
+      // ── Quality Gate (Rules 1–3) ──────────────────────────────────────────
+      if (result !== null) {
+        // Rule 1: -999 placeholder 감지 → 필드 단위 제거 (섹션 전체 폐기 금지)
+        sanitizePlaceholderNumbers(result, sectionKey);
+        // Rule 2: 섹션에 실제 콘텐츠가 하나도 없으면 null 처리 (필드 단위 판정).
+        // 대표 텍스트 필드가 placeholder여도 배열 필드에 콘텐츠가 있으면 섹션은 유지 —
+        // 배열·텍스트 신호가 모두 비어있을 때만 섹션 전체를 폐기한다.
+        const r = result as any;
+        const signals = SECTION_CONTENT_SIGNALS[sectionKey];
+        if (signals) {
+          const hasArrayContent = (signals.arrays ?? []).some(path => {
+            const v = getByPath(r, path);
+            return Array.isArray(v) && v.length > 0;
+          });
+          const hasTextContent = (signals.text ?? []).some(f => !isPlaceholderText(r[f]));
+          if (!hasArrayContent && !hasTextContent) {
+            console.warn(`[quality-gate] ${sectionKey} 콘텐츠 전무 (배열·텍스트 모두 비어있음) → null`);
+            return { result: null, failReason: 'Quality Gate: 콘텐츠 전무' };
+          }
+          // 필드 단위 정리: placeholder 텍스트 필드만 빈 문자열로 정규화, 나머지는 그대로 유지
+          for (const f of signals.text ?? []) {
+            if (isPlaceholderText(r[f])) r[f] = '';
+          }
         }
-        // 필드 단위 정리: placeholder 텍스트 필드만 빈 문자열로 정규화, 나머지는 그대로 유지
-        for (const f of signals.text ?? []) {
-          if (isPlaceholderText(r[f])) r[f] = '';
+        // Rule 3: sources 배열 비어있음 — 경고만 (전체 중단 금지)
+        if (Array.isArray(r.sources) && r.sources.length === 0) {
+          console.warn(`[quality-gate] ${sectionKey} sources 배열 비어있음`);
+        }
+        // 프론트가 조건부 렌더링하는 단일 텍스트 필드가 비어있는 빈도 관찰용 — Quality Gate
+        // 룰로 승격하지 않음(business_model_v2 22% 폐기율 재현 위험, 실전 발견 이력 6번 참고).
+        if (sectionKey === 'summary_v2') {
+          if (!r.bull_case?.length) console.warn(`[quality-gate] summary_v2.bull_case 비어있음`);
+          if (!r.bear_case?.length) console.warn(`[quality-gate] summary_v2.bear_case 비어있음`);
+        }
+        if (sectionKey === 'business_model_v2' && !r.growth_motion_detail) {
+          console.warn(`[quality-gate] business_model_v2.growth_motion_detail 비어있음`);
         }
       }
-      // Rule 3: sources 배열 비어있음 — 경고만 (전체 중단 금지)
-      if (Array.isArray(r.sources) && r.sources.length === 0) {
-        console.warn(`[quality-gate] ${sectionKey} sources 배열 비어있음`);
+      // ─────────────────────────────────────────────────────────────────────
+      // 2026-08-15 로깅 결함 수정(심각도: 높음) — result가 null(extractJson()의 JSON 파싱
+      // 실패)이어도 이 지점까지 예외 없이 도달하면 무조건 "OK"가 찍히던 버그. null이면
+      // merge 단계(analyzeCompany())가 DEFAULT_ANALYSIS_DATA 빈 placeholder로 조용히
+      // 대체하는데, 로그만 보면 성공한 것처럼 보여 원인 추적이 막혔음(2026-08-15 Sonnet 5
+      // 전환 직후 J&J strategy_v2/cross_industry_nudge_v1에서 실측 재현). extractJson() 내부의
+      // console.error는 원문 파싱 실패 자체는 남기지만 "이 섹션이 결국 빈 값으로 저장된다"는
+      // 결과는 여기서 별도로 남겨야 grep으로 추적 가능하다. Sonnet 4.6 때도 동일한 잠재
+      // 결함이었을 가능성이 높음 — 그때는 우연히 응답 길이가 짧아 안 걸렸을 뿐(같은 근본
+      // 원인으로 의심되는 사례: Amprius Technologies 요약 탭 빈 화면).
+      if (result !== null) {
+        console.log(`[claude] ${sectionKey} OK  ${Date.now() - t0}ms`);
+        return { result, failReason: null };
       }
-      // 프론트가 조건부 렌더링하는 단일 텍스트 필드가 비어있는 빈도 관찰용 — Quality Gate
-      // 룰로 승격하지 않음(business_model_v2 22% 폐기율 재현 위험, 실전 발견 이력 6번 참고).
-      if (sectionKey === 'summary_v2') {
-        if (!r.bull_case?.length) console.warn(`[quality-gate] summary_v2.bull_case 비어있음`);
-        if (!r.bear_case?.length) console.warn(`[quality-gate] summary_v2.bear_case 비어있음`);
-      }
-      if (sectionKey === 'business_model_v2' && !r.growth_motion_detail) {
-        console.warn(`[quality-gate] business_model_v2.growth_motion_detail 비어있음`);
-      }
-    }
-    // ─────────────────────────────────────────────────────────────────────
-    // 2026-08-15 로깅 결함 수정(심각도: 높음) — result가 null(extractJson()의 JSON 파싱
-    // 실패)이어도 이 지점까지 예외 없이 도달하면 무조건 "OK"가 찍히던 버그. null이면
-    // merge 단계(analyzeCompany())가 DEFAULT_ANALYSIS_DATA 빈 placeholder로 조용히
-    // 대체하는데, 로그만 보면 성공한 것처럼 보여 원인 추적이 막혔음(2026-08-15 Sonnet 5
-    // 전환 직후 J&J strategy_v2/cross_industry_nudge_v1에서 실측 재현). extractJson() 내부의
-    // console.error는 원문 파싱 실패 자체는 남기지만 "이 섹션이 결국 빈 값으로 저장된다"는
-    // 결과는 여기서 별도로 남겨야 grep으로 추적 가능하다. Sonnet 4.6 때도 동일한 잠재
-    // 결함이었을 가능성이 높음 — 그때는 우연히 응답 길이가 짧아 안 걸렸을 뿐(같은 근본
-    // 원인으로 의심되는 사례: Amprius Technologies 요약 탭 빈 화면).
-    if (result !== null) {
-      console.log(`[claude] ${sectionKey} OK  ${Date.now() - t0}ms`);
-    } else {
       // stop_reason이 "max_tokens"면 진짜 길이 초과로 잘린 것(max_tokens 상향으로 해결
       // 가능) — 그 외 값(예: "end_turn"인데 JSON이 깨짐)이면 길이 문제가 아니라 모델이
       // 애초에 잘못된 JSON을 낸 것이므로 max_tokens를 올려도 소용없다(2026-08-15,
       // NVIDIA strategy_v2가 6000에서도 재현되어 원인 구분 필요성으로 추가).
       console.error(`[claude] ${sectionKey} FAIL ${Date.now() - t0}ms — JSON 파싱 실패로 null 반환, DEFAULT_ANALYSIS_DATA 빈 placeholder로 대체됨 (stop_reason=${response.stop_reason}, output_tokens=${response.usage.output_tokens})`);
+      return { result: null, failReason: 'JSON parse fail' };
+    } catch (err) {
+      console.error(`[claude] ${sectionKey} FAIL ${Date.now() - t0}ms`, err);
+      return { result: null, failReason: `API 호출 예외: ${err instanceof Error ? err.message : String(err)}` };
     }
-    return result;
-  } catch (err) {
-    console.error(`[claude] ${sectionKey} FAIL ${Date.now() - t0}ms`, err);
-    return null;
-  }
+  });
 }
 
 // ── Founder section (own web-search pass) ─────────────────────────────────────
 
-async function callFounderSection(companyName: string, language: Language): Promise<FounderV2 | null> {
-  const t0 = Date.now();
-  try {
-    const systemPrompt = [{ type: 'text' as const, text: `You are an expert on company founders. Use web search to gather founder/CEO information, then return only the specified JSON schema.
+async function callFounderSection(companyName: string, language: Language, opts?: { retry?: boolean }): Promise<FounderV2 | null> {
+  return withOneRetry<FounderV2>('founder_v2', companyName, opts?.retry ?? true, async () => {
+    const t0 = Date.now();
+    try {
+      const systemPrompt = [{ type: 'text' as const, text: `You are an expert on company founders. Use web search to gather founder/CEO information, then return only the specified JSON schema.
 Rules: Output pure JSON only — no markdown, no code blocks, no extra commentary. ${FOUNDER_LANGUAGE_DIRECTIVE[language]}
 Mark any item you can't find as "-". For a private company, research this section more deeply than the financials.`, cache_control: { type: 'ephemeral' as const } }];
 
-    const schema = `Output only a JSON object matching this schema:
+      const schema = `Output only a JSON object matching this schema:
 {"founders":[{"name":"Name","title":"Title","education":"School or '-'","major":"Major or '-'"}],"career_trajectory":[{"period":"Period (e.g. 2018-present)","company":"Company name","role":"Title/role"}],"founding_history":{"type":"1st_time|serial","previous_ventures":[{"name":"Company name","result":"exit|closed|operating","exit_type":"M&A|IPO|null"}]},"reputation":{"sns_style":"Social media style, 1 line, or '-'","media_exposure":"Notable media exposure, 1 line, or '-'","blind_glassdoor":"Blind/Glassdoor reputation summary, 1 line, or '-'"},"network":{"investors":["Investor name/firm, max 5"],"advisors_board":["Advisor/board member, max 5"],"cofounders":["Co-founder name, max 5"]},"key_bullets":["This founder's core strength — why they're the right person for this business, 8 words or fewer","The most notable thing in the founder's network/track record, 8 words or fewer","Founder risk — the biggest concern, 8 words or fewer"],"sources":[{"index":1,"level":"L1","organization":"Source organization name","content":"Key point, 1 line","url":"https://... or null"}]}
 career_trajectory: sort most recent first. Empty array [] if founding_history.previous_ventures has none. Any LinkedIn/news/Crunchbase URL confirmed via search must go in sources[].url.`;
 
-    const raw = await runWithWebSearch(
-      systemPrompt,
-      `Company: ${companyName}\n\nGather founder/CEO information using this search order:\n1. "${companyName} founder CEO name background education"\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} investor board advisor"\n\nThen return the data using this schema:\n${schema}`,
-      'claude-sonnet-5',
-      3,
-      // 2026-08-17 git blame 조사(관찰 기록 확인 요청 계기) — 6000→8000. 의도된 설계가
-      // 아니었음을 확정: founder_v2는 2026-06-24 생성 당시 callSection()의 max_tokens
-      // (그때 4000)보다 오히려 높은 6000으로 시작했으나, callSection() 쪽만 2026-08-15에
-      // Sonnet 5 전환(같은 커밋 4a2f184에서 founder_v2도 동일하게 sonnet-4-6→sonnet-5
-      // 전환됨 — 새 토크나이저가 동일 내용도 ~30-35% 더 많은 토큰 소비, NVIDIA
-      // financials_v2 실측 재현) 대응으로 4000→6000→8000까지 두 차례 상향됐는데,
-      // callFounderSection()은 runWithWebSearch()를 쓰는 별도 호출부라 이 상향에서
-      // 빠짐(callSection()과 같은 anthropic.messages.create() 직접 호출이 아니라 놓치기
-      // 쉬운 구조). founder_v2도 같은 모델 전환을 겪었으니 같은 상향이 적용돼야 함 —
-      // max_tokens는 상한선이라 실제로 다 안 쓰면 비용 증가 없음(callSection과 동일 원칙).
-      8000,
-      'founder_v2',
-    );
-    const result = extractJson<FounderV2>(raw, 'founder_v2');
-    // 2026-08-15 callSection()에서 고친 로깅 결함(파싱 실패해도 OK로 찍히던 것)이
-    // callFounderSection()엔 반영이 빠져있었음(2026-08-17 관찰 기록 조사에서 발견) —
-    // 동일하게 result null 여부로 OK/FAIL 분기. stop_reason/output_tokens는 runWithWebSearch가
-    // texts만 반환해 이 지점에서 접근 불가 — 대신 위 [gatherResearch][founder_v2] round
-    // 로그에 라운드별 stop_reason이 이미 남는다.
-    if (result !== null) {
-      console.log(`[claude] founder_v2 OK  ${Date.now() - t0}ms`);
-    } else {
+      const raw = await runWithWebSearch(
+        systemPrompt,
+        `Company: ${companyName}\n\nGather founder/CEO information using this search order:\n1. "${companyName} founder CEO name background education"\n2. "${companyName} founder serial entrepreneur exit history"\n3. "${companyName} investor board advisor"\n\nThen return the data using this schema:\n${schema}`,
+        'claude-sonnet-5',
+        3,
+        // 2026-08-17 git blame 조사(관찰 기록 확인 요청 계기) — 6000→8000. 의도된 설계가
+        // 아니었음을 확정: founder_v2는 2026-06-24 생성 당시 callSection()의 max_tokens
+        // (그때 4000)보다 오히려 높은 6000으로 시작했으나, callSection() 쪽만 2026-08-15에
+        // Sonnet 5 전환(같은 커밋 4a2f184에서 founder_v2도 동일하게 sonnet-4-6→sonnet-5
+        // 전환됨 — 새 토크나이저가 동일 내용도 ~30-35% 더 많은 토큰 소비, NVIDIA
+        // financials_v2 실측 재현) 대응으로 4000→6000→8000까지 두 차례 상향됐는데,
+        // callFounderSection()은 runWithWebSearch()를 쓰는 별도 호출부라 이 상향에서
+        // 빠짐(callSection()과 같은 anthropic.messages.create() 직접 호출이 아니라 놓치기
+        // 쉬운 구조). founder_v2도 같은 모델 전환을 겪었으니 같은 상향이 적용돼야 함 —
+        // max_tokens는 상한선이라 실제로 다 안 쓰면 비용 증가 없음(callSection과 동일 원칙).
+        8000,
+        'founder_v2',
+      );
+      const result = extractJson<FounderV2>(raw, 'founder_v2');
+      // 2026-08-15 callSection()에서 고친 로깅 결함(파싱 실패해도 OK로 찍히던 것)이
+      // callFounderSection()엔 반영이 빠져있었음(2026-08-17 관찰 기록 조사에서 발견) —
+      // 동일하게 result null 여부로 OK/FAIL 분기. stop_reason/output_tokens는 runWithWebSearch가
+      // texts만 반환해 이 지점에서 접근 불가 — 대신 위 [gatherResearch][founder_v2] round
+      // 로그에 라운드별 stop_reason이 이미 남는다.
+      if (result !== null) {
+        console.log(`[claude] founder_v2 OK  ${Date.now() - t0}ms`);
+        return { result, failReason: null };
+      }
       console.error(`[claude] founder_v2 FAIL ${Date.now() - t0}ms — JSON 파싱 실패로 null 반환, DEFAULT_ANALYSIS_DATA 빈 placeholder로 대체됨`);
+      return { result: null, failReason: 'JSON parse fail' };
+    } catch (err) {
+      console.error(`[claude] founder_v2 FAIL ${Date.now() - t0}ms`, err);
+      return { result: null, failReason: `API 호출 예외: ${err instanceof Error ? err.message : String(err)}` };
     }
-    return result;
-  } catch (err) {
-    console.error(`[claude] founder_v2 FAIL ${Date.now() - t0}ms`, err);
-    return null;
-  }
+  });
 }
 
 // ── Financial refresh (own web-search pass) ───────────────────────────────────
@@ -1440,8 +1536,13 @@ export async function reanalyzeSingleSection(
   purpose?: { purposeCategory?: string | null; purposeDetail?: string | null },
   industryCategory: IndustryCategory = 'general',
 ): Promise<any> {
+  // retry: false — 이 경로(수동 "다시 분석" 버튼)는 이미 클라이언트(handleReanalyzeTab,
+  // HomeContent.tsx)가 2초 지연 후 1회 자동 재시도를 갖고 있다. callSection/
+  // callFounderSection의 새 서버 측 재시도(기본 true)까지 여기서 함께 켜면 클릭
+  // 1번에 최대 2×2=4회 호출이 겹쳐 "필드당 최대 1회" 원칙과 API 비용 절제 원칙을
+  // 둘 다 벗어난다 — 기존에 이미 작동하던 이 경로의 재시도 횟수는 그대로 둔다.
   if (sectionKey === 'founder_v2') {
-    return callFounderSection(companyName, language);
+    return callFounderSection(companyName, language, { retry: false });
   }
   // 작업 D(2026-08-16) — EDGAR/DART 원본이 아예 없는 기업의 "재무 이 섹션 다시 분석"은
   // Claude 호출 자체를 건너뛴다(웹서치 자유서술 재발 방지, batch3/refreshFinancials와 동일 정책).
@@ -1462,7 +1563,7 @@ export async function reanalyzeSingleSection(
     `\n[Web research — detailed info]\n${research2}`,
     purposeBlock,
   ].filter(Boolean).join('\n');
-  const result = await callSection(context, sectionKey, language);
+  const result = await callSection(context, sectionKey, language, undefined, { retry: false });
   if (sectionKey === 'financials_v2' && rawFinancials) {
     return overrideFinancialsTable(result as FinancialsV2, rawFinancials.rawEdgar, rawFinancials.rawDart, language, industryCategory);
   }

@@ -1112,6 +1112,10 @@ const REANALYZE_SECTION_MAP: Record<string, string> = {
   strategy:       'strategy_v2',
   financials:     'financials_v2',
   founder:        'founder_v2',
+  // 2026-08-28 — 여태까지 이 맵에 없어 sources만 재분석 자체가 불가능했다(진단 세션에서
+  // 발견). getReanalyzeSectionDbFields()는 이미 default 분기(`{ [sectionKey]: data }`)가
+  // 'sources' → `{ sources: data }`로 정확히 떨어져 별도 case 추가가 필요 없다.
+  sources:        'sources',
 };
 
 function getReanalyzeSectionDbFields(sectionKey: string, data: any): Record<string, any> {
