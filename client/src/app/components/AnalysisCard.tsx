@@ -3431,6 +3431,12 @@ function AnalysisCardInner({ data, reanalyzingTabs, onReanalyze, isPremium, isSh
           <BenNudgeBanner label={uiT.ben.nudgeBanner} onClick={() => setBenOpen(true)} />
         </ReportSection>
       </div>
+
+      {/* AI 한계 고지(2026-08-28) — 리포트 페이지 최하단 푸터, 섹션마다 반복하지 않고
+          스크롤 스택 전체에 대해 1회만 노출. */}
+      <p className="text-[11px] text-gray-400 text-center py-3 border-t border-gray-100">
+        {uiT.aiDisclaimer}
+      </p>
     </div>
   );
 }

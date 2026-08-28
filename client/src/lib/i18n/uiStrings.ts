@@ -190,6 +190,9 @@ interface UiStringDict {
     thisCompany: string;
     industryMedian: string;
   };
+  // Ben 채팅 입력창 하단 + 웹 리포트 뷰어 페이지 최하단 공용 — 두 곳 모두 동일 문구/톤이라
+  // 별도 네임스페이스 없이 최상위 공용 문자열로 둔다(2026-08-28, AI 한계 고지 문구 추가).
+  aiDisclaimer: string;
   ben: {
     panelTitle: string;
     emptyState: string;
@@ -412,6 +415,7 @@ const ko: UiStringDict = {
     thisCompany: '이 회사',
     industryMedian: '업종 중앙값',
   },
+  aiDisclaimer: 'AI는 실수할 수 있습니다. 중요한 의사결정 전 원문 데이터를 확인하세요.',
   ben: {
     panelTitle: 'Ben',
     emptyState: '기업을 먼저 분석해주세요. 분석이 끝나면 이 리포트를 바탕으로 질문할 수 있어요.',
@@ -634,6 +638,7 @@ const en: UiStringDict = {
     thisCompany: 'This company',
     industryMedian: 'Industry median',
   },
+  aiDisclaimer: 'AI can make mistakes. Please verify against source data before making decisions.',
   ben: {
     panelTitle: 'Ben',
     emptyState: 'Analyze a company first. Once it finishes, you can ask questions grounded in this report.',

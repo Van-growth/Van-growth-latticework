@@ -68,6 +68,7 @@ export default function BenPanel({
 }: BenPanelProps) {
   const { session } = useAuth();
   const uiT = getUiStrings(language).ben;
+  const disclaimerText = getUiStrings(language).aiDisclaimer;
   const { messages, sendMessage, reset, isStreaming, rateLimited, error, loadError, retryLoad } = chat;
   // 컨텍스트 인사말(2026-08-20) — Ben이 먼저 건네는 인사, 실제 유저 메시지가 아니므로
   // messages(서버/휘발성 대화 이력)엔 절대 안 실리고 이 컴포넌트 로컬 렌더에서만 존재한다.
@@ -339,6 +340,12 @@ export default function BenPanel({
               <Send size={13} />
             </button>
           </form>
+
+          {/* AI 한계 고지(2026-08-28) — 입력창 바로 하단 고정 위치, 채팅 패널 셸이 이미
+              flex flex-col + shrink-0 구조라 별도 sticky 포지셔닝 없이도 항상 최하단에 남는다. */}
+          <p className="shrink-0 text-[11px] text-gray-400 text-center px-4 pb-2">
+            {disclaimerText}
+          </p>
         </>
       )}
     </div>

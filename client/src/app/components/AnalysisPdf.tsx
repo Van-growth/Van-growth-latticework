@@ -651,11 +651,19 @@ const s = StyleSheet.create({
     left:       62,
     right:      62,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   footerText: {
     fontSize: 7.5,
     color:    C.light,
+  },
+  // AI 한계 고지(2026-08-28) — flex:1로 남는 가로공간을 전부 차지해 좌측(회사명/리포트
+  // 타이틀)·우측(페이지 번호) Text의 실제 너비와 무관하게 항상 그 사이 중앙에 놓인다.
+  footerDisclaimer: {
+    flex:      1,
+    fontSize:  9,
+    color:     C.light,
+    textAlign: 'center',
   },
 });
 
@@ -2029,6 +2037,9 @@ function PageFooter({ company, t }: { company: string; t: TFn }) {
   return (
     <View style={s.footer} fixed>
       <Text style={s.footerText}>{company} {t('기업 분석 보고서', 'Company Analysis Report')}</Text>
+      <Text style={s.footerDisclaimer}>
+        {t('AI 생성 콘텐츠 — 의사결정 전 원문 확인 권장', 'AI-generated — verify against source before use')}
+      </Text>
       <Text style={s.footerText} render={({ pageNumber, totalPages }) =>
         `${pageNumber} / ${totalPages}`
       } />
