@@ -272,16 +272,27 @@ function buildRow(
   return row;
 }
 
+// 최신 2개년이 실제로 인접 회계연도일 때만 YoY %를 계산, 아니면 null — Claude 프롬프트에
+// 계산을 맡기지 않고 서버가 결정론적으로 값을 만들어 그 자체를 컨텍스트에 주입(또는 아예
+// "계산 불가"로 명시)하는 데 재사용된다(financialContext.ts의 "[Computed YoY growth]" 라인).
+// 2026-09 Alphabet 사고 — fiscalYears가 [2025,2021,...]처럼 비연속일 때 (2025-2021)/2021을
+// "YoY 56.4%"로 잘못 서술한 사고 이후, "연속 연도가 아니면 값 자체를 안 준다"를 프롬프트
+// 지시(claude.ts 보조 규칙)가 아니라 이 함수(1차 방어)로 강제한다.
+export function computeYoyPct(vals: (number | null)[], fiscalYears: string[]): number | null {
+  if (vals.length < 2 || fiscalYears.length < 2) return null;
+  const y0 = Number(fiscalYears[0]), y1 = Number(fiscalYears[1]);
+  if (Math.abs(y0 - y1) !== 1) return null; // 인접연도 아니면 계산 안 함
+  const v0 = vals[0], v1 = vals[1];
+  if (v0 == null || v1 == null || v1 === 0) return null;
+  return ((v0 - v1) / Math.abs(v1)) * 100;
+}
+
 // 최신 2개년(인접 연도) YoY만 계산 — 다년 평균이 아니라 "직전 연도 대비" 단일 값
 // (2026-08-13 워트인텔리전스 "N년 평균" 오표현 사고와 동일한 원칙: 실제로 있는 데이터
 // 포인트 수만큼만 표현한다).
 function computeYoy(vals: (number | null)[], fiscalYears: string[]): string {
-  if (vals.length < 2 || fiscalYears.length < 2) return '—';
-  const y0 = Number(fiscalYears[0]), y1 = Number(fiscalYears[1]);
-  if (Math.abs(y0 - y1) !== 1) return '—'; // 인접연도 아니면 계산 안 함
-  const v0 = vals[0], v1 = vals[1];
-  if (v0 == null || v1 == null || v1 === 0) return '—';
-  const pct = ((v0 - v1) / Math.abs(v1)) * 100;
+  const pct = computeYoyPct(vals, fiscalYears);
+  if (pct == null) return '—';
   return pct >= 0 ? `▲${pct.toFixed(0)}%` : `▼${Math.abs(pct).toFixed(0)}%`;
 }
 

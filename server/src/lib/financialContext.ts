@@ -5,7 +5,7 @@ import { fetchEdgarData, fetchEdgarDataByCik, EdgarData, EdgarRawSeries, lookupC
 import { fetchKisQuote, KisQuote }               from './kis';
 import { fetchFmpData, FmpData, buildFmpContext } from './fmp';
 import { supabase }                              from './supabase';
-import { isGenuineBankData, IndustryCategory }   from './financialsTableBuilder';
+import { isGenuineBankData, IndustryCategory, computeYoyPct } from './financialsTableBuilder';
 
 export type DataSource = 'dart' | 'edgar' | 'web_search';
 
@@ -93,17 +93,58 @@ function countAdjacentYoY(fiscalYears: string[], values: (number | null)[]): num
 
 function growthDataAvailabilityNote(yoyCount: number, lang: 'ko' | 'en'): string {
   if (lang === 'ko') {
-    return yoyCount <= 1
+    if (yoyCount === 0) {
+      return `· 확인 가능한 전년 대비 성장률: 0개 — 연속된 두 회계연도 데이터가 없다는 뜻. 이 경우 ` +
+        `"YoY 성장률"이나 "전년 대비 X% 증가"를 절대 계산·서술하지 말 것. 연도가 떨어져 있는 두 값을 ` +
+        `가져와 그 사이 변화율을 계산해 "YoY"라고 부르는 것 금지(예: FY2021→FY2025 4개년 변화를 ` +
+        `1년 성장률처럼 서술하는 것) — 그런 경우엔 성장률 자체를 "—"로 표시하거나, 굳이 언급해야 ` +
+        `한다면 "OO년→OO년 사이 X% 증가(연속 데이터 아님)"처럼 실제 기간을 명시할 것.`;
+    }
+    return yoyCount === 1
       ? `· 확인 가능한 전년 대비 성장률: ${yoyCount}개. 이걸 "N개년 평균"이나 "N년 평균 성장률"이라고 ` +
         `부르지 말 것 — "전년 대비 X% 증가" 형태로만 서술.`
       : `· 확인 가능한 전년 대비 성장률: ${yoyCount}개. 이 ${yoyCount}개를 실제로 평균낼 때만 "평균"이라고 ` +
         `부를 것 — 실제 데이터보다 더 많은 연도를 평균낸 것처럼 표현하지 말 것.`;
   }
-  return yoyCount <= 1
+  if (yoyCount === 0) {
+    return `· Confirmed YoY growth figures available: 0 — meaning no two consecutive fiscal years exist in this ` +
+      `data. Never compute or state a "YoY growth" / "grew X% YoY" figure in this case. Do not take two ` +
+      `non-adjacent years and describe the change between them as if it were a single year's growth ` +
+      `(e.g. never describe a FY2021→FY2025 4-year change as "YoY growth"). Report growth as "—" instead, ` +
+      `or if you must mention it, name the actual span explicitly (e.g. "up X% from FY2021 to FY2025, not ` +
+      `a single-year figure").`;
+  }
+  return yoyCount === 1
     ? `· Confirmed YoY growth figures available: ${yoyCount}. Never call this an "N-year average" or CAGR — ` +
       `describe it as "grew X% YoY" only.`
     : `· Confirmed YoY growth figures available: ${yoyCount}. Only call something an "N-year average" if you're ` +
       `genuinely averaging across these ${yoyCount} figures — don't imply more years of data than this.`;
+}
+
+// 2026-09 Alphabet 사고 이후: "몇 개 있는지"만 알려주고 계산은 Claude에게 맡기는
+// growthDataAvailabilityNote만으로는 불충분하다는 게 드러났다(연도가 비연속이어도 Claude가
+// "가진 두 값 중 최신 두 개"로 계산해버릴 위험) — 서버가 computeYoyPct()로 직접 계산해서 그
+// 결과(또는 "계산 불가")를 컨텍스트에 확정값으로 박아준다. 이제 claude.ts의 프롬프트 규칙은
+// 이 결정론적 라인의 보조(다른 지표·다른 스코프에 대한 일반 가드레일)일 뿐, 1차 방어는 이 함수다.
+function computedYoyGrowthNote(
+  fiscalYears: string[], values: (number | null)[], metricLabel: string, lang: 'ko' | 'en',
+): string {
+  const pct = computeYoyPct(values, fiscalYears);
+  if (pct == null) {
+    return lang === 'ko'
+      ? `· [서버 계산 YoY ${metricLabel} 성장률] 계산 불가 — 가장 최근 두 회계연도가 연속이 아니거나 ` +
+        `값이 확인되지 않음. "YoY 성장률" 등 이 지표의 성장률 항목은 반드시 "—"로 표시할 것 — ` +
+        `연도가 떨어진 두 값으로 직접 계산해서 채우지 말 것.`
+      : `· [Server-computed YoY ${metricLabel} growth] Not available — the two most recent fiscal years ` +
+        `on file for this metric aren't consecutive, or a value is missing. Output "—" for any "YoY ` +
+        `growth" field tied to this metric — do not compute one yourself from non-adjacent years.`;
+  }
+  const sign = pct >= 0 ? '+' : '';
+  return lang === 'ko'
+    ? `· [서버 계산 YoY ${metricLabel} 성장률] ${sign}${pct.toFixed(1)}% (FY${fiscalYears[1]} → FY${fiscalYears[0]}) ` +
+      `— "YoY 성장률" 항목엔 이 수치를 그대로 옮길 것, 재계산·재추정 금지.`
+    : `· [Server-computed YoY ${metricLabel} growth] ${sign}${pct.toFixed(1)}% (FY${fiscalYears[1]} → FY${fiscalYears[0]}) ` +
+      `— use this exact figure for any "YoY growth" field, do not recompute or re-derive it.`;
 }
 
 function missingYearsNote(presentYears: string[]): string | null {
@@ -146,6 +187,7 @@ function buildDartContext(d: DartData, kis: KisQuote | null): string {
 
     lines.push('\n[성장률 데이터 확인 범위]');
     lines.push(growthDataAvailabilityNote(countAdjacentYoY(trend.fiscalYears, trend.revenue), 'ko'));
+    lines.push(computedYoyGrowthNote(trend.fiscalYears, trend.revenue, '매출', 'ko'));
   }
 
   // KIS 시세 데이터
@@ -301,6 +343,7 @@ function buildEdgarContext(e: EdgarData, fmp: FmpData | null): string {
 
     lines.push('\n[Growth rate data availability]');
     lines.push(growthDataAvailabilityNote(countAdjacentYoY(e.rawSeries.fiscalYears, e.rawSeries.revenue), 'en'));
+    lines.push(computedYoyGrowthNote(e.rawSeries.fiscalYears, e.rawSeries.revenue, 'revenue', 'en'));
   }
 
   // FMP key metrics (valuation)
@@ -391,6 +434,7 @@ export function appendBankContext(
         const v = fmt(rawEdgar.bankNetInterestIncome![i] ?? null);
         lines.push(`· ${fy}: ${v ?? 'Not disclosed'}`);
       });
+      lines.push(computedYoyGrowthNote(rawEdgar.fiscalYears, rawEdgar.bankNetInterestIncome, 'Net Interest Income', 'en'));
     }
   } else if (rawDart?.bankSeries) {
     const b = rawDart.bankSeries;
@@ -413,6 +457,7 @@ export function appendBankContext(
       b.fiscalYears.forEach((fy, i) => {
         lines.push(`· ${fy}년: ${fmtKrw(b.netInterestIncome[i] ?? null) ?? '확인 필요'}`);
       });
+      lines.push(computedYoyGrowthNote(b.fiscalYears, b.netInterestIncome, '순이자수익', 'ko'));
     }
   } else {
     return contextText; // 은행 후보였으나 실제 은행 계열 raw 데이터가 없음 — 원본 그대로

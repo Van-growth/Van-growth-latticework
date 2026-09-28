@@ -48,8 +48,8 @@ function extractEdgarRevenue(rawData: any): { fiscalYears: string[]; revenue: (n
     const gaap = rawData.facts['us-gaap'];
     const revData = pickConceptSeries(
       gaap,
-      'Revenues',
       'RevenueFromContractWithCustomerExcludingAssessedTax',
+      'Revenues',
       'SalesRevenueNet',
     );
     if (revData.length === 0) return null;

@@ -6,6 +6,13 @@ import { createClient } from '@supabase/supabase-js';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+// ⚠️ 이 import는 dotenv.config() 호출 뒤에 있어야 한다 — edgar.ts가 모듈 최상단에서
+// ./supabase(createClient)를 평가하는데, 그게 dotenv.config()보다 먼저 실행되면
+// "Missing SUPABASE_URL" 에러로 죉는다(TS→CommonJS 컴파일은 import를 파일 맨 위로
+// 몰지 않고 소스상 위치 그대로 실행 — repo 루트에서 `npx ts-node server/scripts/...`로
+// 실행할 때만 재현되는 문제라 실측 확인 필요했음, 2026-09).
+import { extractAnnualSeries, pickConceptSeries, pickConceptSeriesWithConflict } from '../src/lib/edgar';
+
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // RLS 우회 필요 — anon key로는 쓰기 작업이 막힘
 if (!supabaseUrl || !supabaseKey) throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -40,101 +47,10 @@ async function fetchEdgar(url: string, attempt = 0): Promise<any | null> {
   }
 }
 
-// 10-K/20-F 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 5개년.
-// server/src/lib/edgar.ts의 extractAnnualSeries와 동일 폼 필터(10-K + 20-F) — 이 스크립트는
-// 별도 실행 컨텍스트라 로직이 복제돼 있는데, 여기만 20-F가 빠져 있어 외국 민간발행인 기업이
-// 월간 배치 캐시에서는 최신 데이터를 놓칠 수 있었다(2026-08-15 발견, 라이브 조회 경로와 불일치).
-function extractAnnual(
-  units: Array<{ form: string; fp?: string; fy?: number; end: string; val: number }> | undefined,
-): Array<{ year: string; val: number }> {
-  if (!units) return [];
-
-  const byYear = new Map<string, { val: number; end: string }>();
-  for (const u of units) {
-    if (!['10-K', '20-F'].includes(u.form)) continue;
-    if (u.fp && u.fp !== 'FY') continue;
-    if (u.val == null) continue;
-    const fy = u.fy ? String(u.fy) : u.end?.slice(0, 4);
-    if (!fy) continue;
-    const cur = byYear.get(fy);
-    if (!cur || u.end > cur.end) byYear.set(fy, { val: u.val, end: u.end });
-  }
-
-  return Array.from(byYear.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .slice(0, 5)
-    .map(([year, { val }]) => ({ year, val }));
-}
-
-// server/src/lib/edgar.ts의 pickConceptSeries와 동일 로직 (이 스크립트는 별도 실행 컨텍스트라
-// 임포트 대신 복제돼 있음) — "처음 매칭되는 concept" 대신 최신 연도/데이터 개수 기준으로 선택.
-// 2026-07-04: Apple이 ASC 606 전환기 옛 concept('Revenues', 2018 단일년)을 그대로 채택하고
-// 실제 다년치가 있는 새 concept(RevenueFromContractWithCustomerExcludingAssessedTax)을
-// 확인하지 않는 버그 발견 후 수정.
-function pickConcept(
-  usGaap: Record<string, any>,
-  ...names: string[]
-): Array<{ year: string; val: number }> {
-  let best: Array<{ year: string; val: number }> = [];
-  for (const name of names) {
-    const concept = usGaap[name];
-    if (!concept) continue;
-    const units: any[] | undefined =
-      concept.units?.USD ??
-      concept.units?.['USD/shares'] ??
-      concept.units?.shares;
-    const result = extractAnnual(units);
-    if (result.length === 0) continue;
-    if (best.length === 0 || result[0].year > best[0].year ||
-        (result[0].year === best[0].year && result.length > best.length)) {
-      best = result;
-    }
-  }
-  return best;
-}
-
-// server/src/lib/edgar.ts의 pickConceptSeriesWithConflict와 동일 로직(순이익 전용, 이 스크립트도
-// 별도 실행 컨텍스트라 복제) — NetIncomeLoss/ProfitLoss가 같은 최신연도에 10%+ 다른 값을 갖는
-// Honeywell류 케이스를 감지해 context_text에 남긴다.
-function pickConceptWithConflict(
-  usGaap: Record<string, any>,
-  ...names: string[]
-): { series: Array<{ year: string; val: number }>; conceptUsed: string | null; conflictNote: string | null } {
-  const candidates: Array<{ name: string; result: Array<{ year: string; val: number }> }> = [];
-  for (const name of names) {
-    const concept = usGaap[name];
-    if (!concept) continue;
-    const units: any[] | undefined =
-      concept.units?.USD ?? concept.units?.['USD/shares'] ?? concept.units?.shares;
-    const result = extractAnnual(units);
-    if (result.length > 0) candidates.push({ name, result });
-  }
-  if (candidates.length === 0) return { series: [], conceptUsed: null, conflictNote: null };
-
-  let best = candidates[0];
-  for (const c of candidates.slice(1)) {
-    if (c.result[0].year > best.result[0].year ||
-        (c.result[0].year === best.result[0].year && c.result.length > best.result.length)) {
-      best = c;
-    }
-  }
-
-  let conflictNote: string | null = null;
-  for (const c of candidates) {
-    if (c.name === best.name || c.result[0].year !== best.result[0].year) continue;
-    const a = best.result[0].val, b = c.result[0].val;
-    if (a === 0) continue;
-    const diffPct = Math.abs((a - b) / a) * 100;
-    if (diffPct >= 10) {
-      conflictNote = `${best.name}=${a} vs ${c.name}=${b} for FY${best.result[0].year} ` +
-        `(${diffPct.toFixed(0)}% apart, likely different continuing-operations/segment scope) — used ${best.name}`;
-      break;
-    }
-  }
-
-  return { series: best.result, conceptUsed: best.name, conflictNote };
-}
-
+// extractAnnualSeries/pickConceptSeries/pickConceptSeriesWithConflict는 server/src/lib/edgar.ts에서
+// import(위 참고) — 예전엔 "별도 실행 컨텍스트"라는 이유로 이 스크립트에 로직이 복제돼 있었는데,
+// 라이브 조회 경로만 고치고 이 배치 스크립트를 깜빡하는 사고가 반복돼(현금흐름/GrossProfit/은행
+// 계정과목 등, CLAUDE.md 실전 발견 이력 참고) 2026-09 Alphabet 사고를 계기로 단일 소스로 통합.
 function fmtUsd(val: number | null): string {
   if (val == null) return 'Not disclosed';
   const sign = val < 0 ? '-' : '';
@@ -172,48 +88,44 @@ export async function processCompany(
 
   const g = data.facts['us-gaap'] as Record<string, any>;
 
-  const revData  = pickConcept(g,
-    'Revenues',
+  const revData  = pickConceptSeries(g,
     'RevenueFromContractWithCustomerExcludingAssessedTax',
+    'Revenues',
     'SalesRevenueNet',
   );
-  const niResult = pickConceptWithConflict(g, 'NetIncomeLoss', 'ProfitLoss');
+  const niResult = pickConceptSeriesWithConflict(g, 'NetIncomeLoss', 'ProfitLoss');
   const niData   = niResult.series;
-  const oiData   = pickConcept(g, 'OperatingIncomeLoss');
-  // GrossProfit/Cash — server/src/lib/edgar.ts의 pickConceptSeries에는 이미 있던 후보인데
-  // 이 배치 스크립트(별도 실행 컨텍스트라 로직이 복제돼 있음)엔 통째로 빠져있었음(2026-08
-  // 발견 — MSFT 등 EDGAR 전체 기업의 매출총이익/현금성자산이 항상 "확인 필요"로 비던 원인).
-  const gpData   = pickConcept(g, 'GrossProfit');
-  const cashData = pickConcept(g,
+  const oiData   = pickConceptSeries(g, 'OperatingIncomeLoss');
+  const gpData   = pickConceptSeries(g, 'GrossProfit');
+  const cashData = pickConceptSeries(g,
     'CashAndCashEquivalentsAtCarryingValue',
     'CashCashEquivalentsAndShortTermInvestments',
   );
-  const aData    = pickConcept(g, 'Assets');
-  const lData    = pickConcept(g, 'Liabilities');
-  const eqData   = pickConcept(g,
+  const aData    = pickConceptSeries(g, 'Assets');
+  const lData    = pickConceptSeries(g, 'Liabilities');
+  const eqData   = pickConceptSeries(g,
     'StockholdersEquity',
     'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
   );
-  const epsData  = pickConcept(g, 'EarningsPerShareBasic');
-  const opCFData  = pickConcept(g, 'NetCashProvidedByUsedInOperatingActivities');
-  const invCFData = pickConcept(g, 'NetCashProvidedByUsedInInvestingActivities');
-  const finCFData = pickConcept(g, 'NetCashProvidedByUsedInFinancingActivities');
+  const epsData  = pickConceptSeries(g, 'EarningsPerShareBasic');
+  const opCFData  = pickConceptSeries(g, 'NetCashProvidedByUsedInOperatingActivities');
+  const invCFData = pickConceptSeries(g, 'NetCashProvidedByUsedInInvestingActivities');
+  const finCFData = pickConceptSeries(g, 'NetCashProvidedByUsedInFinancingActivities');
 
-  // 은행 재무제표 템플릿(2026-08-20, server/src/lib/edgar.ts와 동일 후보 — 이 스크립트도 별도
-  // 실행 컨텍스트라 로직이 복제돼 있음, 위 GrossProfit/Cash 발견 때와 동일한 함정 재발 방지
-  // 차원에서 처음부터 같이 추가) — interestIncome은 InterestAndFeeIncomeLoansAndLeases(대출
-  // 이자만, 더 좁은 개념)를 의도적으로 제외한 이유는 edgar.ts 주석 참고.
-  const bankIntIncData    = pickConcept(g, 'InterestIncomeOperating', 'InterestAndDividendIncomeOperating');
-  const bankIntExpData    = pickConcept(g, 'InterestExpense', 'InterestExpenseOperating');
-  const bankNetIntData    = pickConcept(g, 'InterestIncomeExpenseNet');
-  const bankProvData      = pickConcept(g, 'ProvisionForLoanLeaseAndOtherLosses', 'ProvisionForLoanLossesExpensed', 'ProvisionForCreditLossExpenseReversal', 'ProvisionForDoubtfulAccounts');
-  const bankNonIntIncData = pickConcept(g, 'NoninterestIncome');
-  const bankNonIntExpData = pickConcept(g, 'NoninterestExpense');
-  const bankLoansGrossData = pickConcept(g, 'FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss', 'NotesReceivableGross', 'LoansAndLeasesReceivableGrossCarryingAmount', 'LoansAndLeasesReceivableNetReportedAmount');
-  const bankAllowanceData  = pickConcept(g, 'FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest', 'FinancingReceivableAllowanceForCreditLosses', 'LoansAndLeasesReceivableAllowance');
-  const bankLoansNetData   = pickConcept(g, 'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss', 'NotesReceivableNet', 'LoansAndLeasesReceivableNetOfDeferredIncome');
-  const bankDepositsData   = pickConcept(g, 'Deposits');
-  const bankBorrowingsData = pickConcept(g, 'LongTermDebt', 'ShortTermBorrowings', 'DebtLongtermAndShorttermCombinedAmount');
+  // 은행 재무제표 템플릿(2026-08-20, server/src/lib/edgar.ts와 동일 후보 — 이제 그 파일에서
+  // 직접 import) — interestIncome은 InterestAndFeeIncomeLoansAndLeases(대출 이자만, 더 좁은
+  // 개념)를 의도적으로 제외한 이유는 edgar.ts 주석 참고.
+  const bankIntIncData    = pickConceptSeries(g, 'InterestIncomeOperating', 'InterestAndDividendIncomeOperating');
+  const bankIntExpData    = pickConceptSeries(g, 'InterestExpense', 'InterestExpenseOperating');
+  const bankNetIntData    = pickConceptSeries(g, 'InterestIncomeExpenseNet');
+  const bankProvData      = pickConceptSeries(g, 'ProvisionForLoanLeaseAndOtherLosses', 'ProvisionForLoanLossesExpensed', 'ProvisionForCreditLossExpenseReversal', 'ProvisionForDoubtfulAccounts');
+  const bankNonIntIncData = pickConceptSeries(g, 'NoninterestIncome');
+  const bankNonIntExpData = pickConceptSeries(g, 'NoninterestExpense');
+  const bankLoansGrossData = pickConceptSeries(g, 'FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss', 'NotesReceivableGross', 'LoansAndLeasesReceivableGrossCarryingAmount', 'LoansAndLeasesReceivableNetReportedAmount');
+  const bankAllowanceData  = pickConceptSeries(g, 'FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest', 'FinancingReceivableAllowanceForCreditLosses', 'LoansAndLeasesReceivableAllowance');
+  const bankLoansNetData   = pickConceptSeries(g, 'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss', 'NotesReceivableNet', 'LoansAndLeasesReceivableNetOfDeferredIncome');
+  const bankDepositsData   = pickConceptSeries(g, 'Deposits');
+  const bankBorrowingsData = pickConceptSeries(g, 'LongTermDebt', 'ShortTermBorrowings', 'DebtLongtermAndShorttermCombinedAmount');
 
   // 회계연도 기준: 매출 우선, 없으면 순이익
   const fiscalYears = revData.length > 0

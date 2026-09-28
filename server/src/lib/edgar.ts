@@ -175,7 +175,7 @@ export interface TriggerEventCandidate {
   text: string;
 }
 
-interface XbrlUnit { form: string; fp?: string; fy?: number; val: number; end: string }
+interface XbrlUnit { form: string; fp?: string; fy?: number; val: number; end: string; start?: string; filed?: string }
 export interface XbrlAnnualPoint { year: string; val: number }
 
 // 10-K 손익계산서(또는 바로 이어지는 Revenue Disaggregation Note)에 회사가 실제로 나눠 공시한
@@ -382,39 +382,122 @@ function fmtUsd(val: number): string {
     : `${sign}${(abs / 1_000_000).toFixed(0)}M USD`;
 }
 
-// 10-K/20-F 연간 데이터만 추출. 같은 회계연도 중복 시 최신 end 날짜 기준 유지. 최대 5개년(최신순).
+// 10-K/20-F 연간 데이터만 추출. 최대 5개년(최신순). 값과 라벨(FY)을 서로 다른 기준으로 뽑는다:
+//
+// ⚠️ 연도 "그룹핑"에 `fy`(그 값이 실린 필링 자체의 회계연도 태그)를 그대로 쓰면 안 된다 — SEC
+// XBRL은 한 필링 안의 비교연도(전년/전전년) 데이터에도 그 필링 고유의 fy를 그대로 붙인다.
+// Alphabet 실측(2026-09): 'Revenues' 태그가 2018년경 'RevenueFromContract...'로 전환됐다가
+// FY2025 10-K에서 다시 'Revenues'로 일부 병행 태깅됐는데, fy를 그룹 키로 쓰면 FY2018/2019/
+// 2022/2023/2024가 통째로 빠지고 FY2016/2017/2020/2021/2025만 남는 사고로 이어졌다(성장률이
+// FY2021→FY2025 4년치를 1년 YoY로 오계산). → 실제 보고 기간(end 날짜)을 그룹 키로 쓴다.
+//
+// ⚠️ 반대로 라벨을 end 날짜에서 그대로 뽑아도(예: end.slice(0,4)) 안 된다 — 비-역년(non-calendar)
+// 회계연도 기업은 그 기간을 부르는 이름(FY)이 end의 캘린더 연도와 다를 수 있다. NVIDIA 실측
+// (2026-09): end=2014-01-26인 기간을 NVIDIA 자신은 "FY2015"라고 부른다(end 연도로는 "2014").
+// → 라벨은 "그 기간을 자기 몫 현재연도로 보고한 원 필링의 fy"로 뽑는다: fy별로 그룹을 만들고
+// 그 그룹 내 최댓값 end(=그 필링의 현재연도, 비교연도 데이터는 항상 그보다 이전 end)를 찾아
+// (end → fy) 역매핑을 만들면 된다. 이 역매핑에 없는 end(=fy 정보가 아예 없는 옛 필링 등)만
+// end 연도로 폴백.
+//
+// 같은 end에 값이 여러 개(같은 기간을 여러 필링이 반복 보고) 있으면 값은 가장 최근 filed
+// 값을 채택 — 재작성/정정 공시가 있으면 최신 filed가 더 정확하다(라벨은 이 filed 기준과
+// 무관하게 위 fy 역매핑으로 별도 결정).
+//
+// duration 값(매출 등, start 있음)은 start~end 간격이 대략 1년(350~380일, 52~53주)이 아니면
+// 제외 — 8-K/전환기 stub period 등 비연간 duration이 10-K/20-F 안에 섞여 들어오는 걸 방지.
+// instant 값(자산 등 B/S 항목, start 없음)은 이 기간 필터 대상이 아니고 end로만 dedupe한다.
+//
+// ⚠️ concept 전체가 duration인데 그 중 일부 엔트리만 start가 없는 경우(Bridgewater Bancshares
+// 실측, 2026-09: NetIncomeLoss에 "end":"2024-12-13"(start 없음, 인수·이사교체 등 이벤트성
+// 단발 값으로 추정) 1건이 나머지 정상 연간 duration 엔트리들 사이에 끼어 있었음) — start가
+// 없다는 이유로 기간 필터를 건너뛰면 이 이상값이 그대로 통과해 "end 연도" 폴백 라벨로 채택되고,
+// 진짜 연간 데이터와 같은 라벨(중복 연도)로 출력에 섞여 들어간다. 이 concept의 엔트리 절반
+// 이상이 start를 갖고 있으면(=근본적으로 duration concept) start 없는 나머지는 이상값으로 보고
+// 통째로 제외한다 — instant concept(전 엔트리가 start 없음)은 이 판정에 걸리지 않는다.
 export function extractAnnualSeries(units: XbrlUnit[] | undefined): XbrlAnnualPoint[] {
   if (!units) return [];
 
-  const byYear = new Map<string, { val: number; end: string }>();
+  const MIN_DURATION_DAYS = 350;
+  const MAX_DURATION_DAYS = 380;
+  const isDurationConcept = units.filter(u => u.start != null).length > units.length / 2;
+
+  interface Entry { end: string; val: number; filed: string; fy: string | null }
+  const entries: Entry[] = [];
   for (const u of units) {
     if (!['10-K', '20-F'].includes(u.form)) continue;
     if (u.fp && u.fp !== 'FY') continue;
-    if (u.val == null) continue;
-    const fy = u.fy ? String(u.fy) : u.end?.slice(0, 4);
-    if (!fy) continue;
-    const cur = byYear.get(fy);
-    if (!cur || u.end > cur.end) byYear.set(fy, { val: u.val, end: u.end });
+    if (u.val == null || !u.end) continue;
+    if (isDurationConcept && !u.start) continue; // duration concept의 start 없는 이상값 제외
+    if (u.start) {
+      const days = (new Date(u.end).getTime() - new Date(u.start).getTime()) / 86_400_000;
+      if (days < MIN_DURATION_DAYS || days > MAX_DURATION_DAYS) continue;
+    }
+    entries.push({ end: u.end, val: u.val, filed: u.filed ?? '', fy: u.fy != null ? String(u.fy) : null });
+  }
+  if (entries.length === 0) return [];
+
+  const byEnd = new Map<string, Entry[]>();
+  for (const e of entries) {
+    const arr = byEnd.get(e.end);
+    if (arr) arr.push(e); else byEnd.set(e.end, [e]);
   }
 
-  return Array.from(byYear.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
+  const byFy = new Map<string, Entry[]>();
+  for (const e of entries) {
+    if (e.fy == null) continue;
+    const arr = byFy.get(e.fy);
+    if (arr) arr.push(e); else byFy.set(e.fy, [e]);
+  }
+  const primaryEndToFy = new Map<string, string>();
+  for (const [fy, grp] of byFy) {
+    const maxEnd = grp.reduce((a, b) => (b.end > a.end ? b : a)).end;
+    primaryEndToFy.set(maxEnd, fy);
+  }
+
+  const resolved = Array.from(byEnd.entries()).map(([end, grp]) => {
+    const val = grp.reduce((a, b) => (b.filed >= a.filed ? b : a)).val;
+    const mappedYear = primaryEndToFy.get(end);
+    return { end, val, year: mappedYear ?? end.slice(0, 4), confirmed: mappedYear != null };
+  });
+
+  // ⚠️ 회사 자신의 fy 태깅이 내부적으로 어긋나 있으면(CrowdStrike 실측, 2026-09 — 일부
+  // 회계연도가 NetIncomeLoss/ProfitLoss 어느 concept에도 "그 연도의 주 기간"으로 등록된
+  // end가 없어, 그 end는 end.slice(0,4) 폴백으로 넘어가고 우연히 다른 end의 fy 라벨과
+  // 겹치는 경우) 서로 다른 end 두 개가 같은 라벨을 받을 수 있다 — 라벨당 하나만 남기고,
+  // primaryEndToFy로 확정된 쪽(fy 역매핑 성공)을 폴백보다 우선, 둘 다 같은 신뢰도면 더
+  // 최근 end를 우선한다.
+  const byLabel = new Map<string, typeof resolved[number]>();
+  for (const r of resolved) {
+    const cur = byLabel.get(r.year);
+    if (!cur || (r.confirmed && !cur.confirmed) || (r.confirmed === cur.confirmed && r.end > cur.end)) {
+      byLabel.set(r.year, r);
+    }
+  }
+
+  return Array.from(byLabel.values())
+    .sort((a, b) => b.end.localeCompare(a.end))
     .slice(0, 5)
-    .map(([year, { val }]) => ({ year, val }));
+    .map(({ year, val }) => ({ year, val }));
 }
 
-// 후보 concept 이름들(예: 'Revenues' → 'RevenueFromContractWithCustomerExcludingAssessedTax')은
-// 우선순위가 아니라 회계기준 전환에 따른 동의어 목록 — 예전엔 "처음 매칭되는 concept" 선택이라,
-// ASC 606 전환기(2018년경) 기업 상당수가 옛 concept('Revenues')에 단 1개년(전환 직전)만
-// 태깅된 걸 그대로 채택하고, 실제로 다년치가 있는 새 concept은 아예 확인하지 않는 버그가 있었음
-// (Apple 실측: Revenues=[2018]만 11건, RevenueFromContractWithCustomerExcludingAssessedTax=
-// 2019~2025 37건 — 코드가 전자를 고르고 있었음). 최신 연도 → 데이터 개수 순으로 가장 나은
-// concept을 선택하도록 변경.
+// 후보 concept 이름들(예: 'RevenueFromContractWithCustomerExcludingAssessedTax' →
+// 'Revenues')은 회계기준 전환에 따른 동의어 목록이자 우선순위 — 인자 순서가 그대로 폴백
+// 순서다(첫 이름이 최우선). 연도별로 폴백한다: 각 연도마다 우선순위가 가장 높은 candidate가
+// 그 연도 값을 갖고 있으면 그 값을 쓰고, 없으면 다음 candidate로 넘어간다.
+//
+// ⚠️ "concept 하나를 통째로 골라 전체 연도에 쓰는" 방식은 두 번 버그를 냈다 — (1) 2026-07-04
+// Apple: ASC 606 전환기 옛 concept('Revenues')에 1개년만 태깅된 걸 그대로 채택하고 실제 다년치가
+// 있는 새 concept을 아예 확인 안 함. (2) 2026-09 Alphabet: 반대 방향 — 새 concept
+// ('RevenueFromContract...')이 최근 몇 개년만 갖고 있는데 옛 concept('Revenues')이 우연히 더
+// "최신"(FY2025) 연도를 하나 갖고 있어서, 그 옛 concept 시리즈 전체(FY2016/2017/2020/2021/2025 —
+// 스파스)가 통째로 선택되고 새 concept이 갖고 있던 FY2022~2024는 버려짐. 두 문제 모두 "어느
+// 연도든 그 값을 갖고 있는 가장 우선순위 높은 concept을 쓴다"로 근본 해결된다 — concept
+// 전환기에도 연도별로 최선의 값을 잃지 않는다.
 export function pickConceptSeries(
   usGaap: Record<string, any>,
   ...names: string[]
 ): XbrlAnnualPoint[] {
-  let best: XbrlAnnualPoint[] = [];
+  const seriesByPriority: { name: string; points: Map<string, number> }[] = [];
   for (const name of names) {
     const concept = usGaap[name];
     if (!concept) continue;
@@ -424,12 +507,40 @@ export function pickConceptSeries(
       concept.units?.shares;
     const result = extractAnnualSeries(units);
     if (result.length === 0) continue;
-    if (best.length === 0 || result[0].year > best[0].year ||
-        (result[0].year === best[0].year && result.length > best.length)) {
-      best = result;
+    seriesByPriority.push({ name, points: new Map(result.map(r => [r.year, r.val])) });
+  }
+  if (seriesByPriority.length === 0) return [];
+
+  const allYears = new Set<string>();
+  for (const s of seriesByPriority) for (const y of s.points.keys()) allYears.add(y);
+
+  const merged: XbrlAnnualPoint[] = [];
+  for (const year of allYears) {
+    // 같은 연도에 후보 태그가 2개 이상 값을 갖고 있으면(정상적인 concept 전환기에도 흔함) 그 값들이
+    // 서로 2% 넘게 벌어지는지 확인해 로그만 남긴다(우선순위 선택 자체는 그대로 진행) — 조용히
+    // 넘어가면 태그 간 실제 불일치(continuing-operations 범위 차이 등)를 아무도 못 알아챈다.
+    if (seriesByPriority.length > 1) {
+      const candidates = seriesByPriority
+        .map(s => ({ name: s.name, val: s.points.get(year) }))
+        .filter((c): c is { name: string; val: number } => c.val !== undefined);
+      if (candidates.length > 1) {
+        const vals = candidates.map(c => c.val);
+        const max = Math.max(...vals), min = Math.min(...vals);
+        if (max !== 0 && Math.abs((max - min) / max) * 100 > 2) {
+          console.warn(
+            `[edgar] pickConceptSeries FY${year} 태그 값 불일치(>2%): ` +
+            candidates.map(c => `${c.name}=${c.val}`).join(' vs '),
+          );
+        }
+      }
+    }
+    for (const s of seriesByPriority) {
+      const val = s.points.get(year);
+      if (val !== undefined) { merged.push({ year, val }); break; }
     }
   }
-  return best;
+
+  return merged.sort((a, b) => b.year.localeCompare(a.year)).slice(0, 5);
 }
 
 export interface ConceptSeriesResult {
@@ -635,7 +746,7 @@ async function fetchEdgarDataById(
   let rawSeries: EdgarRawSeries | undefined;
 
   if (gaap) {
-    const revData  = pickConceptSeries(gaap, 'Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet');
+    const revData  = pickConceptSeries(gaap, 'RevenueFromContractWithCustomerExcludingAssessedTax', 'Revenues', 'SalesRevenueNet');
     const gpData   = pickConceptSeries(gaap, 'GrossProfit');
     const oiData   = pickConceptSeries(gaap, 'OperatingIncomeLoss');
     // 순이익만 conflict 감지 버전 사용 — Honeywell 실측 사례(NetIncomeLoss/ProfitLoss가 같은
@@ -654,9 +765,9 @@ async function fetchEdgarDataById(
     // 은행 재무제표 템플릿 전용 태그 — 표준 3항목(Revenues/GrossProfit/OperatingIncomeLoss)이
     // 없는 은행/저축기관에서 그 자리를 대신할 계정과목(2026-08-20, Synchrony/JPMorgan 실제
     // companyfacts 대조로 검증). interestIncome은 InterestAndFeeIncomeLoansAndLeases(대출
-    // 이자만, 더 좁은 개념)를 의도적으로 후보에서 제외 — JPM에서 이 태그가 데이터 연수가 더
-    // 많아(16년 vs 14년) pickConceptSeries의 "최신+데이터개수" 선택 로직이 이걸 잘못 고르는
-    // 사고가 실측 확인됨(총이자수익이 대출이자만 잡는 좁은 수치로 축소됨).
+    // 이자만, 더 좁은 개념)를 의도적으로 후보에서 제외 — 후보에 넣으면 더 넓은 개념(총이자수익)이
+    // 없는 연도에 pickConceptSeries가 연도별 폴백으로 이 좁은 수치를 끌어와 총이자수익 자리를
+    // 대출이자만으로 축소시킬 위험이 있음(JPM 실측 확인).
     const bankIntIncData   = pickConceptSeries(gaap, 'InterestIncomeOperating', 'InterestAndDividendIncomeOperating');
     const bankIntExpData   = pickConceptSeries(gaap, 'InterestExpense', 'InterestExpenseOperating');
     const bankNetIntData   = pickConceptSeries(gaap, 'InterestIncomeExpenseNet');
@@ -672,7 +783,7 @@ async function fetchEdgarDataById(
     // 후보를 전부 시도해도 못 찾은 필드만 concept_miss_log에 기록(fire-and-forget) — 나중에
     // 사람이 이 로그를 보고 새 concept 후보를 추가할지 판단하는 용도. 은행 전용 필드는 비은행
     // 기업 대부분에서 정상적으로 비어있을 것이라 여기 포함하지 않음(로그 노이즈 방지).
-    void logConceptMissIfEmpty(cik, entityName, 'revenue', revData, ['Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet']);
+    void logConceptMissIfEmpty(cik, entityName, 'revenue', revData, ['RevenueFromContractWithCustomerExcludingAssessedTax', 'Revenues', 'SalesRevenueNet']);
     void logConceptMissIfEmpty(cik, entityName, 'grossProfit', gpData, ['GrossProfit']);
     void logConceptMissIfEmpty(cik, entityName, 'operatingIncome', oiData, ['OperatingIncomeLoss']);
     void logConceptMissIfEmpty(cik, entityName, 'netIncome', niData, ['NetIncomeLoss', 'ProfitLoss']);
@@ -689,6 +800,12 @@ async function fetchEdgarDataById(
     // 태깅이 끊긴 시점이 다를 수 있어(예: Berkshire Hathaway는 'OperatingIncomeLoss'를 2012년
     // 이후로 아예 태깅 안 함), 검증 없이 "최신"을 취하면 13년 전 수치가 "올해" 라벨을 달고
     // 나가는 사고가 남(2026-07-04 발견 — 5.4% 영업이익률이 실제론 2012년 수치였음).
+    // 기준연도 선정 정책: revData[0](= extractAnnualSeries가 이미 end 날짜 내림차순으로 정렬해둔
+    // 결과의 첫 항목) = 매출이 확인되는 "가장 최근 회계연도"로 고정한다. "가장 완전한 연도"
+    // (다른 계정과목까지 전부 채워진 연도)를 고르는 로직은 의도적으로 두지 않음 — 완결성 기준으로
+    // 기준연도를 고르면 최신연도 대신 과거 어느 해가 뽑힐 수 있어 "최신 재무"라는 사용자 기대와
+    // 어긋난다. 다른 계정과목이 그 해에 없으면(구조적 미보고 등) matchYear가 null을 반환해 그
+    // 항목만 개별적으로 비게 둔다 — 기준연도 자체를 바꾸지 않는다.
     const latest = (d: XbrlAnnualPoint[]) => d[0] ?? null;
     const rev = latest(revData);
     const anchorYear = rev?.year;
